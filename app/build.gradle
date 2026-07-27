@@ -11,8 +11,8 @@ android {
         applicationId 'com.transiva.driver'
         minSdk 23
         targetSdk 35
-        versionCode 2
-        versionName '1.1'
+        versionCode 3
+        versionName '1.2'
     }
 
     signingConfigs {
@@ -40,6 +40,9 @@ android {
 }
 
 dependencies {
+    // Native audio WebRTC (Maven Central)
+    implementation 'io.github.webrtc-sdk:android:144.7559.09'
+
     implementation 'androidx.activity:activity:1.9.3'
 
     implementation 'androidx.camera:camera-view:1.4.1'
