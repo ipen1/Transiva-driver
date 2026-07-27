@@ -3,6 +3,8 @@ package com.transiva.app;
 import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
+import android.content.BroadcastReceiver;
+import android.content.IntentFilter;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -24,6 +26,8 @@ import android.widget.Chronometer;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.core.content.ContextCompat;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -49,6 +53,9 @@ import java.util.concurrent.Executors;
 public class WebRtcCallActivity extends Activity {
     private static final int REQ_MIC = 7101;
     private static final long POLL_MS = 900L;
+    public static final String ACTION_CALL_STATE = "com.transiva.app.WEBRTC_CALL_STATE";
+    public static final String EXTRA_CALL_ID = "call_id";
+    public static final String EXTRA_CALL_STATUS = "call_status";
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newSingleThreadExecutor();
@@ -87,6 +94,19 @@ public class WebRtcCallActivity extends Activity {
     private Button muteButton;
     private Button speakerButton;
 
+    private boolean receiverRegistered;
+
+    private final BroadcastReceiver callStateReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (intent == null || ended) return;
+            String eventCallId = clean(intent.getStringExtra(EXTRA_CALL_ID));
+            String eventStatus = clean(intent.getStringExtra(EXTRA_CALL_STATUS)).toLowerCase();
+            if (eventCallId.isEmpty() || !eventCallId.equals(callId)) return;
+            handleTerminalStatus(eventStatus, true);
+        }
+    };
+
     private final Runnable pollTask = new Runnable() {
         @Override public void run() {
             if (ended || callId.isEmpty()) return;
@@ -105,6 +125,7 @@ public class WebRtcCallActivity extends Activity {
         session = new SessionManager(this);
         role = getApplicationContext().getPackageName().endsWith(".driver") ? "driver" : "customer";
         readIntent();
+        registerCallStateReceiver();
         setContentView(buildUi());
         configureAudioRoute();
 
@@ -413,10 +434,23 @@ public class WebRtcCallActivity extends Activity {
 
     private void handleStatus(String st) {
         if (ended) return;
+        st = clean(st).toLowerCase();
         if ("accepted".equals(st) && !incoming) status("Diterima, menyambungkan audio...");
-        if ("rejected".equals(st)) { toast("Panggilan ditolak"); finishCall("", false); }
-        else if ("ended".equals(st)) { toast("Panggilan berakhir"); finishCall("", false); }
-        else if ("missed".equals(st)) { toast("Panggilan tidak terjawab"); finishCall("", false); }
+        handleTerminalStatus(st, false);
+    }
+
+    private void handleTerminalStatus(String st, boolean fromPush) {
+        if (ended) return;
+        if ("rejected".equals(st)) {
+            toast("Panggilan ditolak");
+            finishCall("", false);
+        } else if ("ended".equals(st) || "cancelled".equals(st) || "canceled".equals(st)) {
+            toast("Panggilan berakhir");
+            finishCall("", false);
+        } else if ("missed".equals(st) || "timeout".equals(st)) {
+            toast("Panggilan tidak terjawab");
+            finishCall("", false);
+        }
     }
 
     private JSONObject basePayload(String action) throws Exception {
@@ -433,11 +467,29 @@ public class WebRtcCallActivity extends Activity {
         ended = true;
         stopRingtone();
         main.removeCallbacks(pollTask);
+
+        final Runnable closeUi = () -> {
+            releaseRtc();
+            if (closeNow) finish();
+            else main.postDelayed(this::finish, 180);
+        };
+
         if (!action.isEmpty() && !callId.isEmpty()) {
-            io.execute(() -> { try { WebRtcSignalApi.post(session, basePayload(action)); } catch (Exception ignored) {} });
+            // IMPORTANT: do not finish the Activity before this terminal signal
+            // reaches the backend. Otherwise onDestroy() may cancel the executor
+            // and the peer can remain stuck on the call screen.
+            io.execute(() -> {
+                try {
+                    WebRtcSignalApi.post(session, basePayload(action));
+                } catch (Exception ignored) {
+                    // Polling/timeout on the peer remains the fallback.
+                } finally {
+                    runOnUiThread(closeUi);
+                }
+            });
+        } else {
+            closeUi.run();
         }
-        releaseRtc();
-        if (closeNow) finish(); else main.postDelayed(this::finish, 450);
     }
 
     private void releaseRtc() {
@@ -451,6 +503,25 @@ public class WebRtcCallActivity extends Activity {
             audioManager.setSpeakerphoneOn(false);
             audioManager.setMode(AudioManager.MODE_NORMAL);
         }
+    }
+
+
+    private void registerCallStateReceiver() {
+        if (receiverRegistered) return;
+        IntentFilter filter = new IntentFilter(ACTION_CALL_STATE);
+        ContextCompat.registerReceiver(
+                this,
+                callStateReceiver,
+                filter,
+                ContextCompat.RECEIVER_NOT_EXPORTED
+        );
+        receiverRegistered = true;
+    }
+
+    private void unregisterCallStateReceiver() {
+        if (!receiverRegistered) return;
+        try { unregisterReceiver(callStateReceiver); } catch (Exception ignored) {}
+        receiverRegistered = false;
     }
 
     private void toggleMute() {
@@ -500,7 +571,13 @@ public class WebRtcCallActivity extends Activity {
     private void fail(Exception e) { runOnUiThread(() -> { toast(e.getMessage() == null ? "Panggilan gagal" : e.getMessage()); finishCall(callId.isEmpty() ? "" : "end", true); }); }
 
     @Override public void onBackPressed() { finishCall(callId.isEmpty() ? "" : (incoming && !accepted ? "reject" : "end"), true); }
-    @Override protected void onDestroy() { if (!ended) finishCall(callId.isEmpty() ? "" : "end", false); io.shutdownNow(); super.onDestroy(); }
+    @Override protected void onDestroy() {
+        unregisterCallStateReceiver();
+        if (!ended) finishCall(callId.isEmpty() ? "" : "end", false);
+        // Let an already queued terminal end/reject request finish.
+        io.shutdown();
+        super.onDestroy();
+    }
 
     private class PeerObserver implements PeerConnection.Observer {
         @Override public void onSignalingChange(PeerConnection.SignalingState newState) {}

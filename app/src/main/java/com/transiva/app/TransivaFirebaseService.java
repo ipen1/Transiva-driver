@@ -111,6 +111,39 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                 "general"
         ).toLowerCase();
 
+        if ("webrtc_call".equals(type)) {
+            String event = first(data.get("event"), "").toLowerCase();
+            String callId = first(data.get("call_id"), "");
+
+            if ("call_ended".equals(event)
+                    || "call_rejected".equals(event)
+                    || "call_missed".equals(event)
+                    || "ended".equals(event)
+                    || "rejected".equals(event)
+                    || "missed".equals(event)) {
+                Intent state = new Intent(WebRtcCallActivity.ACTION_CALL_STATE);
+                state.setPackage(getPackageName());
+                state.putExtra(WebRtcCallActivity.EXTRA_CALL_ID, callId);
+
+                String status;
+                if (event.contains("reject")) status = "rejected";
+                else if (event.contains("miss")) status = "missed";
+                else status = "ended";
+
+                state.putExtra(WebRtcCallActivity.EXTRA_CALL_STATUS, status);
+                sendBroadcast(state);
+
+                // Remove any ringing notification for this call. The active
+                // WebRtcCallActivity will close itself through the broadcast.
+                NotificationManager nm =
+                        (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                if (nm != null && !callId.isEmpty()) {
+                    nm.cancel(Math.abs(("webrtc_call|" + callId).hashCode()));
+                }
+                return;
+            }
+        }
+
         if (type.equals("force_logout")
                 || type.equals("device_reset")
                 || type.equals("device_banned")
@@ -199,17 +232,25 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                         | Intent.FLAG_ACTIVITY_SINGLE_TOP
         );
 
-        int requestCode = Math.abs(
-                (
-                        type
-                                + "|"
-                                + first(orderId, "")
-                                + "|"
-                                + first(roomId, "")
-                                + "|"
-                                + System.currentTimeMillis()
-                ).hashCode()
-        );
+        String callNotificationId =
+                data != null ? first(data.get("call_id"), "") : "";
+
+        int requestCode;
+        if ("webrtc_call".equals(type) && !callNotificationId.isEmpty()) {
+            requestCode = Math.abs(("webrtc_call|" + callNotificationId).hashCode());
+        } else {
+            requestCode = Math.abs(
+                    (
+                            type
+                                    + "|"
+                                    + first(orderId, "")
+                                    + "|"
+                                    + first(roomId, "")
+                                    + "|"
+                                    + System.currentTimeMillis()
+                    ).hashCode()
+            );
+        }
 
         PendingIntent pendingIntent =
                 PendingIntent.getActivity(
