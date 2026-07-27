@@ -1,1 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="transparent">#00000000</color>
 
+    <color name="transiva_blue">#1677FF</color>
+    <color name="transiva_blue_dark">#0057D9</color>
+    <color name="transiva_blue_light">#5AA8FF</color>
+    <color name="transiva_orange">#FF8A00</color>
+
+    <color name="transiva_bg">#F7FBFF</color>
+    <color name="transiva_soft_blue">#EAF4FF</color>
+    <color name="transiva_card">#FFFFFFFF</color>
+    <color name="transiva_version_bg">#F2F7FF</color>
+
+    <color name="transiva_text">#123D7C</color>
+    <color name="transiva_title">#0B3675</color>
+    <color name="transiva_subtitle">#68758A</color>
+    <color name="transiva_muted">#64748B</color>
+    <color name="transiva_hint">#8A96A8</color>
+
+    <color name="transiva_border">#D9E2EE</color>
+    <color name="transiva_divider">#E3EAF4</color>
+    <color name="transiva_shadow">#18000000</color>
+
+    <color name="transiva_dark">#081423</color>
+    <color name="transiva_bg_dark">#0F172A</color>
+    <color name="transiva_card_dark">#1E293B</color>
+    <color name="transiva_text_dark">#F8FAFC</color>
+
+    <color name="success">#2ECC71</color>
+    <color name="warning">#F59E0B</color>
+    <color name="error">#EF4444</color>
+    <color name="info">#2196F3</color>
+</resources>
