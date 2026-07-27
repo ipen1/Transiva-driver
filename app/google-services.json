@@ -26,6 +26,44 @@
     },
     {
       "client_info": {
+        "mobilesdk_app_id": "1:450425290065:android:b67590aa65abc2b85c6770",
+        "android_client_info": {
+          "package_name": "com.transiva.customer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA9OQ1QEzGlbrliogkdZeYQ_-FME26XdQ0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:450425290065:android:0dcd3522ec3b3a355c6770",
+        "android_client_info": {
+          "package_name": "com.transiva.driver"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA9OQ1QEzGlbrliogkdZeYQ_-FME26XdQ0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:450425290065:android:a7b6cda68f819d1d5c6770",
         "android_client_info": {
           "package_name": "com.transiva.mobile"
