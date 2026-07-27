@@ -173,6 +173,19 @@ public class DriverChatRoomActivity extends Activity {
                 || DriverMessageStatus.isEnded(orderStatus);
     }
 
+    private void callCustomer() {
+        if (orderId == null || orderId.trim().isEmpty()) {
+            Toast.makeText(this, "Order tidak valid", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Intent call = new Intent(this, WebRtcCallActivity.class);
+        call.putExtra("order_id", orderId);
+        call.putExtra("source", orderSource);
+        call.putExtra("peer_name", participantName);
+        call.putExtra("incoming", false);
+        startActivity(call);
+    }
+
     private View buildScreen() {
         FrameLayout page = new FrameLayout(this);
         page.setBackgroundColor(Color.parseColor("#F4F8FD"));
@@ -218,6 +231,19 @@ public class DriverChatRoomActivity extends Activity {
         service.setPadding(dp(9), dp(5), dp(9), dp(5));
         service.setBackground(round("#EAF4FF", 12));
         header.addView(service);
+
+        if (!readOnly) {
+            TextView callButton = text("☎", 22, "#0B7CFF", true);
+            callButton.setGravity(Gravity.CENTER);
+            callButton.setContentDescription("Telepon customer");
+            callButton.setBackground(round("#EAF4FF", 15));
+            LinearLayout.LayoutParams callLp =
+                    new LinearLayout.LayoutParams(dp(46), dp(46));
+            callLp.setMargins(dp(7), 0, 0, 0);
+            header.addView(callButton, callLp);
+            callButton.setOnClickListener(v -> callCustomer());
+        }
+
         root.addView(header);
 
         messagesScroll = new ScrollView(this);

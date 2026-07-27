@@ -38,6 +38,8 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
             "transiva_wallet_channel";
     private static final String CH_CHAT =
             "transiva_chat_channel";
+    private static final String CH_CALL =
+            "transiva_call_channel";
     private static final String CH_PROMO =
             "transiva_promo_channel";
     private static final String CH_BROADCAST =
@@ -250,6 +252,12 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                                         | NotificationCompat.DEFAULT_LIGHTS
                         );
 
+        if ("webrtc_call".equals(type)) {
+            builder.setCategory(NotificationCompat.CATEGORY_CALL)
+                    .setPriority(NotificationCompat.PRIORITY_MAX)
+                    .setFullScreenIntent(pendingIntent, true);
+        }
+
         if (
                 Build.VERSION.SDK_INT >= 33
                         && ContextCompat.checkSelfPermission(
@@ -272,6 +280,16 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
             String url,
             Map<String, String> data
     ) {
+        if ("webrtc_call".equals(type)) {
+            Intent intent = new Intent(this, WebRtcCallActivity.class);
+            intent.putExtra("call_id", data != null ? first(data.get("call_id"), "") : "");
+            intent.putExtra("order_id", orderId);
+            intent.putExtra("source", data != null ? first(data.get("source"), "orders") : "orders");
+            intent.putExtra("caller_name", data != null ? first(data.get("caller_name"), "Transiva") : "Transiva");
+            intent.putExtra("incoming", true);
+            return intent;
+        }
+
         if (isChat(type)) {
             Intent intent = new Intent(this, DriverChatActivity.class);
             intent.putExtra("room_id", first(roomId, orderId));
@@ -309,6 +327,13 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                 CH_WALLET,
                 "Financial Transiva",
                 "Saldo, deposit, dan penarikan",
+                NotificationManager.IMPORTANCE_HIGH
+        );
+
+        createChannel(
+                CH_CALL,
+                "Panggilan Transiva",
+                "Panggilan suara Driver dan Customer",
                 NotificationManager.IMPORTANCE_HIGH
         );
 
@@ -410,6 +435,10 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
     private String channelForType(String type) {
         type = first(type, "general").toLowerCase();
 
+        if ("webrtc_call".equals(type)) {
+            return CH_CALL;
+        }
+
         if (isChat(type)) {
             return CH_CHAT;
         }
@@ -440,7 +469,8 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
         type = first(type, "").toLowerCase();
 
         if (
-                isChat(type)
+                "webrtc_call".equals(type)
+                        || isChat(type)
                         || isOrder(type)
                         || isWallet(type)
                         || type.contains("broadcast")
@@ -454,6 +484,10 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
 
     private String categoryForType(String type) {
         type = first(type, "").toLowerCase();
+
+        if ("webrtc_call".equals(type)) {
+            return NotificationCompat.CATEGORY_CALL;
+        }
 
         if (isChat(type)) {
             return NotificationCompat.CATEGORY_MESSAGE;
