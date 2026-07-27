@@ -103,7 +103,7 @@ public class WebRtcCallActivity extends Activity {
                 | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED);
 
         session = new SessionManager(this);
-        role = BuildConfig.APPLICATION_ID.endsWith(".driver") ? "driver" : "customer";
+        role = getApplicationContext().getPackageName().endsWith(".driver") ? "driver" : "customer";
         readIntent();
         setContentView(buildUi());
         configureAudioRoute();
