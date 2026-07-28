@@ -56,6 +56,13 @@ public class WebRtcCallActivity extends Activity {
     public static final String ACTION_CALL_STATE = "com.transiva.app.WEBRTC_CALL_STATE";
     public static final String EXTRA_CALL_ID = "call_id";
     public static final String EXTRA_CALL_STATUS = "call_status";
+    private static final String STATE_CALL_ID = "wr_call_id";
+    private static final String STATE_ORDER_ID = "wr_order_id";
+    private static final String STATE_SOURCE = "wr_source";
+    private static final String STATE_PEER = "wr_peer";
+    private static final String STATE_INCOMING = "wr_incoming";
+    private static final String STATE_ACCEPTED = "wr_accepted";
+
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newSingleThreadExecutor();
@@ -124,15 +131,42 @@ public class WebRtcCallActivity extends Activity {
 
         session = new SessionManager(this);
         role = getApplicationContext().getPackageName().endsWith(".driver") ? "driver" : "customer";
-        readIntent();
+
+        if (savedInstanceState != null) {
+            callId = clean(savedInstanceState.getString(STATE_CALL_ID, ""));
+            orderId = clean(savedInstanceState.getString(STATE_ORDER_ID, ""));
+            orderSource = first(savedInstanceState.getString(STATE_SOURCE, ""), "orders");
+            peerName = first(
+                    savedInstanceState.getString(STATE_PEER, ""),
+                    role.equals("driver") ? "Customer" : "Driver"
+            );
+            incoming = savedInstanceState.getBoolean(STATE_INCOMING, false);
+            accepted = savedInstanceState.getBoolean(STATE_ACCEPTED, false);
+        } else {
+            readIntent();
+        }
+
         registerCallStateReceiver();
         setContentView(buildUi());
         configureAudioRoute();
 
         if (incoming) {
-            status("Panggilan masuk");
-            startRingtone();
+            if (accepted) {
+                acceptButton.setVisibility(View.GONE);
+                endButton.setText("Akhiri");
+                status("Menyambungkan kembali...");
+                main.post(pollTask);
+                ensureMicrophoneThenResume();
+            } else {
+                status("Panggilan masuk");
+                startRingtone();
+                main.post(pollTask);
+            }
+        } else if (!callId.isEmpty()) {
+            // Existing outgoing call after Android recreated this Activity.
+            status("Menyambungkan kembali...");
             main.post(pollTask);
+            ensureMicrophoneThenResume();
         } else {
             status("Menghubungkan...");
             ensureMicrophoneThenStart();
@@ -146,6 +180,34 @@ public class WebRtcCallActivity extends Activity {
         orderSource = first(i.getStringExtra("source"), i.getStringExtra("order_source"), "orders");
         peerName = first(i.getStringExtra("peer_name"), i.getStringExtra("caller_name"), role.equals("driver") ? "Customer" : "Driver");
         incoming = i.getBooleanExtra("incoming", !callId.isEmpty());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        if (intent == null) return;
+        setIntent(intent);
+
+        String nextCallId = clean(intent.getStringExtra("call_id"));
+        if (!nextCallId.isEmpty() && !callId.isEmpty() && !nextCallId.equals(callId)) {
+            // Never mix signaling from two calls in one Activity instance.
+            finishCall(callId.isEmpty() ? "" : (incoming && !accepted ? "reject" : "end"), true);
+            return;
+        }
+
+        if (!nextCallId.isEmpty()) callId = nextCallId;
+        orderId = first(intent.getStringExtra("order_id"), orderId);
+        orderSource = first(intent.getStringExtra("source"), intent.getStringExtra("order_source"), orderSource, "orders");
+        peerName = first(intent.getStringExtra("peer_name"), intent.getStringExtra("caller_name"), peerName);
+        incoming = intent.getBooleanExtra("incoming", incoming || !callId.isEmpty());
+
+        if (titleView != null && !peerName.isEmpty()) titleView.setText(peerName);
+        if (incoming && !accepted && !ended) {
+            status("Panggilan masuk");
+            startRingtone();
+            main.removeCallbacks(pollTask);
+            main.post(pollTask);
+        }
     }
 
     private View buildUi() {
@@ -213,6 +275,18 @@ public class WebRtcCallActivity extends Activity {
         return root;
     }
 
+    private void ensureMicrophoneThenResume() {
+        if (Build.VERSION.SDK_INT >= 23
+                && checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_MIC);
+            return;
+        }
+
+        // callId already exists, therefore never create another server-side call.
+        loadIceAndStartPeer();
+    }
+
     private void ensureMicrophoneThenStart() {
         if (Build.VERSION.SDK_INT >= 23 && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_MIC);
@@ -227,7 +301,12 @@ public class WebRtcCallActivity extends Activity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQ_MIC) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                if (incoming && accepted) loadIceAndStartPeer(); else if (!incoming) startOutgoingCall();
+                if (incoming && accepted) {
+                    loadIceAndStartPeer();
+                } else if (!incoming) {
+                    if (callId.isEmpty()) startOutgoingCall();
+                    else loadIceAndStartPeer();
+                }
             } else {
                 toast("Izin mikrofon diperlukan untuk panggilan online.");
                 finishCall(callId.isEmpty() ? "" : (incoming ? "reject" : "end"), true);
@@ -251,7 +330,7 @@ public class WebRtcCallActivity extends Activity {
                     main.post(pollTask);
                     loadIceAndStartPeer();
                 });
-            } catch (Exception e) { fail(e); }
+            } catch (Throwable e) { fail(e); }
         });
     }
 
@@ -266,7 +345,7 @@ public class WebRtcCallActivity extends Activity {
             try {
                 WebRtcSignalApi.post(session, basePayload("accept"));
                 runOnUiThread(this::ensureMicrophoneThenStart);
-            } catch (Exception e) { fail(e); }
+            } catch (Throwable e) { fail(e); }
         });
     }
 
@@ -307,7 +386,7 @@ public class WebRtcCallActivity extends Activity {
     }
 
     private void initializePeer(List<PeerConnection.IceServer> iceServers) {
-        if (ended) return;
+        if (ended || peerConnection != null || factory != null) return;
         try {
             PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(getApplicationContext()).createInitializationOptions());
             audioDeviceModule = JavaAudioDeviceModule.builder(getApplicationContext())
@@ -326,7 +405,7 @@ public class WebRtcCallActivity extends Activity {
             peerConnection.addTrack(localAudioTrack, Collections.singletonList("transiva_audio"));
             configureAudioRoute();
             if (!incoming) createOffer();
-        } catch (Exception e) { fail(e); }
+        } catch (Throwable e) { fail(e); }
     }
 
     private void createOffer() {
@@ -361,7 +440,7 @@ public class WebRtcCallActivity extends Activity {
     private void postSdp(String action, String sdp) {
         io.execute(() -> {
             try { JSONObject p = basePayload(action); p.put("sdp", sdp); WebRtcSignalApi.post(session, p); }
-            catch (Exception e) { fail(e); }
+            catch (Throwable e) { fail(e); }
         });
     }
 
@@ -568,13 +647,50 @@ public class WebRtcCallActivity extends Activity {
 
     private void status(String text) { if (statusView != null) statusView.setText(text); }
     private void toast(String text) { Toast.makeText(this, text, Toast.LENGTH_LONG).show(); }
-    private void fail(Exception e) { runOnUiThread(() -> { toast(e.getMessage() == null ? "Panggilan gagal" : e.getMessage()); finishCall(callId.isEmpty() ? "" : "end", true); }); }
+    private void fail(Throwable e) {
+        runOnUiThread(() -> {
+            String message = (e == null || e.getMessage() == null || e.getMessage().trim().isEmpty())
+                    ? "Panggilan gagal"
+                    : e.getMessage().trim();
+            status("Gagal: " + message);
+            toast(message);
 
-    @Override public void onBackPressed() { finishCall(callId.isEmpty() ? "" : (incoming && !accepted ? "reject" : "end"), true); }
-    @Override protected void onDestroy() {
+            // Give the user enough time to see the actual failure reason.
+            main.postDelayed(
+                    () -> finishCall(callId.isEmpty() ? "" : "end", true),
+                    1200L
+            );
+        });
+    }
+
+    @Override
+    public void onBackPressed() {
+        finishCall(
+                callId.isEmpty() ? "" : (incoming && !accepted ? "reject" : "end"),
+                true
+        );
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        outState.putString(STATE_CALL_ID, callId);
+        outState.putString(STATE_ORDER_ID, orderId);
+        outState.putString(STATE_SOURCE, orderSource);
+        outState.putString(STATE_PEER, peerName);
+        outState.putBoolean(STATE_INCOMING, incoming);
+        outState.putBoolean(STATE_ACCEPTED, accepted);
+        super.onSaveInstanceState(outState);
+    }
+
+    @Override
+    protected void onDestroy() {
         unregisterCallStateReceiver();
-        if (!ended) finishCall(callId.isEmpty() ? "" : "end", false);
-        // Let an already queued terminal end/reject request finish.
+        main.removeCallbacks(pollTask);
+        stopRingtone();
+
+        // Android/OEM may destroy and recreate this Activity without the user
+        // hanging up. Never send "end" from onDestroy().
+        releaseRtc();
         io.shutdown();
         super.onDestroy();
     }

@@ -39,7 +39,7 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
     private static final String CH_CHAT =
             "transiva_chat_channel";
     private static final String CH_CALL =
-            "transiva_call_channel";
+            "transiva_call_channel_v2";
     private static final String CH_PROMO =
             "transiva_promo_channel";
     private static final String CH_BROADCAST =
@@ -296,6 +296,9 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
         if ("webrtc_call".equals(type)) {
             builder.setCategory(NotificationCompat.CATEGORY_CALL)
                     .setPriority(NotificationCompat.PRIORITY_MAX)
+                    .setOngoing(true)
+                    .setAutoCancel(false)
+                    .setTimeoutAfter(50_000L)
                     .setFullScreenIntent(pendingIntent, true);
         }
 
@@ -312,6 +315,29 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
         NotificationManagerCompat
                 .from(this)
                 .notify(requestCode, builder.build());
+
+        if ("webrtc_call".equals(type)
+                && data != null
+                && "incoming_call".equalsIgnoreCase(first(data.get("event"), ""))) {
+            openIncomingCallScreen(intent);
+        }
+    }
+
+    private void openIncomingCallScreen(Intent intent) {
+        if (intent == null) return;
+        try {
+            Intent callIntent = new Intent(intent);
+            callIntent.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK
+                            | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                            | Intent.FLAG_ACTIVITY_SINGLE_TOP
+                            | Intent.FLAG_ACTIVITY_NO_USER_ACTION
+            );
+            startActivity(callIntent);
+        } catch (Throwable ignored) {
+            // Android 10+ may block a direct background Activity start. In that
+            // case the high-priority full-screen call notification above opens it.
+        }
     }
 
     private Intent buildOpenIntent(
@@ -456,17 +482,16 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
         channel.enableLights(true);
 
         channel.setSound(
-                android.provider.Settings
-                        .System
-                        .DEFAULT_NOTIFICATION_URI,
+                CH_CALL.equals(id)
+                        ? android.provider.Settings.System.DEFAULT_RINGTONE_URI
+                        : android.provider.Settings.System.DEFAULT_NOTIFICATION_URI,
                 new AudioAttributes.Builder()
                         .setUsage(
-                                AudioAttributes.USAGE_NOTIFICATION
+                                CH_CALL.equals(id)
+                                        ? AudioAttributes.USAGE_NOTIFICATION_RINGTONE
+                                        : AudioAttributes.USAGE_NOTIFICATION
                         )
-                        .setContentType(
-                                AudioAttributes
-                                        .CONTENT_TYPE_SONIFICATION
-                        )
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .build()
         );
 
