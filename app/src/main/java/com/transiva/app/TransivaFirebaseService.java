@@ -144,6 +144,25 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                 }
                 return;
             }
+
+            // Accepted is a state update for the already-open call screen. Do
+            // not create another call notification/full-screen PendingIntent: it
+            // can deliver onNewIntent() to the caller and corrupt caller/callee
+            // direction while SDP negotiation is starting.
+            if ("call_accepted".equals(event) || "accepted".equals(event)) {
+                Intent state = new Intent(WebRtcCallActivity.ACTION_CALL_STATE);
+                state.setPackage(getPackageName());
+                state.putExtra(WebRtcCallActivity.EXTRA_CALL_ID, callId);
+                state.putExtra(WebRtcCallActivity.EXTRA_CALL_STATUS, "accepted");
+                sendBroadcast(state);
+
+                NotificationManager nm =
+                        (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                if (nm != null && !callId.isEmpty()) {
+                    nm.cancel(Math.abs(("webrtc_call|" + callId).hashCode()));
+                }
+                return;
+            }
         }
 
         if (type.equals("force_logout")
@@ -290,10 +309,13 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                                 NotificationCompat.VISIBILITY_PUBLIC
                         );
 
-        if ("webrtc_call".equals(type)) {
-            // High-priority/full-screen, but SILENT. WebRtcCallActivity owns
-            // the ringtone so opening/tapping the notification cannot create
-            // a second overlapping ringtone.
+        boolean incomingCallEvent = "webrtc_call".equals(type)
+                && data != null
+                && "incoming_call".equalsIgnoreCase(first(data.get("event"), ""));
+
+        if (incomingCallEvent) {
+            // Full-screen notification is ONLY valid for a genuinely incoming
+            // call. Accepted/signaling updates must never relaunch the active call.
             builder.setCategory(NotificationCompat.CATEGORY_CALL)
                     .setPriority(NotificationCompat.PRIORITY_MAX)
                     .setOngoing(true)
@@ -361,11 +383,14 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
     ) {
         if ("webrtc_call".equals(type)) {
             Intent intent = new Intent(this, WebRtcCallActivity.class);
+            String callEvent = data != null ? first(data.get("event"), "") : "";
+            boolean incomingCall = "incoming_call".equalsIgnoreCase(callEvent);
             intent.putExtra("call_id", data != null ? first(data.get("call_id"), "") : "");
             intent.putExtra("order_id", orderId);
             intent.putExtra("source", data != null ? first(data.get("source"), "orders") : "orders");
             intent.putExtra("caller_name", data != null ? first(data.get("caller_name"), "Transiva") : "Transiva");
-            intent.putExtra("incoming", true);
+            // Never classify accepted/ended/signaling events as incoming calls.
+            intent.putExtra("incoming", incomingCall);
             return intent;
         }
 

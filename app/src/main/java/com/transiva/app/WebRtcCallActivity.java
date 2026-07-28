@@ -131,7 +131,10 @@ public class WebRtcCallActivity extends Activity {
             String eventCallId = clean(intent.getStringExtra(EXTRA_CALL_ID));
             String eventStatus = clean(intent.getStringExtra(EXTRA_CALL_STATUS)).toLowerCase();
             if (eventCallId.isEmpty() || !eventCallId.equals(callId)) return;
-            handleTerminalStatus(eventStatus, true);
+            // Accepted is non-terminal and must wake the existing caller without
+            // recreating/reclassifying the Activity through an FCM PendingIntent.
+            if ("accepted".equals(eventStatus)) handleStatus(eventStatus);
+            else handleTerminalStatus(eventStatus, true);
         }
     };
 
@@ -222,11 +225,18 @@ public class WebRtcCallActivity extends Activity {
             return;
         }
 
+        boolean sameExistingCall = !callId.isEmpty()
+                && (nextCallId.isEmpty() || nextCallId.equals(callId));
         if (!nextCallId.isEmpty()) callId = nextCallId;
         orderId = first(intent.getStringExtra("order_id"), orderId);
         orderSource = first(intent.getStringExtra("source"), intent.getStringExtra("order_source"), orderSource, "orders");
         peerName = first(intent.getStringExtra("peer_name"), intent.getStringExtra("caller_name"), peerName);
-        incoming = intent.getBooleanExtra("incoming", incoming || !callId.isEmpty());
+
+        // The call direction is immutable for a running call. A caller must never
+        // become a callee (or vice versa) just because another FCM event arrives.
+        if (!sameExistingCall) {
+            incoming = intent.getBooleanExtra("incoming", incoming);
+        }
 
         if (titleView != null && !peerName.isEmpty()) titleView.setText(peerName);
         if (incoming && !accepted && !ended) {
