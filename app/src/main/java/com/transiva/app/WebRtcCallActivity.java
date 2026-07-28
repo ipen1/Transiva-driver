@@ -2,6 +2,7 @@ package com.transiva.app;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.NotificationManager;
 import android.content.Context;
 import android.content.BroadcastReceiver;
 import android.content.IntentFilter;
@@ -81,6 +82,7 @@ public class WebRtcCallActivity extends Activity {
     private boolean offerCreated;
     private boolean answerCreated;
     private boolean remoteDescriptionSet;
+    private boolean rtcStartRequested;
     private boolean muted;
     private boolean speaker = true;
     private int lastCandidateId;
@@ -146,6 +148,7 @@ public class WebRtcCallActivity extends Activity {
             readIntent();
         }
 
+        cancelOwnCallNotification();
         registerCallStateReceiver();
         setContentView(buildUi());
         configureAudioRoute();
@@ -187,6 +190,8 @@ public class WebRtcCallActivity extends Activity {
         super.onNewIntent(intent);
         if (intent == null) return;
         setIntent(intent);
+
+        cancelOwnCallNotification();
 
         String nextCallId = clean(intent.getStringExtra("call_id"));
         if (!nextCallId.isEmpty() && !callId.isEmpty() && !nextCallId.equals(callId)) {
@@ -327,8 +332,10 @@ public class WebRtcCallActivity extends Activity {
                 runOnUiThread(() -> {
                     titleView.setText(peerName);
                     status("Memanggil " + peerName + "...");
+                    // Keep the caller on the ringing screen. WebRTC/audio is
+                    // started only after the callee has actually accepted.
+                    main.removeCallbacks(pollTask);
                     main.post(pollTask);
-                    loadIceAndStartPeer();
                 });
             } catch (Throwable e) { fail(e); }
         });
@@ -514,7 +521,13 @@ public class WebRtcCallActivity extends Activity {
     private void handleStatus(String st) {
         if (ended) return;
         st = clean(st).toLowerCase();
-        if ("accepted".equals(st) && !incoming) status("Diterima, menyambungkan audio...");
+        if ("accepted".equals(st) && !incoming) {
+            status("Diterima, menyambungkan audio...");
+            if (!peerStarted && !rtcStartRequested) {
+                rtcStartRequested = true;
+                ensureMicrophoneThenResume();
+            }
+        }
         handleTerminalStatus(st, false);
     }
 
@@ -625,14 +638,31 @@ public class WebRtcCallActivity extends Activity {
 
     private void startRingtone() {
         try {
+            // The Activity is the single owner of call audio. FCM notifications
+            // are intentionally silent, preventing double ringtone.
+            if (ringtone != null && ringtone.isPlaying()) return;
             Uri uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
-            ringtone = RingtoneManager.getRingtone(this, uri);
-            if (ringtone != null) ringtone.play();
-        } catch (Exception ignored) {}
+            ringtone = RingtoneManager.getRingtone(getApplicationContext(), uri);
+            if (ringtone != null && !ringtone.isPlaying()) ringtone.play();
+        } catch (Throwable ignored) {}
     }
 
     private void stopRingtone() {
-        try { if (ringtone != null && ringtone.isPlaying()) ringtone.stop(); } catch (Exception ignored) {}
+        try { if (ringtone != null && ringtone.isPlaying()) ringtone.stop(); } catch (Throwable ignored) {}
+        ringtone = null;
+    }
+
+    private void cancelOwnCallNotification() {
+        String id = clean(callId);
+        if (id.isEmpty() && getIntent() != null) {
+            id = clean(getIntent().getStringExtra("call_id"));
+        }
+        if (id.isEmpty()) return;
+        try {
+            NotificationManager nm =
+                    (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) nm.cancel(Math.abs(("webrtc_call|" + id).hashCode()));
+        } catch (Throwable ignored) {}
     }
 
     private void connected() {

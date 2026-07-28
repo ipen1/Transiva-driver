@@ -39,7 +39,7 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
     private static final String CH_CHAT =
             "transiva_chat_channel";
     private static final String CH_CALL =
-            "transiva_call_channel_v2";
+            "transiva_call_channel_v3";
     private static final String CH_PROMO =
             "transiva_promo_channel";
     private static final String CH_BROADCAST =
@@ -286,20 +286,26 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                         .setCategory(categoryForType(type))
                         .setVisibility(
                                 NotificationCompat.VISIBILITY_PUBLIC
-                        )
-                        .setDefaults(
-                                NotificationCompat.DEFAULT_SOUND
-                                        | NotificationCompat.DEFAULT_VIBRATE
-                                        | NotificationCompat.DEFAULT_LIGHTS
                         );
 
         if ("webrtc_call".equals(type)) {
+            // High-priority/full-screen, but SILENT. WebRtcCallActivity owns
+            // the ringtone so opening/tapping the notification cannot create
+            // a second overlapping ringtone.
             builder.setCategory(NotificationCompat.CATEGORY_CALL)
                     .setPriority(NotificationCompat.PRIORITY_MAX)
                     .setOngoing(true)
                     .setAutoCancel(false)
+                    .setOnlyAlertOnce(true)
+                    .setSilent(true)
                     .setTimeoutAfter(50_000L)
                     .setFullScreenIntent(pendingIntent, true);
+        } else {
+            builder.setDefaults(
+                    NotificationCompat.DEFAULT_SOUND
+                            | NotificationCompat.DEFAULT_VIBRATE
+                            | NotificationCompat.DEFAULT_LIGHTS
+            );
         }
 
         if (
@@ -481,19 +487,19 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
         channel.enableVibration(DriverAppSettings.isVibrationEnabled(this));
         channel.enableLights(true);
 
-        channel.setSound(
-                CH_CALL.equals(id)
-                        ? android.provider.Settings.System.DEFAULT_RINGTONE_URI
-                        : android.provider.Settings.System.DEFAULT_NOTIFICATION_URI,
-                new AudioAttributes.Builder()
-                        .setUsage(
-                                CH_CALL.equals(id)
-                                        ? AudioAttributes.USAGE_NOTIFICATION_RINGTONE
-                                        : AudioAttributes.USAGE_NOTIFICATION
-                        )
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build()
-        );
+        if (CH_CALL.equals(id)) {
+            // Silent channel; the full-screen Activity plays exactly one ringtone.
+            channel.setSound(null, null);
+            channel.enableVibration(false);
+        } else {
+            channel.setSound(
+                    android.provider.Settings.System.DEFAULT_NOTIFICATION_URI,
+                    new AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+            );
+        }
 
         manager.createNotificationChannel(channel);
     }
