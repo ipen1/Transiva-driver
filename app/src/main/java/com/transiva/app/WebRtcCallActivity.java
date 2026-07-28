@@ -63,6 +63,8 @@ public class WebRtcCallActivity extends Activity {
     private static final String STATE_PEER = "wr_peer";
     private static final String STATE_INCOMING = "wr_incoming";
     private static final String STATE_ACCEPTED = "wr_accepted";
+    private static final Object RTC_INIT_LOCK = new Object();
+    private static boolean rtcFactoryInitialized;
 
 
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -104,6 +106,7 @@ public class WebRtcCallActivity extends Activity {
     private Button speakerButton;
 
     private boolean receiverRegistered;
+    private volatile boolean destroyed;
 
     private final BroadcastReceiver callStateReceiver = new BroadcastReceiver() {
         @Override
@@ -118,9 +121,9 @@ public class WebRtcCallActivity extends Activity {
 
     private final Runnable pollTask = new Runnable() {
         @Override public void run() {
-            if (ended || callId.isEmpty()) return;
+            if (ended || destroyed || callId.isEmpty()) return;
             pollSignal();
-            main.postDelayed(this, POLL_MS);
+            if (!ended && !destroyed) main.postDelayed(this, POLL_MS);
         }
     };
 
@@ -321,7 +324,7 @@ public class WebRtcCallActivity extends Activity {
 
     private void startOutgoingCall() {
         if (orderId.isEmpty()) { toast("Order tidak valid"); finish(); return; }
-        io.execute(() -> {
+        safeIo(() -> {
             try {
                 JSONObject p = basePayload("start");
                 p.put("order_id", orderId);
@@ -348,7 +351,7 @@ public class WebRtcCallActivity extends Activity {
         acceptButton.setVisibility(View.GONE);
         endButton.setText("Akhiri");
         status("Menghubungkan audio...");
-        io.execute(() -> {
+        safeIo(() -> {
             try {
                 WebRtcSignalApi.post(session, basePayload("accept"));
                 runOnUiThread(this::ensureMicrophoneThenStart);
@@ -359,7 +362,7 @@ public class WebRtcCallActivity extends Activity {
     private void loadIceAndStartPeer() {
         if (peerStarted || ended) return;
         peerStarted = true;
-        io.execute(() -> {
+        safeIo(() -> {
             List<PeerConnection.IceServer> servers = new ArrayList<>();
             try {
                 JSONObject r = WebRtcSignalApi.post(session, basePayload("ice_config"));
@@ -382,7 +385,7 @@ public class WebRtcCallActivity extends Activity {
                         }
                     }
                 }
-            } catch (Exception ignored) {}
+            } catch (Throwable ignored) {}
             if (servers.isEmpty()) {
                 servers.add(PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer());
                 servers.add(PeerConnection.IceServer.builder("stun:stun.cloudflare.com:3478").createIceServer());
@@ -395,10 +398,10 @@ public class WebRtcCallActivity extends Activity {
     private void initializePeer(List<PeerConnection.IceServer> iceServers) {
         if (ended || peerConnection != null || factory != null) return;
         try {
-            PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(getApplicationContext()).createInitializationOptions());
+            ensureRtcFactoryInitialized();
             audioDeviceModule = JavaAudioDeviceModule.builder(getApplicationContext())
-                    .setUseHardwareAcousticEchoCanceler(true)
-                    .setUseHardwareNoiseSuppressor(true)
+                    .setUseHardwareAcousticEchoCanceler(false)
+                    .setUseHardwareNoiseSuppressor(false)
                     .createAudioDeviceModule();
             factory = PeerConnectionFactory.builder().setAudioDeviceModule(audioDeviceModule).createPeerConnectionFactory();
             audioSource = factory.createAudioSource(new MediaConstraints());
@@ -445,26 +448,26 @@ public class WebRtcCallActivity extends Activity {
     }
 
     private void postSdp(String action, String sdp) {
-        io.execute(() -> {
+        safeIo(() -> {
             try { JSONObject p = basePayload(action); p.put("sdp", sdp); WebRtcSignalApi.post(session, p); }
             catch (Throwable e) { fail(e); }
         });
     }
 
     private void postCandidate(IceCandidate c) {
-        io.execute(() -> {
+        safeIo(() -> {
             try {
                 JSONObject p = basePayload("candidate");
                 p.put("candidate", c.sdp);
                 p.put("sdp_mid", c.sdpMid == null ? "" : c.sdpMid);
                 p.put("sdp_mline_index", c.sdpMLineIndex);
                 WebRtcSignalApi.post(session, p);
-            } catch (Exception ignored) {}
+            } catch (Throwable ignored) {}
         });
     }
 
     private void pollSignal() {
-        io.execute(() -> {
+        safeIo(() -> {
             try {
                 JSONObject p = basePayload("poll");
                 p.put("candidate_after", lastCandidateId);
@@ -545,6 +548,46 @@ public class WebRtcCallActivity extends Activity {
         }
     }
 
+    private void safeIo(Runnable task) {
+        if (task == null || destroyed || ended || io.isShutdown()) return;
+        try {
+            io.execute(() -> {
+                if (destroyed || ended) return;
+                try {
+                    task.run();
+                } catch (Throwable t) {
+                    // Do not let an executor callback kill the process.
+                    fail(t);
+                }
+            });
+        } catch (Throwable ignored) {
+            // Activity may be shutting down between the check and execute().
+        }
+    }
+
+    private void terminalIo(Runnable task) {
+        if (task == null || destroyed || io.isShutdown()) {
+            return;
+        }
+        try {
+            io.execute(task);
+        } catch (Throwable ignored) {
+            // Shutdown race: the UI will still be closed safely.
+        }
+    }
+
+    private void ensureRtcFactoryInitialized() {
+        synchronized (RTC_INIT_LOCK) {
+            if (rtcFactoryInitialized) return;
+            PeerConnectionFactory.initialize(
+                    PeerConnectionFactory.InitializationOptions
+                            .builder(getApplicationContext())
+                            .createInitializationOptions()
+            );
+            rtcFactoryInitialized = true;
+        }
+    }
+
     private JSONObject basePayload(String action) throws Exception {
         JSONObject p = new JSONObject();
         p.put("action", action);
@@ -570,7 +613,7 @@ public class WebRtcCallActivity extends Activity {
             // IMPORTANT: do not finish the Activity before this terminal signal
             // reaches the backend. Otherwise onDestroy() may cancel the executor
             // and the peer can remain stuck on the call screen.
-            io.execute(() -> {
+            terminalIo(() -> {
                 try {
                     WebRtcSignalApi.post(session, basePayload(action));
                 } catch (Exception ignored) {
@@ -585,12 +628,12 @@ public class WebRtcCallActivity extends Activity {
     }
 
     private void releaseRtc() {
-        try { if (peerConnection != null) { peerConnection.close(); peerConnection.dispose(); } } catch (Exception ignored) {}
+        try { if (peerConnection != null) { peerConnection.close(); peerConnection.dispose(); } } catch (Throwable ignored) {}
         peerConnection = null;
-        try { if (localAudioTrack != null) localAudioTrack.dispose(); } catch (Exception ignored) {}
-        try { if (audioSource != null) audioSource.dispose(); } catch (Exception ignored) {}
-        try { if (factory != null) factory.dispose(); } catch (Exception ignored) {}
-        try { if (audioDeviceModule != null) audioDeviceModule.release(); } catch (Exception ignored) {}
+        try { if (localAudioTrack != null) localAudioTrack.dispose(); } catch (Throwable ignored) {}
+        try { if (audioSource != null) audioSource.dispose(); } catch (Throwable ignored) {}
+        try { if (factory != null) factory.dispose(); } catch (Throwable ignored) {}
+        try { if (audioDeviceModule != null) audioDeviceModule.release(); } catch (Throwable ignored) {}
         if (audioManager != null) {
             audioManager.setSpeakerphoneOn(false);
             audioManager.setMode(AudioManager.MODE_NORMAL);
@@ -612,7 +655,7 @@ public class WebRtcCallActivity extends Activity {
 
     private void unregisterCallStateReceiver() {
         if (!receiverRegistered) return;
-        try { unregisterReceiver(callStateReceiver); } catch (Exception ignored) {}
+        try { unregisterReceiver(callStateReceiver); } catch (Throwable ignored) {}
         receiverRegistered = false;
     }
 
@@ -678,7 +721,9 @@ public class WebRtcCallActivity extends Activity {
     private void status(String text) { if (statusView != null) statusView.setText(text); }
     private void toast(String text) { Toast.makeText(this, text, Toast.LENGTH_LONG).show(); }
     private void fail(Throwable e) {
+        if (destroyed || ended) return;
         runOnUiThread(() -> {
+            if (destroyed || ended) return;
             String message = (e == null || e.getMessage() == null || e.getMessage().trim().isEmpty())
                     ? "Panggilan gagal"
                     : e.getMessage().trim();
@@ -714,6 +759,7 @@ public class WebRtcCallActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        destroyed = true;
         unregisterCallStateReceiver();
         main.removeCallbacks(pollTask);
         stopRingtone();
