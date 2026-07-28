@@ -126,7 +126,16 @@
         <activity android:name=".DriverDashboardActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
         <activity android:name=".DriverSettingsActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
         <activity android:name=".DriverTripActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
-        <activity android:name=".WebRtcCallActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
+        <activity
+            android:name=".WebRtcCallActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:screenOrientation="portrait"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|uiMode"
+            android:theme="@style/AppTheme" />
         <activity android:name=".DriverChatRoomActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".DriverNavigationActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
         <activity android:name=".DriverLeafletNavigationActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
