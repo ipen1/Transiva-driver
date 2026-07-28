@@ -25,6 +25,7 @@ import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.Chronometer;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -88,6 +89,7 @@ public class WebRtcCallActivity extends Activity {
     private boolean muted;
     private boolean speaker = true;
     private int lastCandidateId;
+    private String lastServerStatus = "";
 
     private PeerConnectionFactory factory;
     private PeerConnection peerConnection;
@@ -104,6 +106,9 @@ public class WebRtcCallActivity extends Activity {
     private Button endButton;
     private Button muteButton;
     private Button speakerButton;
+    private TextView debugView;
+    private boolean userRequestedClose;
+    private boolean everConnected;
 
     private boolean receiverRegistered;
     private volatile boolean destroyed;
@@ -162,6 +167,9 @@ public class WebRtcCallActivity extends Activity {
             readIntent();
         }
 
+        CallDebugReporter.installCrashHandler(this, callId);
+        CallDebugReporter.clear(this, callId);
+        debug("Activity onCreate role=" + role + " incoming=" + incoming + " accepted=" + accepted + " call=" + callId);
         cancelOwnCallNotification();
         registerCallStateReceiver();
         setContentView(buildUi());
@@ -262,6 +270,22 @@ public class WebRtcCallActivity extends Activity {
         timerLp.setMargins(0, dp(10), 0, 0);
         root.addView(timerView, timerLp);
 
+        TextView debugLabel = text("WEBRTC DEBUG", 12, Color.parseColor("#60A5FA"), true);
+        LinearLayout.LayoutParams dl = new LinearLayout.LayoutParams(-1, -2);
+        dl.setMargins(0, dp(18), 0, dp(6));
+        root.addView(debugLabel, dl);
+
+        ScrollView debugScroll = new ScrollView(this);
+        debugScroll.setFillViewport(true);
+        debugView = text("Menunggu proses WebRTC...", 11, Color.parseColor("#D1D5DB"), false);
+        debugView.setTypeface(android.graphics.Typeface.MONOSPACE);
+        debugView.setTextIsSelectable(true);
+        debugView.setPadding(dp(10), dp(8), dp(10), dp(8));
+        debugView.setBackground(round("#0F2435", 10));
+        debugScroll.addView(debugView, new ScrollView.LayoutParams(-1, -2));
+        LinearLayout.LayoutParams dslp = new LinearLayout.LayoutParams(-1, dp(190));
+        root.addView(debugScroll, dslp);
+
         View spacer = new View(this);
         root.addView(spacer, new LinearLayout.LayoutParams(1, 0, 1f));
 
@@ -334,6 +358,7 @@ public class WebRtcCallActivity extends Activity {
     }
 
     private void startOutgoingCall() {
+        debug("SIGNAL start outgoing order=" + orderId + " source=" + orderSource);
         if (orderId.isEmpty()) { toast("Order tidak valid"); finish(); return; }
         safeIo(() -> {
             try {
@@ -342,6 +367,7 @@ public class WebRtcCallActivity extends Activity {
                 p.put("source", orderSource);
                 JSONObject r = WebRtcSignalApi.post(session, p);
                 callId = r.optString("call_id", "");
+                debug("SIGNAL start OK call_id=" + callId);
                 peerName = first(r.optString("peer_name", ""), peerName);
                 runOnUiThread(() -> {
                     titleView.setText(peerName);
@@ -356,6 +382,7 @@ public class WebRtcCallActivity extends Activity {
     }
 
     private void acceptIncoming() {
+        debug("UI acceptIncoming() call=" + callId);
         if (accepted || callId.isEmpty()) return;
         accepted = true;
         stopRingtone();
@@ -365,17 +392,20 @@ public class WebRtcCallActivity extends Activity {
         safeIo(() -> {
             try {
                 WebRtcSignalApi.post(session, basePayload("accept"));
+                debug("SIGNAL accept OK");
                 runOnUiThread(this::ensureMicrophoneThenStart);
             } catch (Throwable e) { fail(e); }
         });
     }
 
     private void loadIceAndStartPeer() {
+        debug("RTC loadIceAndStartPeer peerStarted=" + peerStarted + " accepted=" + accepted);
         if (peerStarted || ended) return;
         peerStarted = true;
         safeIo(() -> {
             List<PeerConnection.IceServer> servers = new ArrayList<>();
             try {
+                debug("SIGNAL ice_config request");
                 JSONObject r = WebRtcSignalApi.post(session, basePayload("ice_config"));
                 JSONArray arr = r.optJSONArray("ice_servers");
                 if (arr != null) {
@@ -401,35 +431,44 @@ public class WebRtcCallActivity extends Activity {
                 servers.add(PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer());
                 servers.add(PeerConnection.IceServer.builder("stun:stun.cloudflare.com:3478").createIceServer());
             }
+            debug("ICE servers=" + servers.size());
             List<PeerConnection.IceServer> finalServers = servers;
             runOnUiThread(() -> initializePeer(finalServers));
         });
     }
 
     private void initializePeer(List<PeerConnection.IceServer> iceServers) {
+        debug("RTC initializePeer servers=" + (iceServers == null ? 0 : iceServers.size()));
         if (ended || peerConnection != null || factory != null) return;
         try {
+            debug("RTC PeerConnectionFactory.initialize");
             ensureRtcFactoryInitialized();
+            debug("AUDIO create JavaAudioDeviceModule");
             audioDeviceModule = JavaAudioDeviceModule.builder(getApplicationContext())
                     .setUseHardwareAcousticEchoCanceler(false)
                     .setUseHardwareNoiseSuppressor(false)
                     .createAudioDeviceModule();
             factory = PeerConnectionFactory.builder().setAudioDeviceModule(audioDeviceModule).createPeerConnectionFactory();
+            debug("RTC factory created");
             audioSource = factory.createAudioSource(new MediaConstraints());
             localAudioTrack = factory.createAudioTrack("TRANSIVA_AUDIO", audioSource);
+            debug("AUDIO local track created");
             localAudioTrack.setEnabled(true);
 
             PeerConnection.RTCConfiguration cfg = new PeerConnection.RTCConfiguration(iceServers);
             cfg.sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN;
             peerConnection = factory.createPeerConnection(cfg, new PeerObserver());
+            debug("RTC peerConnection=" + (peerConnection != null));
             if (peerConnection == null) throw new IllegalStateException("PeerConnection gagal dibuat");
             peerConnection.addTrack(localAudioTrack, Collections.singletonList("transiva_audio"));
+            debug("AUDIO addTrack OK");
             configureAudioRoute();
             if (!incoming) createOffer();
         } catch (Throwable e) { fail(e); }
     }
 
     private void createOffer() {
+        debug("SDP createOffer requested");
         if (offerCreated || peerConnection == null) return;
         offerCreated = true;
         MediaConstraints c = new MediaConstraints();
@@ -437,28 +476,36 @@ public class WebRtcCallActivity extends Activity {
         c.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveVideo", "false"));
         peerConnection.createOffer(new SimpleSdpObserver() {
             @Override public void onCreateSuccess(SessionDescription sdp) {
+                debug("SDP offer created bytes=" + (sdp == null || sdp.description == null ? 0 : sdp.description.length()));
                 peerConnection.setLocalDescription(new SimpleSdpObserver() {
-                    @Override public void onSetSuccess() { postSdp("offer", sdp.description); }
+                    @Override public void onSetSuccess() { debug("SDP local offer SET"); postSdp("offer", sdp.description); }
+                    @Override public void onSetFailure(String error) { fail(new IllegalStateException("SDP local offer SET gagal: " + error)); }
                 }, sdp);
             }
+            @Override public void onCreateFailure(String error) { fail(new IllegalStateException("SDP offer create gagal: " + error)); }
         }, c);
     }
 
     private void createAnswer() {
+        debug("SDP createAnswer requested");
         if (answerCreated || peerConnection == null) return;
         answerCreated = true;
         MediaConstraints c = new MediaConstraints();
         c.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"));
         peerConnection.createAnswer(new SimpleSdpObserver() {
             @Override public void onCreateSuccess(SessionDescription sdp) {
+                debug("SDP answer created bytes=" + (sdp == null || sdp.description == null ? 0 : sdp.description.length()));
                 peerConnection.setLocalDescription(new SimpleSdpObserver() {
-                    @Override public void onSetSuccess() { postSdp("answer", sdp.description); }
+                    @Override public void onSetSuccess() { debug("SDP local answer SET"); postSdp("answer", sdp.description); }
+                    @Override public void onSetFailure(String error) { fail(new IllegalStateException("SDP local answer SET gagal: " + error)); }
                 }, sdp);
             }
+            @Override public void onCreateFailure(String error) { fail(new IllegalStateException("SDP answer create gagal: " + error)); }
         }, c);
     }
 
     private void postSdp(String action, String sdp) {
+        debug("SIGNAL post SDP " + action + " bytes=" + (sdp == null ? 0 : sdp.length()));
         safeIo(() -> {
             try { JSONObject p = basePayload(action); p.put("sdp", sdp); WebRtcSignalApi.post(session, p); }
             catch (Throwable e) { fail(e); }
@@ -466,6 +513,7 @@ public class WebRtcCallActivity extends Activity {
     }
 
     private void postCandidate(IceCandidate c) {
+        debug("ICE local candidate mid=" + (c == null ? "?" : c.sdpMid) + " line=" + (c == null ? -1 : c.sdpMLineIndex));
         safeIo(() -> {
             try {
                 JSONObject p = basePayload("candidate");
@@ -484,12 +532,14 @@ public class WebRtcCallActivity extends Activity {
                 p.put("candidate_after", lastCandidateId);
                 JSONObject r = WebRtcSignalApi.post(session, p);
                 String st = r.optString("status", "");
+                if (!st.equalsIgnoreCase(lastServerStatus)) { lastServerStatus = st; debug("SIGNAL server status=" + st); }
                 String offer = r.optString("offer_sdp", "");
                 String answer = r.optString("answer_sdp", "");
                 JSONArray candidates = r.optJSONArray("candidates");
                 lastCandidateId = r.optInt("candidate_last", lastCandidateId);
                 String serverPeer = r.optString("peer_name", "");
                 runOnUiThread(() -> {
+                    if (candidates != null && candidates.length() > 0) debug("ICE remote candidates batch=" + candidates.length() + " last=" + lastCandidateId);
                     if (!serverPeer.isEmpty()) { peerName = serverPeer; titleView.setText(peerName); }
                     handleStatus(st);
                     if (peerConnection != null) {
@@ -508,16 +558,19 @@ public class WebRtcCallActivity extends Activity {
                     }
                 });
             } catch (Exception e) {
+                debug("SIGNAL poll ERROR " + e.getClass().getSimpleName() + ": " + clean(e.getMessage()));
                 if (!ended) runOnUiThread(() -> status("Menyambungkan kembali..."));
             }
         });
     }
 
     private void setRemote(SessionDescription sdp, Runnable after) {
+        debug("SDP setRemote type=" + (sdp == null ? "?" : sdp.type));
         if (peerConnection == null || remoteDescriptionSet) return;
         peerConnection.setRemoteDescription(new SimpleSdpObserver() {
             @Override public void onSetSuccess() {
                 remoteDescriptionSet = true;
+                debug("SDP remote SET OK");
                 for (IceCandidate c : pendingRemoteCandidates) peerConnection.addIceCandidate(c);
                 pendingRemoteCandidates.clear();
                 if (after != null) after.run();
@@ -536,6 +589,7 @@ public class WebRtcCallActivity extends Activity {
         if (ended) return;
         st = clean(st).toLowerCase();
         if ("accepted".equals(st)) {
+            debug("CALL accepted by server");
             // Accepted is a call-wide state, not only a callee-side UI state.
             // Keeping this flag on the caller lets us retry WebRTC without
             // accidentally closing the call screen.
@@ -554,12 +608,18 @@ public class WebRtcCallActivity extends Activity {
     private void handleTerminalStatus(String st, boolean fromPush) {
         if (ended) return;
         if ("rejected".equals(st)) {
+            debug("CALL terminal server=rejected");
+            CallDebugReporter.notifyError(this, "WebRTC DEBUG: layar call ditutup", "Server mengirim status REJECTED");
             toast("Panggilan ditolak");
             finishCall("", false);
         } else if ("ended".equals(st) || "cancelled".equals(st) || "canceled".equals(st)) {
+            debug("CALL terminal server=" + st);
+            CallDebugReporter.notifyError(this, "WebRTC DEBUG: layar call ditutup", "Server mengirim status " + st.toUpperCase());
             toast("Panggilan berakhir");
             finishCall("", false);
         } else if ("missed".equals(st) || "timeout".equals(st)) {
+            debug("CALL terminal server=" + st);
+            CallDebugReporter.notifyError(this, "WebRTC DEBUG: layar call ditutup", "Server mengirim status " + st.toUpperCase());
             toast("Panggilan tidak terjawab");
             finishCall("", false);
         }
@@ -615,6 +675,8 @@ public class WebRtcCallActivity extends Activity {
     }
 
     private void finishCall(String action, boolean closeNow) {
+        debug("CALL finishCall action=" + action + " closeNow=" + closeNow);
+        if (closeNow) userRequestedClose = true;
         if (ended) return;
         ended = true;
         stopRingtone();
@@ -727,6 +789,8 @@ public class WebRtcCallActivity extends Activity {
     }
 
     private void connected() {
+        everConnected = true;
+        debug("RTC CONNECTED audio call active");
         main.removeCallbacks(rtcRetryTask);
         rtcRetryCount = 0;
         stopRingtone();
@@ -741,6 +805,7 @@ public class WebRtcCallActivity extends Activity {
     private void status(String text) { if (statusView != null) statusView.setText(text); }
     private void toast(String text) { Toast.makeText(this, text, Toast.LENGTH_LONG).show(); }
     private void fail(Throwable e) {
+        debug("ERROR " + (e == null ? "unknown" : e.getClass().getSimpleName() + ": " + clean(e.getMessage())));
         if (destroyed || ended) return;
         runOnUiThread(() -> {
             if (destroyed || ended) return;
@@ -766,6 +831,7 @@ public class WebRtcCallActivity extends Activity {
     }
 
     private void resetRtcForRetry() {
+        debug("RTC reset retry #" + rtcRetryCount);
         main.removeCallbacks(rtcRetryTask);
         releaseRtc();
         peerStarted = false;
@@ -795,8 +861,16 @@ public class WebRtcCallActivity extends Activity {
         super.onSaveInstanceState(outState);
     }
 
+    @Override protected void onPause() { super.onPause(); debug("LIFECYCLE onPause finishing=" + isFinishing()); }
+    @Override protected void onStop() { super.onStop(); debug("LIFECYCLE onStop finishing=" + isFinishing()); }
+
     @Override
     protected void onDestroy() {
+        debug("LIFECYCLE onDestroy finishing=" + isFinishing() + " ended=" + ended + " userClose=" + userRequestedClose + " connected=" + everConnected);
+        if (!userRequestedClose && !ended) {
+            CallDebugReporter.notifyError(this, "WebRTC DEBUG: layar call tertutup",
+                    "Call Activity berhenti tanpa tombol Akhiri. call=" + callId + " connected=" + everConnected);
+        }
         destroyed = true;
         unregisterCallStateReceiver();
         main.removeCallbacks(pollTask);
@@ -811,8 +885,9 @@ public class WebRtcCallActivity extends Activity {
     }
 
     private class PeerObserver implements PeerConnection.Observer {
-        @Override public void onSignalingChange(PeerConnection.SignalingState newState) {}
+        @Override public void onSignalingChange(PeerConnection.SignalingState newState) { debug("RTC signaling=" + newState); }
         @Override public void onIceConnectionChange(PeerConnection.IceConnectionState state) {
+            debug("ICE connection=" + state);
             runOnUiThread(() -> {
                 if (state == PeerConnection.IceConnectionState.CONNECTED || state == PeerConnection.IceConnectionState.COMPLETED) {
                     connected();
@@ -833,15 +908,15 @@ public class WebRtcCallActivity extends Activity {
                 }
             });
         }
-        @Override public void onIceConnectionReceivingChange(boolean receiving) {}
-        @Override public void onIceGatheringChange(PeerConnection.IceGatheringState state) {}
+        @Override public void onIceConnectionReceivingChange(boolean receiving) { debug("ICE receiving=" + receiving); }
+        @Override public void onIceGatheringChange(PeerConnection.IceGatheringState state) { debug("ICE gathering=" + state); }
         @Override public void onIceCandidate(IceCandidate candidate) { postCandidate(candidate); }
         @Override public void onIceCandidatesRemoved(IceCandidate[] candidates) {}
         @Override public void onAddStream(MediaStream stream) {}
         @Override public void onRemoveStream(MediaStream stream) {}
         @Override public void onDataChannel(DataChannel dataChannel) {}
-        @Override public void onRenegotiationNeeded() {}
-        @Override public void onAddTrack(RtpReceiver receiver, MediaStream[] mediaStreams) {}
+        @Override public void onRenegotiationNeeded() { debug("RTC renegotiation needed"); }
+        @Override public void onAddTrack(RtpReceiver receiver, MediaStream[] mediaStreams) { debug("AUDIO remote track added"); }
     }
 
     private static class SimpleSdpObserver implements SdpObserver {
@@ -849,6 +924,20 @@ public class WebRtcCallActivity extends Activity {
         @Override public void onSetSuccess() {}
         @Override public void onCreateFailure(String error) {}
         @Override public void onSetFailure(String error) {}
+    }
+
+    private void debug(String event) {
+        final String line = new java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US)
+                .format(new java.util.Date()) + "  " + clean(event);
+        CallDebugReporter.log(getApplicationContext(), callId, clean(event));
+        main.post(() -> {
+            if (debugView == null || destroyed) return;
+            String old = debugView.getText() == null ? "" : debugView.getText().toString();
+            if (old.equals("Menunggu proses WebRTC...")) old = "";
+            String next = old.isEmpty() ? line : old + "\n" + line;
+            if (next.length() > 9000) next = next.substring(next.length() - 9000);
+            debugView.setText(next);
+        });
     }
 
     private TextView text(String value, int sp, int color, boolean bold) {

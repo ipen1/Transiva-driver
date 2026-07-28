@@ -10,6 +10,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.media.AudioAttributes;
 import android.os.Build;
+import android.provider.Settings;
 import android.text.TextUtils;
 
 import androidx.core.app.NotificationCompat;
@@ -112,6 +113,7 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
         ).toLowerCase();
 
         if ("webrtc_call".equals(type)) {
+            CallDebugReporter.log(this, first(data.get("call_id"), ""), "FCM webrtc event=" + first(data.get("event"), ""));
             String event = first(data.get("event"), "").toLowerCase();
             String callId = first(data.get("call_id"), "");
 
@@ -331,6 +333,9 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
 
     private void openIncomingCallScreen(Intent intent) {
         if (intent == null) return;
+        String dbgCall = first(intent.getStringExtra("call_id"), "");
+        boolean overlay = Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(this);
+        CallDebugReporter.log(this, dbgCall, "FCM open screen overlay=" + overlay);
         try {
             Intent callIntent = new Intent(intent);
             callIntent.addFlags(
@@ -341,6 +346,7 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
             );
             startActivity(callIntent);
         } catch (Throwable ignored) {
+            CallDebugReporter.log(this, dbgCall, "FCM direct start ERROR " + ignored.getClass().getSimpleName() + ": " + String.valueOf(ignored.getMessage()));
             // Android 10+ may block a direct background Activity start. In that
             // case the high-priority full-screen call notification above opens it.
         }
