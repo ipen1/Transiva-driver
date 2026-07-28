@@ -107,6 +107,17 @@ public class WebRtcCallActivity extends Activity {
 
     private boolean receiverRegistered;
     private volatile boolean destroyed;
+    private int rtcRetryCount;
+    private static final int MAX_RTC_RETRIES = 5;
+
+    private final Runnable rtcRetryTask = new Runnable() {
+        @Override public void run() {
+            if (destroyed || ended || !accepted || callId.isEmpty()) return;
+            status("Mencoba menyambungkan audio kembali...");
+            resetRtcForRetry();
+            loadIceAndStartPeer();
+        }
+    };
 
     private final BroadcastReceiver callStateReceiver = new BroadcastReceiver() {
         @Override
@@ -524,11 +535,17 @@ public class WebRtcCallActivity extends Activity {
     private void handleStatus(String st) {
         if (ended) return;
         st = clean(st).toLowerCase();
-        if ("accepted".equals(st) && !incoming) {
-            status("Diterima, menyambungkan audio...");
-            if (!peerStarted && !rtcStartRequested) {
-                rtcStartRequested = true;
-                ensureMicrophoneThenResume();
+        if ("accepted".equals(st)) {
+            // Accepted is a call-wide state, not only a callee-side UI state.
+            // Keeping this flag on the caller lets us retry WebRTC without
+            // accidentally closing the call screen.
+            accepted = true;
+            if (!incoming) {
+                status("Diterima, menyambungkan audio...");
+                if (!peerStarted && !rtcStartRequested) {
+                    rtcStartRequested = true;
+                    ensureMicrophoneThenResume();
+                }
             }
         }
         handleTerminalStatus(st, false);
@@ -602,6 +619,7 @@ public class WebRtcCallActivity extends Activity {
         ended = true;
         stopRingtone();
         main.removeCallbacks(pollTask);
+        main.removeCallbacks(rtcRetryTask);
 
         final Runnable closeUi = () -> {
             releaseRtc();
@@ -709,6 +727,8 @@ public class WebRtcCallActivity extends Activity {
     }
 
     private void connected() {
+        main.removeCallbacks(rtcRetryTask);
+        rtcRetryCount = 0;
         stopRingtone();
         status("Panggilan tersambung");
         timerView.setBase(SystemClock.elapsedRealtime());
@@ -725,17 +745,35 @@ public class WebRtcCallActivity extends Activity {
         runOnUiThread(() -> {
             if (destroyed || ended) return;
             String message = (e == null || e.getMessage() == null || e.getMessage().trim().isEmpty())
-                    ? "Panggilan gagal"
+                    ? "Audio belum tersambung"
                     : e.getMessage().trim();
-            status("Gagal: " + message);
-            toast(message);
 
-            // Give the user enough time to see the actual failure reason.
-            main.postDelayed(
-                    () -> finishCall(callId.isEmpty() ? "" : "end", true),
-                    1200L
-            );
+            // A WebRTC/SDP/ICE failure is NOT the same as the other person
+            // hanging up. Never close the call Activity automatically here.
+            status("Audio belum tersambung. Mencoba kembali...");
+
+            if (accepted && !callId.isEmpty() && rtcRetryCount < MAX_RTC_RETRIES) {
+                rtcRetryCount++;
+                main.removeCallbacks(rtcRetryTask);
+                main.postDelayed(rtcRetryTask, 1800L);
+            } else if (accepted && rtcRetryCount >= MAX_RTC_RETRIES) {
+                status("Panggilan tetap aktif, tetapi audio belum tersambung. Tekan Akhiri untuk menutup.");
+                toast("Koneksi audio belum berhasil: " + message);
+            } else {
+                status("Menyambungkan...");
+            }
         });
+    }
+
+    private void resetRtcForRetry() {
+        main.removeCallbacks(rtcRetryTask);
+        releaseRtc();
+        peerStarted = false;
+        rtcStartRequested = false;
+        offerCreated = false;
+        answerCreated = false;
+        remoteDescriptionSet = false;
+        pendingRemoteCandidates.clear();
     }
 
     @Override
@@ -762,6 +800,7 @@ public class WebRtcCallActivity extends Activity {
         destroyed = true;
         unregisterCallStateReceiver();
         main.removeCallbacks(pollTask);
+        main.removeCallbacks(rtcRetryTask);
         stopRingtone();
 
         // Android/OEM may destroy and recreate this Activity without the user
@@ -775,9 +814,23 @@ public class WebRtcCallActivity extends Activity {
         @Override public void onSignalingChange(PeerConnection.SignalingState newState) {}
         @Override public void onIceConnectionChange(PeerConnection.IceConnectionState state) {
             runOnUiThread(() -> {
-                if (state == PeerConnection.IceConnectionState.CONNECTED || state == PeerConnection.IceConnectionState.COMPLETED) connected();
-                else if (state == PeerConnection.IceConnectionState.FAILED) { toast("Koneksi WebRTC gagal"); finishCall("end", true); }
-                else if (state == PeerConnection.IceConnectionState.DISCONNECTED) status("Koneksi terputus, mencoba kembali...");
+                if (state == PeerConnection.IceConnectionState.CONNECTED || state == PeerConnection.IceConnectionState.COMPLETED) {
+                    connected();
+                } else if (state == PeerConnection.IceConnectionState.FAILED) {
+                    // Do not treat a transport failure as a hang-up. Mobile
+                    // networks often briefly report FAILED while switching
+                    // Wi-Fi/data or while TURN/STUN negotiation is retried.
+                    status("Koneksi audio gagal, mencoba kembali...");
+                    if (accepted && rtcRetryCount < MAX_RTC_RETRIES) {
+                        rtcRetryCount++;
+                        main.removeCallbacks(rtcRetryTask);
+                        main.postDelayed(rtcRetryTask, 1800L);
+                    } else {
+                        status("Panggilan tetap aktif, audio belum tersambung.");
+                    }
+                } else if (state == PeerConnection.IceConnectionState.DISCONNECTED) {
+                    status("Koneksi terputus, mencoba kembali...");
+                }
             });
         }
         @Override public void onIceConnectionReceivingChange(boolean receiving) {}
