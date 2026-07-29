@@ -115,7 +115,6 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
         if ("webrtc_call".equals(type)) {
             final String event = first(data.get("event"), "").toLowerCase();
             final String callId = first(data.get("call_id"), "");
-            CallDebugReporter.log(this, callId, "FCM webrtc event=" + event);
 
             // Only a genuinely new incoming call is allowed to open the call UI.
             // All state/signaling events are consumed here so they cannot launch
@@ -212,7 +211,6 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
             state.putExtra(WebRtcCallActivity.EXTRA_CALL_STATUS, status);
             sendBroadcast(state);
         } catch (Throwable t) {
-            CallDebugReporter.log(this, callId, "FCM state broadcast ERROR " + t.getClass().getSimpleName());
         }
     }
 
@@ -363,7 +361,6 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
         if (intent == null) return;
         String dbgCall = first(intent.getStringExtra("call_id"), "");
         boolean overlay = Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(this);
-        CallDebugReporter.log(this, dbgCall, "FCM open screen overlay=" + overlay);
         try {
             Intent callIntent = new Intent(intent);
             callIntent.addFlags(
@@ -374,7 +371,6 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
             );
             startActivity(callIntent);
         } catch (Throwable ignored) {
-            CallDebugReporter.log(this, dbgCall, "FCM direct start ERROR " + ignored.getClass().getSimpleName() + ": " + String.valueOf(ignored.getMessage()));
             // Android 10+ may block a direct background Activity start. In that
             // case the high-priority full-screen call notification above opens it.
         }

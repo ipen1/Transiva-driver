@@ -25,7 +25,6 @@ import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.Chronometer;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -106,7 +105,6 @@ public class WebRtcCallActivity extends Activity {
     private Button endButton;
     private Button muteButton;
     private Button speakerButton;
-    private TextView debugView;
     private boolean userRequestedClose;
     private boolean everConnected;
 
@@ -171,8 +169,6 @@ public class WebRtcCallActivity extends Activity {
             readIntent();
         }
 
-        CallDebugReporter.installCrashHandler(this, callId);
-        CallDebugReporter.clear(this, callId);
         debug("Activity onCreate role=" + role + " incoming=" + incoming + " accepted=" + accepted + " call=" + callId);
         cancelOwnCallNotification();
         registerCallStateReceiver();
@@ -282,22 +278,6 @@ public class WebRtcCallActivity extends Activity {
         LinearLayout.LayoutParams timerLp = new LinearLayout.LayoutParams(-1, -2);
         timerLp.setMargins(0, dp(10), 0, 0);
         root.addView(timerView, timerLp);
-
-        TextView debugLabel = text("WEBRTC DEBUG", 12, Color.parseColor("#60A5FA"), true);
-        LinearLayout.LayoutParams dl = new LinearLayout.LayoutParams(-1, -2);
-        dl.setMargins(0, dp(18), 0, dp(6));
-        root.addView(debugLabel, dl);
-
-        ScrollView debugScroll = new ScrollView(this);
-        debugScroll.setFillViewport(true);
-        debugView = text("Menunggu proses WebRTC...", 11, Color.parseColor("#D1D5DB"), false);
-        debugView.setTypeface(android.graphics.Typeface.MONOSPACE);
-        debugView.setTextIsSelectable(true);
-        debugView.setPadding(dp(10), dp(8), dp(10), dp(8));
-        debugView.setBackground(round("#0F2435", 10));
-        debugScroll.addView(debugView, new ScrollView.LayoutParams(-1, -2));
-        LinearLayout.LayoutParams dslp = new LinearLayout.LayoutParams(-1, dp(190));
-        root.addView(debugScroll, dslp);
 
         View spacer = new View(this);
         root.addView(spacer, new LinearLayout.LayoutParams(1, 0, 1f));
@@ -455,37 +435,25 @@ public class WebRtcCallActivity extends Activity {
         if (ended || peerConnection != null || factory != null) return;
         try {
             debug("RTC PeerConnectionFactory.initialize");
-            RemoteWebRtcLog.critical(getApplicationContext(), callId, "ENTER PeerConnectionFactory.initialize");
             ensureRtcFactoryInitialized();
-            RemoteWebRtcLog.critical(getApplicationContext(), callId, "EXIT PeerConnectionFactory.initialize OK");
             debug("AUDIO create JavaAudioDeviceModule");
-            RemoteWebRtcLog.critical(getApplicationContext(), callId, "ENTER JavaAudioDeviceModule.createAudioDeviceModule");
             audioDeviceModule = JavaAudioDeviceModule.builder(getApplicationContext())
                     .setUseHardwareAcousticEchoCanceler(false)
                     .setUseHardwareNoiseSuppressor(false)
                     .createAudioDeviceModule();
-            RemoteWebRtcLog.critical(getApplicationContext(), callId, "EXIT JavaAudioDeviceModule.createAudioDeviceModule OK");
-            RemoteWebRtcLog.critical(getApplicationContext(), callId, "ENTER createPeerConnectionFactory");
             factory = PeerConnectionFactory.builder().setAudioDeviceModule(audioDeviceModule).createPeerConnectionFactory();
-            RemoteWebRtcLog.critical(getApplicationContext(), callId, "EXIT createPeerConnectionFactory OK");
             debug("RTC factory created");
-            RemoteWebRtcLog.critical(getApplicationContext(), callId, "ENTER createAudioSource/createAudioTrack");
             audioSource = factory.createAudioSource(new MediaConstraints());
             localAudioTrack = factory.createAudioTrack("TRANSIVA_AUDIO", audioSource);
-            RemoteWebRtcLog.critical(getApplicationContext(), callId, "EXIT createAudioSource/createAudioTrack OK");
             debug("AUDIO local track created");
             localAudioTrack.setEnabled(true);
 
             PeerConnection.RTCConfiguration cfg = new PeerConnection.RTCConfiguration(iceServers);
             cfg.sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN;
-            RemoteWebRtcLog.critical(getApplicationContext(), callId, "ENTER createPeerConnection");
             peerConnection = factory.createPeerConnection(cfg, new PeerObserver());
-            RemoteWebRtcLog.critical(getApplicationContext(), callId, "EXIT createPeerConnection result=" + (peerConnection != null));
             debug("RTC peerConnection=" + (peerConnection != null));
             if (peerConnection == null) throw new IllegalStateException("PeerConnection gagal dibuat");
-            RemoteWebRtcLog.critical(getApplicationContext(), callId, "ENTER peerConnection.addTrack");
             peerConnection.addTrack(localAudioTrack, Collections.singletonList("transiva_audio"));
-            RemoteWebRtcLog.critical(getApplicationContext(), callId, "EXIT peerConnection.addTrack OK");
             debug("AUDIO addTrack OK");
             configureAudioRoute();
             if (!incoming) createOffer();
@@ -634,17 +602,14 @@ public class WebRtcCallActivity extends Activity {
         if (ended) return;
         if ("rejected".equals(st)) {
             debug("CALL terminal server=rejected");
-            CallDebugReporter.notifyError(this, "WebRTC DEBUG: layar call ditutup", "Server mengirim status REJECTED");
             toast("Panggilan ditolak");
             finishCall("", false);
         } else if ("ended".equals(st) || "cancelled".equals(st) || "canceled".equals(st)) {
             debug("CALL terminal server=" + st);
-            CallDebugReporter.notifyError(this, "WebRTC DEBUG: layar call ditutup", "Server mengirim status " + st.toUpperCase());
             toast("Panggilan berakhir");
             finishCall("", false);
         } else if ("missed".equals(st) || "timeout".equals(st)) {
             debug("CALL terminal server=" + st);
-            CallDebugReporter.notifyError(this, "WebRTC DEBUG: layar call ditutup", "Server mengirim status " + st.toUpperCase());
             toast("Panggilan tidak terjawab");
             finishCall("", false);
         }
@@ -892,10 +857,6 @@ public class WebRtcCallActivity extends Activity {
     @Override
     protected void onDestroy() {
         debug("LIFECYCLE onDestroy finishing=" + isFinishing() + " ended=" + ended + " userClose=" + userRequestedClose + " connected=" + everConnected);
-        if (!userRequestedClose && !ended) {
-            CallDebugReporter.notifyError(this, "WebRTC DEBUG: layar call tertutup",
-                    "Call Activity berhenti tanpa tombol Akhiri. call=" + callId + " connected=" + everConnected);
-        }
         destroyed = true;
         unregisterCallStateReceiver();
         main.removeCallbacks(pollTask);
@@ -952,17 +913,7 @@ public class WebRtcCallActivity extends Activity {
     }
 
     private void debug(String event) {
-        final String line = new java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US)
-                .format(new java.util.Date()) + "  " + clean(event);
-        CallDebugReporter.log(getApplicationContext(), callId, clean(event));
-        main.post(() -> {
-            if (debugView == null || destroyed) return;
-            String old = debugView.getText() == null ? "" : debugView.getText().toString();
-            if (old.equals("Menunggu proses WebRTC...")) old = "";
-            String next = old.isEmpty() ? line : old + "\n" + line;
-            if (next.length() > 9000) next = next.substring(next.length() - 9000);
-            debugView.setText(next);
-        });
+        // Production: diagnostic UI/remote logging disabled.
     }
 
     private TextView text(String value, int sp, int color, boolean bold) {
