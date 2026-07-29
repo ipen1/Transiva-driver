@@ -37,6 +37,8 @@ import com.transiva.app.driver.presentation.DriverDashboardPresenter;
 import com.transiva.app.driver.ui.DriverBottomNavigation;
 import com.transiva.app.driver.ui.DriverPageTransition;
 
+import org.json.JSONObject;
+
 import java.text.NumberFormat;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -489,6 +491,44 @@ public class DriverDashboardActivity extends Activity
         }
     }
 
+    private JSONObject foodPayload(JSONObject raw) {
+        if (raw == null) return new JSONObject();
+        JSONObject direct = raw.optJSONObject("food");
+        if (direct != null) return direct;
+        try {
+            String note = raw.optString("note", "");
+            if (!note.trim().isEmpty()) {
+                JSONObject parsed = new JSONObject(note);
+                if ("food".equalsIgnoreCase(parsed.optString("type", "")) || parsed.has("items")) return parsed;
+            }
+        } catch (Exception ignored) { }
+        return new JSONObject();
+    }
+
+    private boolean isFoodOrder(DriverOrder order) {
+        if (order == null) return false;
+        String s = (clean(order.serviceName) + " " + (order.raw == null ? "" : order.raw.optString("order_type", ""))).toLowerCase(Locale.US);
+        return s.contains("food") || s.contains("makanan") || s.contains("restaurant");
+    }
+
+    private String merchantStatusLabel(String raw) {
+        String s = clean(raw).toLowerCase(Locale.US);
+        if (s.equals("merchant_accepted") || s.equals("accepted")) return "Diterima merchant";
+        if (s.equals("preparing") || s.equals("processing")) return "Sedang disiapkan";
+        if (s.equals("ready")) return "Siap diambil";
+        if (s.equals("merchant_rejected") || s.equals("rejected")) return "Ditolak merchant";
+        return raw;
+    }
+
+    private String firstNonEmpty(String... values) {
+        if (values == null) return "";
+        for (String value : values) {
+            String c = clean(value);
+            if (!c.isEmpty() && !"null".equalsIgnoreCase(c)) return c;
+        }
+        return "";
+    }
+
     private View orderCard(DriverOrder order, boolean active) {
         LinearLayout card = card();
         card.addView(text(
@@ -506,6 +546,23 @@ public class DriverDashboardActivity extends Activity
             meta += " • " + order.pickupDistanceText;
         }
         add(card, text(meta, 13, "#0F172A", true), 0, dp(8), 0, 0);
+
+        if (isFoodOrder(order)) {
+            JSONObject raw = order.raw == null ? new JSONObject() : order.raw;
+            JSONObject food = foodPayload(raw);
+            String merchantStatus = firstNonEmpty(raw.optString("merchant_status", ""), food.optString("merchant_status", ""));
+            int cookMinutes = raw.optInt("cook_minutes", food.optInt("cook_minutes", 0));
+            String restaurant = firstNonEmpty(raw.optString("restaurant_name", ""), raw.optString("merchant_name", ""),
+                    food.optString("restaurant_name", ""), food.optString("merchant_name", ""));
+            if (!restaurant.isEmpty()) {
+                add(card, text("Merchant: " + restaurant, 13, "#334155", true), 0, dp(6), 0, 0);
+            }
+            if (!merchantStatus.isEmpty()) {
+                String kitchen = "Dapur: " + merchantStatusLabel(merchantStatus);
+                if (cookMinutes > 0) kitchen += " • ±" + cookMinutes + " menit";
+                add(card, text(kitchen, 13, "#B45309", true), 0, dp(5), 0, 0);
+            }
+        }
 
         if (!active && order.remainingSeconds >= 0) {
             String key = offerKey(order);

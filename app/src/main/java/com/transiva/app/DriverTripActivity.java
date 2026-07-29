@@ -361,11 +361,62 @@ public class DriverTripActivity extends Activity {
                 int qty = it.optInt("qty", it.optInt("quantity", 1));
                 double subtotal = it.optDouble("subtotal", it.optDouble("total", it.optDouble("price",0) * qty));
                 LinearLayout r = new LinearLayout(this); r.setGravity(Gravity.CENTER_VERTICAL); r.setPadding(0, dp(7),0,dp(7));
-                LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.addView(text(name, 15, "#111827", true)); l.addView(text(qty + "x pesanan", 12, "#64748B", false)); r.addView(l, new LinearLayout.LayoutParams(0,-2,1));
+                LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL);
+                l.addView(text(name, 15, "#111827", true));
+                l.addView(text(qty + "x pesanan", 12, "#64748B", false));
+                String optionText = foodItemOptions(it);
+                if(!optionText.isEmpty()) l.addView(text("• " + optionText, 12, "#475569", false));
+                String itemNote = first(it.optString("note"), it.optString("customer_note"), "");
+                if(!itemNote.isEmpty()) l.addView(text("Catatan: " + itemNote, 12, "#B45309", false));
+                r.addView(l, new LinearLayout.LayoutParams(0,-2,1));
                 r.addView(text(rupiah(subtotal), 14, "#111827", true)); c.addView(r);
             }
         }
+        String merchantStatus = first(food.optString("merchant_status"), "");
+        int cookMinutes = food.optInt("cook_minutes", 0);
+        String readyAt = first(food.optString("estimated_ready_at"), "");
+        if(!merchantStatus.isEmpty()){
+            String kitchen = "Status merchant: " + merchantStatusLabel(merchantStatus);
+            if(cookMinutes > 0) kitchen += " • estimasi " + cookMinutes + " menit";
+            rowText(c, "🍳 Dapur", kitchen);
+        }
+        if(!readyAt.isEmpty()) rowText(c, "⏱ Siap sekitar", readyAt);
+        String customerNote = first(food.optString("customer_note"), food.optString("note_customer"), "");
+        if(!customerNote.isEmpty()) rowText(c, "📝 Catatan customer", customerNote);
         add(c,0,0,0,dp(12));
+    }
+
+    private String merchantStatusLabel(String raw){
+        String s = first(raw, "").toLowerCase(Locale.US).trim();
+        if(s.equals("merchant_accepted") || s.equals("accepted")) return "Pesanan diterima";
+        if(s.equals("preparing") || s.equals("processing")) return "Sedang disiapkan";
+        if(s.equals("ready")) return "Pesanan siap diambil";
+        if(s.equals("merchant_rejected") || s.equals("rejected")) return "Ditolak merchant";
+        return raw;
+    }
+
+    private String foodItemOptions(JSONObject item){
+        if(item == null) return "";
+        String direct = first(item.optString("options_text"), item.optString("selected_options_text"), "");
+        if(!direct.isEmpty()) return direct;
+        JSONArray a = item.optJSONArray("selected_options");
+        if(a == null) a = item.optJSONArray("options");
+        if(a == null || a.length() == 0) return "";
+        StringBuilder b = new StringBuilder();
+        for(int i=0;i<a.length();i++){
+            Object value = a.opt(i);
+            String label = "";
+            if(value instanceof JSONObject){
+                JSONObject o = (JSONObject)value;
+                label = first(o.optString("name"), o.optString("label"), o.optString("option_name"), o.optString("value"), "");
+            }else if(value != null && value != JSONObject.NULL){
+                label = String.valueOf(value).trim();
+            }
+            if(label.isEmpty()) continue;
+            if(b.length() > 0) b.append(", ");
+            b.append(label);
+        }
+        return b.toString();
     }
     private JSONObject parseFoodNote(){
         try{ JSONObject d = new JSONObject(first(order.optString("note"), "{}")); return "food".equalsIgnoreCase(d.optString("type")) ? d : null; }catch(Exception e){ return null; }
