@@ -41,6 +41,7 @@ public final class CallDebugReporter {
         String next = old.isEmpty() ? line : old + "\n" + line;
         if (next.length() > MAX_CHARS) next = next.substring(next.length() - MAX_CHARS);
         p.edit().putString(KEY_LOG, next).putString(KEY_CALL, clean(callId)).apply();
+        RemoteWebRtcLog.async(c.getApplicationContext(), clean(callId), "BREADCRUMB", line);
     }
 
     public static String getLog(Context c) { return prefs(c).getString(KEY_LOG, ""); }
@@ -88,7 +89,19 @@ public final class CallDebugReporter {
         }
         @Override public void uncaughtException(Thread t, Throwable e) {
             String msg = e == null ? "Unknown crash" : e.getClass().getSimpleName() + ": " + clean(e.getMessage());
-            log(app, callId, "UNCAUGHT [" + (t == null ? "?" : t.getName()) + "] " + msg);
+            StringBuilder full = new StringBuilder();
+            full.append("UNCAUGHT [").append(t == null ? "?" : t.getName()).append("] ").append(msg);
+            if (e != null) {
+                try {
+                    java.io.StringWriter sw = new java.io.StringWriter();
+                    java.io.PrintWriter pw = new java.io.PrintWriter(sw);
+                    e.printStackTrace(pw);
+                    pw.flush();
+                    full.append("\n").append(sw.toString());
+                } catch (Throwable ignored) {}
+            }
+            log(app, callId, full.toString());
+            try { RemoteWebRtcLog.critical(app, callId, full.toString()); } catch (Throwable ignored) {}
             try { notifyError(app, "WebRTC CRASH", msg); } catch (Throwable ignored) {}
             if (previous != null) previous.uncaughtException(t, e);
         }

@@ -455,25 +455,37 @@ public class WebRtcCallActivity extends Activity {
         if (ended || peerConnection != null || factory != null) return;
         try {
             debug("RTC PeerConnectionFactory.initialize");
+            RemoteWebRtcLog.critical(getApplicationContext(), callId, "ENTER PeerConnectionFactory.initialize");
             ensureRtcFactoryInitialized();
+            RemoteWebRtcLog.critical(getApplicationContext(), callId, "EXIT PeerConnectionFactory.initialize OK");
             debug("AUDIO create JavaAudioDeviceModule");
+            RemoteWebRtcLog.critical(getApplicationContext(), callId, "ENTER JavaAudioDeviceModule.createAudioDeviceModule");
             audioDeviceModule = JavaAudioDeviceModule.builder(getApplicationContext())
                     .setUseHardwareAcousticEchoCanceler(false)
                     .setUseHardwareNoiseSuppressor(false)
                     .createAudioDeviceModule();
+            RemoteWebRtcLog.critical(getApplicationContext(), callId, "EXIT JavaAudioDeviceModule.createAudioDeviceModule OK");
+            RemoteWebRtcLog.critical(getApplicationContext(), callId, "ENTER createPeerConnectionFactory");
             factory = PeerConnectionFactory.builder().setAudioDeviceModule(audioDeviceModule).createPeerConnectionFactory();
+            RemoteWebRtcLog.critical(getApplicationContext(), callId, "EXIT createPeerConnectionFactory OK");
             debug("RTC factory created");
+            RemoteWebRtcLog.critical(getApplicationContext(), callId, "ENTER createAudioSource/createAudioTrack");
             audioSource = factory.createAudioSource(new MediaConstraints());
             localAudioTrack = factory.createAudioTrack("TRANSIVA_AUDIO", audioSource);
+            RemoteWebRtcLog.critical(getApplicationContext(), callId, "EXIT createAudioSource/createAudioTrack OK");
             debug("AUDIO local track created");
             localAudioTrack.setEnabled(true);
 
             PeerConnection.RTCConfiguration cfg = new PeerConnection.RTCConfiguration(iceServers);
             cfg.sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN;
+            RemoteWebRtcLog.critical(getApplicationContext(), callId, "ENTER createPeerConnection");
             peerConnection = factory.createPeerConnection(cfg, new PeerObserver());
+            RemoteWebRtcLog.critical(getApplicationContext(), callId, "EXIT createPeerConnection result=" + (peerConnection != null));
             debug("RTC peerConnection=" + (peerConnection != null));
             if (peerConnection == null) throw new IllegalStateException("PeerConnection gagal dibuat");
+            RemoteWebRtcLog.critical(getApplicationContext(), callId, "ENTER peerConnection.addTrack");
             peerConnection.addTrack(localAudioTrack, Collections.singletonList("transiva_audio"));
+            RemoteWebRtcLog.critical(getApplicationContext(), callId, "EXIT peerConnection.addTrack OK");
             debug("AUDIO addTrack OK");
             configureAudioRoute();
             if (!incoming) createOffer();
