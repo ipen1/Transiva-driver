@@ -131,10 +131,11 @@ public class WebRtcCallActivity extends Activity {
             String eventCallId = clean(intent.getStringExtra(EXTRA_CALL_ID));
             String eventStatus = clean(intent.getStringExtra(EXTRA_CALL_STATUS)).toLowerCase();
             if (eventCallId.isEmpty() || !eventCallId.equals(callId)) return;
-            // Accepted is non-terminal and must wake the existing caller without
-            // recreating/reclassifying the Activity through an FCM PendingIntent.
-            if ("accepted".equals(eventStatus)) handleStatus(eventStatus);
-            else handleTerminalStatus(eventStatus, true);
+            if ("accepted".equals(eventStatus)) {
+                handleStatus("accepted");
+                return;
+            }
+            handleTerminalStatus(eventStatus, true);
         }
     };
 
@@ -207,7 +208,7 @@ public class WebRtcCallActivity extends Activity {
         orderId = clean(i.getStringExtra("order_id"));
         orderSource = first(i.getStringExtra("source"), i.getStringExtra("order_source"), "orders");
         peerName = first(i.getStringExtra("peer_name"), i.getStringExtra("caller_name"), role.equals("driver") ? "Customer" : "Driver");
-        incoming = i.getBooleanExtra("incoming", !callId.isEmpty());
+        incoming = i.getBooleanExtra("incoming", false);
     }
 
     @Override
@@ -220,22 +221,24 @@ public class WebRtcCallActivity extends Activity {
 
         String nextCallId = clean(intent.getStringExtra("call_id"));
         if (!nextCallId.isEmpty() && !callId.isEmpty() && !nextCallId.equals(callId)) {
-            // Never mix signaling from two calls in one Activity instance.
-            finishCall(callId.isEmpty() ? "" : (incoming && !accepted ? "reject" : "end"), true);
+            // A notification for another call must NEVER terminate or mutate the
+            // call that is already visible. Ignore it and let FCM create its own
+            // incoming-call notification instead.
+            debug("onNewIntent ignored different call=" + nextCallId + " active=" + callId);
             return;
         }
 
-        boolean sameExistingCall = !callId.isEmpty()
-                && (nextCallId.isEmpty() || nextCallId.equals(callId));
+        final boolean hadActiveCall = !callId.isEmpty();
         if (!nextCallId.isEmpty()) callId = nextCallId;
         orderId = first(intent.getStringExtra("order_id"), orderId);
         orderSource = first(intent.getStringExtra("source"), intent.getStringExtra("order_source"), orderSource, "orders");
         peerName = first(intent.getStringExtra("peer_name"), intent.getStringExtra("caller_name"), peerName);
 
-        // The call direction is immutable for a running call. A caller must never
-        // become a callee (or vice versa) just because another FCM event arrives.
-        if (!sameExistingCall) {
-            incoming = intent.getBooleanExtra("incoming", incoming);
+        // Caller/callee role is immutable for the lifetime of one call. In the
+        // old code, any WebRTC PendingIntent could turn an outgoing caller into
+        // incoming=true after the peer accepted, preventing createOffer().
+        if (!hadActiveCall) {
+            incoming = intent.getBooleanExtra("incoming", false);
         }
 
         if (titleView != null && !peerName.isEmpty()) titleView.setText(peerName);

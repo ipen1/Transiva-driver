@@ -113,9 +113,18 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
         ).toLowerCase();
 
         if ("webrtc_call".equals(type)) {
-            CallDebugReporter.log(this, first(data.get("call_id"), ""), "FCM webrtc event=" + first(data.get("event"), ""));
-            String event = first(data.get("event"), "").toLowerCase();
-            String callId = first(data.get("call_id"), "");
+            final String event = first(data.get("event"), "").toLowerCase();
+            final String callId = first(data.get("call_id"), "");
+            CallDebugReporter.log(this, callId, "FCM webrtc event=" + event);
+
+            // Only a genuinely new incoming call is allowed to open the call UI.
+            // All state/signaling events are consumed here so they cannot launch
+            // WebRtcCallActivity again through a PendingIntent/full-screen intent.
+            if ("call_accepted".equals(event) || "accepted".equals(event)) {
+                sendCallState(callId, "accepted");
+                cancelCallNotification(callId);
+                return;
+            }
 
             if ("call_ended".equals(event)
                     || "call_rejected".equals(event)
@@ -123,47 +132,22 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                     || "ended".equals(event)
                     || "rejected".equals(event)
                     || "missed".equals(event)) {
-                Intent state = new Intent(WebRtcCallActivity.ACTION_CALL_STATE);
-                state.setPackage(getPackageName());
-                state.putExtra(WebRtcCallActivity.EXTRA_CALL_ID, callId);
-
                 String status;
                 if (event.contains("reject")) status = "rejected";
                 else if (event.contains("miss")) status = "missed";
                 else status = "ended";
-
-                state.putExtra(WebRtcCallActivity.EXTRA_CALL_STATUS, status);
-                sendBroadcast(state);
-
-                // Remove any ringing notification for this call. The active
-                // WebRtcCallActivity will close itself through the broadcast.
-                NotificationManager nm =
-                        (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-                if (nm != null && !callId.isEmpty()) {
-                    nm.cancel(Math.abs(("webrtc_call|" + callId).hashCode()));
-                }
+                sendCallState(callId, status);
+                cancelCallNotification(callId);
                 return;
             }
 
-            // Accepted is a state update for the already-open call screen. Do
-            // not create another call notification/full-screen PendingIntent: it
-            // can deliver onNewIntent() to the caller and corrupt caller/callee
-            // direction while SDP negotiation is starting.
-            if ("call_accepted".equals(event) || "accepted".equals(event)) {
-                Intent state = new Intent(WebRtcCallActivity.ACTION_CALL_STATE);
-                state.setPackage(getPackageName());
-                state.putExtra(WebRtcCallActivity.EXTRA_CALL_ID, callId);
-                state.putExtra(WebRtcCallActivity.EXTRA_CALL_STATUS, "accepted");
-                sendBroadcast(state);
-
-                NotificationManager nm =
-                        (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-                if (nm != null && !callId.isEmpty()) {
-                    nm.cancel(Math.abs(("webrtc_call|" + callId).hashCode()));
-                }
+            // SDP/candidate/ringing/update pushes are not UI launches. The active
+            // call Activity already polls signaling from the backend.
+            if (!"incoming_call".equals(event)) {
                 return;
             }
         }
+
 
         if (type.equals("force_logout")
                 || type.equals("device_reset")
@@ -217,6 +201,28 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                 url,
                 data
         );
+    }
+
+    private void sendCallState(String callId, String status) {
+        if (callId == null || callId.trim().isEmpty()) return;
+        try {
+            Intent state = new Intent(WebRtcCallActivity.ACTION_CALL_STATE);
+            state.setPackage(getPackageName());
+            state.putExtra(WebRtcCallActivity.EXTRA_CALL_ID, callId);
+            state.putExtra(WebRtcCallActivity.EXTRA_CALL_STATUS, status);
+            sendBroadcast(state);
+        } catch (Throwable t) {
+            CallDebugReporter.log(this, callId, "FCM state broadcast ERROR " + t.getClass().getSimpleName());
+        }
+    }
+
+    private void cancelCallNotification(String callId) {
+        if (callId == null || callId.trim().isEmpty()) return;
+        try {
+            NotificationManager nm =
+                    (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) nm.cancel(Math.abs(("webrtc_call|" + callId).hashCode()));
+        } catch (Throwable ignored) {}
     }
 
     private void showNotification(
@@ -309,13 +315,13 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                                 NotificationCompat.VISIBILITY_PUBLIC
                         );
 
-        boolean incomingCallEvent = "webrtc_call".equals(type)
+        boolean incomingCallNotification = "webrtc_call".equals(type)
                 && data != null
                 && "incoming_call".equalsIgnoreCase(first(data.get("event"), ""));
 
-        if (incomingCallEvent) {
-            // Full-screen notification is ONLY valid for a genuinely incoming
-            // call. Accepted/signaling updates must never relaunch the active call.
+        if (incomingCallNotification) {
+            // Full-screen is reserved strictly for a new incoming call. Accepted,
+            // SDP and ICE events must never relaunch the active call Activity.
             builder.setCategory(NotificationCompat.CATEGORY_CALL)
                     .setPriority(NotificationCompat.PRIORITY_MAX)
                     .setOngoing(true)
@@ -383,14 +389,11 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
     ) {
         if ("webrtc_call".equals(type)) {
             Intent intent = new Intent(this, WebRtcCallActivity.class);
-            String callEvent = data != null ? first(data.get("event"), "") : "";
-            boolean incomingCall = "incoming_call".equalsIgnoreCase(callEvent);
             intent.putExtra("call_id", data != null ? first(data.get("call_id"), "") : "");
             intent.putExtra("order_id", orderId);
             intent.putExtra("source", data != null ? first(data.get("source"), "orders") : "orders");
             intent.putExtra("caller_name", data != null ? first(data.get("caller_name"), "Transiva") : "Transiva");
-            // Never classify accepted/ended/signaling events as incoming calls.
-            intent.putExtra("incoming", incomingCall);
+            intent.putExtra("incoming", data != null && "incoming_call".equalsIgnoreCase(first(data.get("event"), "")));
             return intent;
         }
 
