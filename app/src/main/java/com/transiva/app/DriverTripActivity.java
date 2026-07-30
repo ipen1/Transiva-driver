@@ -439,7 +439,7 @@ public class DriverTripActivity extends Activity {
         arrivedPickupBtn = green("📍 Tiba di Lokasi Pickup"); arrivedPickupBtn.setOnClickListener(v -> confirm("Konfirmasi bahwa Anda sudah tiba di lokasi pickup?", "arrived_pickup")); c.addView(arrivedPickupBtn, btnLp(10));
         startDeliveryBtn = green(orderKind.equals("pickup") ? "📦 Paket Sudah Diambil • Mulai Antar" : vehicleEmoji() + " Mulai Perjalanan ke Tujuan"); startDeliveryBtn.setOnClickListener(v -> confirm("Pesanan sudah siap dan mulai perjalanan ke lokasi pengantaran?", "on_delivery")); c.addView(startDeliveryBtn, btnLp(10));
         arrivedDeliveryBtn = green("🏁 Tiba di Lokasi Pengantaran"); arrivedDeliveryBtn.setOnClickListener(v -> confirm("Konfirmasi bahwa Anda sudah tiba di lokasi pengantaran?", "arrived_delivery")); c.addView(arrivedDeliveryBtn, btnLp(10));
-        finishBtn = green("✅ Pesanan Diterima • Selesaikan Order"); finishBtn.setOnClickListener(v -> confirm("Pastikan pesanan sudah diterima customer. Selesaikan order sekarang?", "finished")); c.addView(finishBtn, btnLp(10));
+        finishBtn = green("✅ Pesanan Diterima • Selesaikan Order"); finishBtn.setOnClickListener(v -> { if (isPickupOrder()) showPickupOtpDialog(); else confirm("Pastikan pesanan sudah diterima customer. Selesaikan order sekarang?", "finished"); }); c.addView(finishBtn, btnLp(10));
 
         LinearLayout quick = new LinearLayout(this); quick.setOrientation(LinearLayout.HORIZONTAL);
         Button chat = primary("💬 Chat"); chat.setOnClickListener(v -> openChat()); quick.addView(chat, new LinearLayout.LayoutParams(0, dp(50), 1));
@@ -704,6 +704,33 @@ public class DriverTripActivity extends Activity {
         return n.equals("arrived_pickup") || n.equals("on_delivery") || n.equals("arrived_delivery") || n.equals("finished") || n.equals("completed");
     }
 
+
+    private String pendingFinishOtp = "";
+
+    private void showPickupOtpDialog() {
+        if (updatingStatus) return;
+        final EditText input = new EditText(this);
+        input.setHint("Masukkan 6 digit OTP penerima");
+        input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        input.setSingleLine(true);
+        input.setPadding(dp(18), dp(8), dp(18), dp(8));
+        AlertDialog ad = new AlertDialog.Builder(this)
+                .setTitle("Verifikasi OTP TransPickup")
+                .setMessage("Minta OTP kepada penerima setelah paket benar-benar diterima.")
+                .setView(input)
+                .setNegativeButton("Batal", null)
+                .setPositiveButton("Verifikasi & Selesaikan", null)
+                .create();
+        ad.setOnShowListener(dialog -> ad.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String otp = input.getText().toString().replaceAll("[^0-9]", "");
+            if (otp.length() < 4) { input.setError("OTP belum lengkap"); return; }
+            pendingFinishOtp = otp;
+            ad.dismiss();
+            updateStatus("completed");
+        }));
+        ad.show();
+    }
+
     private void confirm(String msg, String next){ if(updatingStatus)return; new AlertDialog.Builder(this).setTitle("Konfirmasi").setMessage(msg).setNegativeButton("Batal",null).setPositiveButton("Ya",(d,w)->updateStatus(next)).show(); }
     private void updateStatus(String next){
         updatingStatus = true; setLoading(true);
@@ -716,11 +743,12 @@ public class DriverTripActivity extends Activity {
             p.put("order_kind", orderKind);
             p.put("source", isPickupOrder() ? "pickup_orders" : "orders");
             p.put("status", next);
+            if(isPickupOrder() && (next.equals("finished") || next.equals("completed"))) p.put("otp", pendingFinishOtp);
             String endpoint = endpoint(next);
             JSONObject r = postJson(BASE_URL + endpoint, p);
             boolean ok = r.optBoolean("success", false);
             String m = first(r.optString("message"), ok ? "Status berhasil diperbarui." : "Gagal update status.");
-            mainHandler.post(() -> { updatingStatus=false; setLoading(false); if(ok){ try{ order.put("status", next); }catch(Exception ignored){} saveActiveOrder(); refreshButtons(); mainHandler.postDelayed(() -> updateMap(), 250); info("Berhasil", m); if(next.equals("finished") || next.equals("completed")){ clearActiveOrder(); finish(); } } else info("Gagal", m); });
+            mainHandler.post(() -> { updatingStatus=false; setLoading(false); if(ok){ pendingFinishOtp = ""; try{ order.put("status", next); }catch(Exception ignored){} saveActiveOrder(); refreshButtons(); mainHandler.postDelayed(() -> updateMap(), 250); info("Berhasil", m); if(next.equals("finished") || next.equals("completed")){ clearActiveOrder(); finish(); } } else info("Gagal", m); });
         }catch(Exception e){ mainHandler.post(() -> { updatingStatus=false; setLoading(false); info("Koneksi gagal", "Tidak bisa update status ke server."); }); }}).start();
     }
     private String endpoint(String n){
