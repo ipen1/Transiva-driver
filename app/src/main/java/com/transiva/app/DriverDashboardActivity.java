@@ -776,9 +776,11 @@ public class DriverDashboardActivity extends Activity
             return;
         }
 
-        if (Math.abs(candidate - current) > SERVER_DRIFT_TOLERANCE_MS) {
+        // Server polling must never extend the same visible offer. This is
+        // important for public TransPickup offers that use a fresh 30-second
+        // window when first loaded by the driver.
+        if (candidate < current - SERVER_DRIFT_TOLERANCE_MS) {
             offerDeadlines.put(key, candidate);
-            if (candidate > now) expiredRefreshRequested.remove(key);
         }
     }
 
