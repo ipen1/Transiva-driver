@@ -1,6 +1,10 @@
 package com.transiva.app;
 
 import android.app.Activity;
+import android.provider.Settings;
+import android.os.Build;
+import android.net.Uri;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -75,6 +79,28 @@ public class DriverSettingsActivity extends Activity {
         ));
         root.addView(card);
 
+        TextView callSection = text("Panggilan Masuk", 13, "#0B3A78", true);
+        LinearLayout.LayoutParams callSectionLp = new LinearLayout.LayoutParams(-1, -2);
+        callSectionLp.setMargins(0, dp(18), 0, dp(8));
+        root.addView(callSection, callSectionLp);
+
+        LinearLayout callCard = new LinearLayout(this);
+        callCard.setOrientation(LinearLayout.VERTICAL);
+        callCard.setPadding(dp(16), dp(16), dp(16), dp(16));
+        callCard.setBackground(round("#FFFFFF", 20));
+        callCard.setElevation(dp(2));
+        LinearLayout overlayRow = new LinearLayout(this);
+        overlayRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout overlayLabels = new LinearLayout(this);
+        overlayLabels.setOrientation(LinearLayout.VERTICAL);
+        overlayLabels.addView(text("Tampil di Atas Aplikasi Lain", 15, "#0B3A78", true));
+        overlayLabels.addView(text(overlayStatusText(), 11, "#64748B", false));
+        overlayRow.addView(overlayLabels, new LinearLayout.LayoutParams(0, -2, 1));
+        overlayRow.addView(text("›", 30, "#0B7CFF", true));
+        overlayRow.setOnClickListener(v -> explainAndOpenOverlaySettings());
+        callCard.addView(overlayRow);
+        root.addView(callCard);
+
         TextView updateSection = text("Pembaruan", 13, "#0B3A78", true);
         LinearLayout.LayoutParams updateSectionLp = new LinearLayout.LayoutParams(-1, -2);
         updateSectionLp.setMargins(0, dp(18), 0, dp(8));
@@ -110,6 +136,38 @@ public class DriverSettingsActivity extends Activity {
         root.addView(note, noteLp);
 
         return shell;
+    }
+
+    private String overlayStatusText() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
+            return "Aktif • layar panggilan dapat tampil saat aplikasi di latar belakang";
+        }
+        return "Opsional • aktifkan hanya untuk membantu layar panggilan masuk";
+    }
+
+    private void explainAndOpenOverlaySettings() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
+        if (Settings.canDrawOverlays(this)) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Izin sudah aktif")
+                    .setMessage("Transiva Driver sudah diizinkan tampil di atas aplikasi lain. Izin ini membantu layar panggilan masuk tampil ketika aplikasi berada di latar belakang.")
+                    .setPositiveButton("Tutup", null)
+                    .show();
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Aktifkan secara opsional")
+                .setMessage("Izin ini tidak wajib untuk memakai aplikasi. Aktifkan hanya bila Anda ingin layar panggilan Transiva tampil di atas aplikasi lain saat sedang online atau menjalankan perjalanan.")
+                .setNegativeButton("Nanti", null)
+                .setPositiveButton("Buka Pengaturan", (dialog, which) -> {
+                    try {
+                        Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:" + getPackageName()));
+                        startActivity(intent);
+                    } catch (Exception ignored) {
+                    }
+                })
+                .show();
     }
 
     private LinearLayout toggleRow(String title, String subtitle, boolean checked,

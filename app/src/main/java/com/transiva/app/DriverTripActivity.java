@@ -443,7 +443,7 @@ public class DriverTripActivity extends Activity {
 
         LinearLayout quick = new LinearLayout(this); quick.setOrientation(LinearLayout.HORIZONTAL);
         Button chat = primary("💬 Chat"); chat.setOnClickListener(v -> openChat()); quick.addView(chat, new LinearLayout.LayoutParams(0, dp(50), 1));
-        Button nav = outline("➤ Navigasi"); nav.setOnClickListener(v -> openLeafletNavigation(!isDeliveryPhase(status())));
+        Button nav = outline("➤ Navigasi"); nav.setOnClickListener(v -> openNativeNavigation(!isDeliveryPhase(status())));
         LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(0, dp(50), 1); np.setMargins(dp(8),0,0,0); quick.addView(nav, np);
         LinearLayout.LayoutParams qp = new LinearLayout.LayoutParams(-1,-2); qp.setMargins(0,dp(10),0,0); c.addView(quick, qp);
         add(c,0,0,0,dp(12));
@@ -802,7 +802,7 @@ public class DriverTripActivity extends Activity {
         }).start();
     }
     private void openChat(){ try{ String roomId = first(order.optString("room_id"), pref("active_chat_room_id"), "ROOM-" + orderId()).trim().replace("_", "-").toUpperCase(Locale.US).replaceAll("[^A-Z0-9\\-]", ""); if(!roomId.startsWith("ROOM-")) roomId = "ROOM-" + roomId; String customerName = first(order.optString("customer_name"), order.optString("customer"), order.optString("username"), order.optString("user_id"), "Customer"); getSharedPreferences(PREF_NAME, MODE_PRIVATE).edit().putString("active_order_id", orderId()).putString("active_chat_order_id", orderId()).putString("active_chat_room_id", roomId).putString("active_chat_driver_name", driverUsername).putString("active_chat_customer_name", customerName).putString("active_chat_order_status", status()).apply(); Intent i = new Intent(this, DriverChatActivity.class); i.putExtra("order_id", orderId()); i.putExtra("room_id", roomId); i.putExtra("driver_name", driverUsername); i.putExtra("customer_name", customerName); i.putExtra("order_status", status()); startActivity(i); }catch(Exception e){ info("Chat", "Gagal membuka chat."); } }
-    private void openLeafletNavigation(boolean pickup){
+    private void openNativeNavigation(boolean pickup){
         double lat = pickup ? coord("pickup_lat","user_lat") : coord("delivery_lat","destination_lat");
         double lng = pickup ? coord("pickup_lng","user_lng") : coord("delivery_lng","destination_lng");
         if(!valid(lat,lng)){ info("Lokasi", "Koordinat belum tersedia."); return; }
@@ -839,13 +839,6 @@ public class DriverTripActivity extends Activity {
         nativeNav.putExtra("driver_lng", lastDriverLng);
         try{
             startActivity(nativeNav);
-            return;
-        }catch(Exception ignored){}
-
-        try{
-            Intent web = new Intent(Intent.ACTION_VIEW,
-                    Uri.parse(WEB_APP_URL + "?app=1#driverNavigation"));
-            startActivity(web);
             return;
         }catch(Exception ignored){}
 
