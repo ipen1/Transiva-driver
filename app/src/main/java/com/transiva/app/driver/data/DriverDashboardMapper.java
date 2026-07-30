@@ -73,6 +73,8 @@ public final class DriverDashboardMapper {
                 first(order.optString("pickup_distance_text"),
                         order.optString("distance_km"), ""),
                 readInt(order, "remaining_seconds", -1),
+                first(order.optString("payment_method"), "cash"),
+                first(order.optString("payment_label"), order.optString("payment_method").equalsIgnoreCase("balance") ? "TransPay" : "Tunai"),
                 order
         );
     }
