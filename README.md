@@ -1,48 +1,36 @@
-# Transiva Driver Android
+TRANSIVA DRIVER FIX — API 36 + OVERLAY UX + TESTS + MAPLIBRE PRIMARY
 
-Repository Android khusus **Driver Transiva**.
+File yang diubah/ditambahkan:
+1. build.gradle
+   - Android Gradle Plugin 8.10.1.
+2. app/build.gradle
+   - compileSdk 36, targetSdk 36, minSdk tetap 23.
+   - JUnit 4.13.2.
+3. .github/workflows/build-aab.yml
+   - Gradle 8.11.1.
+   - testDebugUnitTest wajib lulus sebelum release APK/AAB.
+4. app/src/main/java/com/transiva/app/SplashActivity.java
+   - Tidak meminta izin overlay saat startup.
+5. app/src/main/java/com/transiva/app/DriverSettingsActivity.java
+   - Overlay menjadi opsi sadar di Pengaturan Driver > Panggilan Masuk.
+6. app/src/main/java/com/transiva/app/DriverTripActivity.java
+   - Jalur utama navigasi selalu DriverNavigationActivity (MapLibre).
+   - Fallback web Transiva dihapus; Google Navigation hanya fallback darurat bila Activity native gagal.
+7. app/src/main/AndroidManifest.xml
+   - DriverLeafletNavigationActivity tidak lagi didaftarkan sebagai Activity aktif.
+8. app/src/test/java/com/transiva/app/DriverMessageStatusTest.java
+   - Regression tests untuk pending, accepted, trip aktif, completed/cancelled, normalisasi status, TransFood dan TransRide.
 
-## Identitas aplikasi
+Tidak diubah:
+- applicationId
+- minSdk
+- endpoint API
+- signing configuration
+- Firebase/FCM
+- WebRTC signaling
+- foreground/background service
+- logika update status perjalanan
+- layout dan renderer MapLibre DriverNavigationActivity
 
-- Application ID: `com.transiva.driver`
-- Java namespace: `com.transiva.app`
-- App name: `Transiva Driver`
-- Min SDK: 23
-- Target SDK: 35
-
-Namespace Java sengaja tetap `com.transiva.app` agar source stabil. Identitas instalasi Android ditentukan oleh `applicationId`.
-
-## Source yang dipertahankan
-
-Repository ini hanya memuat source Driver dan helper bersama yang memang dibutuhkan Driver:
-dashboard, order/trip, navigasi, chat, riwayat, pendapatan, profil, BPJS,
-top-up/withdraw, foreground/background location, Firebase notification,
-session/PIN/login, dan updater.
-
-Source Java Customer, Merchant, dan Admin telah dihapus dari source aktif.
-Login dan session juga dikunci untuk role `driver`.
-
-## Firebase
-
-Sebelum release production:
-
-1. Tambahkan Android app `com.transiva.driver` di Firebase project Transiva.
-2. Download `google-services.json` resmi.
-3. Replace `app/google-services.json`.
-
-File konfigurasi dalam repository memiliki entry sementara yang cocok dengan
-`com.transiva.driver` agar struktur project dapat diproses, tetapi file resmi
-Firebase wajib digunakan untuk FCM production.
-
-## GitHub Actions signing
-
-Tambahkan Repository Secrets:
-
-- `KEYSTORE_BASE64`
-- `KEYSTORE_PASSWORD`
-- `KEY_ALIAS`
-- `KEY_PASSWORD`
-
-Keystore tidak boleh di-commit ke repository.
-
-Lalu buka **Actions → Build Transiva Driver Signed Release → Run workflow**.
+Cara pakai:
+Ekstrak ZIP ini ke root repository Transiva Driver dan izinkan replace file.
