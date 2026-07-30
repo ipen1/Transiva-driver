@@ -5,12 +5,12 @@ plugins {
 
 android {
     namespace 'com.transiva.app'
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
         applicationId 'com.transiva.driver'
         minSdk 23
-        targetSdk 35
+        targetSdk 36
         versionCode 3
         versionName '1.2'
     }
@@ -40,6 +40,8 @@ android {
 }
 
 dependencies {
+    testImplementation 'junit:junit:4.13.2'
+
     // Native audio WebRTC (Maven Central)
     implementation 'io.github.webrtc-sdk:android:144.7559.09'
 
