@@ -825,8 +825,12 @@ public class DriverTripActivity extends Activity {
                     .apply();
         }catch(Exception ignored){}
 
-        Intent nativeNav = new Intent();
-        nativeNav.setClassName(getPackageName(), getPackageName() + ".DriverNavigationActivity");
+        // Use the Activity class directly. The driver APK applicationId is
+        // com.transiva.driver, while this Activity intentionally remains in the
+        // Java namespace com.transiva.app. Building the class name from
+        // getPackageName() therefore points to a non-existent Activity and causes
+        // the web fallback below to open instead.
+        Intent nativeNav = new Intent(this, DriverNavigationActivity.class);
         nativeNav.putExtra("order_json", order == null ? "" : order.toString());
         nativeNav.putExtra("target", mode);
         nativeNav.putExtra("target_lat", lat);
