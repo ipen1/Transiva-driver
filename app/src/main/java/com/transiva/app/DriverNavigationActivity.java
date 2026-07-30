@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.PictureInPictureParams;
 import android.content.pm.PackageManager;
+import android.content.pm.ActivityInfo;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
@@ -110,6 +111,7 @@ public class DriverNavigationActivity extends Activity {
     private TextView routeBadge;
     private TextView instructionBadge;
     private TextView speedBadge;
+    private TextView backButton;
 
     private LocationManager locationManager;
     private LocationListener locationListener;
@@ -231,6 +233,11 @@ public class DriverNavigationActivity extends Activity {
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        // Navigation remains portrait both in full screen and when returning from PiP.
+        try {
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        } catch (Exception ignored) {}
+
         try {
             if (getActionBar() != null) getActionBar().hide();
             getWindow().setStatusBarColor(Color.parseColor("#0B3A78"));
@@ -338,18 +345,18 @@ public class DriverNavigationActivity extends Activity {
         // Marker kendaraan sekarang terikat ke LatLng di peta, sehingga saat pinch zoom
         // kendaraan tetap berada pada koordinat/rute dan tidak mengikuti titik tengah HP.
 
-        TextView back = new TextView(this);
-        back.setText("‹");
-        back.setTextSize(38);
-        back.setTextColor(Color.parseColor("#0B3A78"));
-        back.setGravity(Gravity.CENTER);
-        back.setBackground(roundRect(Color.parseColor("#FCFFFFFF"), 20));
-        back.setElevation(dp(8));
-        back.setOnClickListener(v -> finish());
+        backButton = new TextView(this);
+        backButton.setText("‹");
+        backButton.setTextSize(38);
+        backButton.setTextColor(Color.parseColor("#0B3A78"));
+        backButton.setGravity(Gravity.CENTER);
+        backButton.setBackground(roundRect(Color.parseColor("#FCFFFFFF"), 20));
+        backButton.setElevation(dp(8));
+        backButton.setOnClickListener(v -> finish());
         FrameLayout.LayoutParams backLp = new FrameLayout.LayoutParams(dp(54), dp(54));
         backLp.leftMargin = dp(16);
         backLp.topMargin = dp(18);
-        page.addView(back, backLp);
+        page.addView(backButton, backLp);
 
         routeBadge = new TextView(this);
         routeBadge.setText(targetMode.equals("delivery") ? "Menyiapkan rute ke tujuan…" : "Menyiapkan rute ke pickup…");
@@ -644,18 +651,26 @@ public class DriverNavigationActivity extends Activity {
         smoothCameraBearing = easeBearing(smoothCameraBearing, desiredBearing,
                 immediate ? 1.0f : 0.065f);
         double cameraBearing = smoothCameraBearing;
-        double zoom = 18.4d;
-        try {
-            if (map != null && map.getCameraPosition() != null && map.getCameraPosition().zoom > 2d) {
-                zoom = map.getCameraPosition().zoom;
-            }
-        } catch (Exception ignored) {}
+        boolean pipCamera = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                (inPictureInPicture || isInPictureInPictureMode());
+
+        // PiP is physically small, therefore use a much wider overview instead of
+        // preserving the full-screen zoom level. This keeps the vehicle, route ahead,
+        // and nearby junctions visible inside a stable portrait window.
+        double zoom = pipCamera ? 15.0d : 18.4d;
+        if (!pipCamera) {
+            try {
+                if (map != null && map.getCameraPosition() != null && map.getCameraPosition().zoom > 2d) {
+                    zoom = map.getCameraPosition().zoom;
+                }
+            } catch (Exception ignored) {}
+        }
 
         CameraPosition cp = new CameraPosition.Builder()
                 .target(new LatLng(lat, lng))
                 .zoom(zoom)
                 .bearing(cameraBearing)
-                .tilt(42d)
+                .tilt(pipCamera ? 0d : 42d)
                 .build();
 
         // Do NOT start a new easeCamera animation every frame. Repeatedly cancelling
@@ -1502,7 +1517,7 @@ public class DriverNavigationActivity extends Activity {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         try {
             PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder()
-                    .setAspectRatio(new Rational(9, 16));
+                    .setAspectRatio(new Rational(3, 4));
             // Android 12+: Home gesture/button enters PiP more smoothly.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 builder.setAutoEnterEnabled(true);
@@ -1517,7 +1532,7 @@ public class DriverNavigationActivity extends Activity {
         try {
             if (isInPictureInPictureMode()) return;
             PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder()
-                    .setAspectRatio(new Rational(9, 16));
+                    .setAspectRatio(new Rational(3, 4));
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 builder.setAutoEnterEnabled(true);
                 builder.setSeamlessResizeEnabled(true);
@@ -1531,16 +1546,32 @@ public class DriverNavigationActivity extends Activity {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
         inPictureInPicture = isInPictureInPictureMode;
 
-        // Hide large controls in the tiny window; keep route instruction visible.
+        // PiP is map-first: remove every large overlay that can collapse into a
+        // white vertical pill/button on narrow OEM launchers.
+        if (backButton != null) backButton.setVisibility(isInPictureInPictureMode ? View.GONE : View.VISIBLE);
         if (routeBadge != null) routeBadge.setVisibility(isInPictureInPictureMode ? View.GONE : View.VISIBLE);
         if (speedBadge != null) speedBadge.setVisibility(isInPictureInPictureMode ? View.GONE : View.VISIBLE);
         if (instructionBadge != null) {
-            instructionBadge.setVisibility(View.VISIBLE);
-            instructionBadge.setTextSize(isInPictureInPictureMode ? 11 : 15);
+            instructionBadge.setVisibility(isInPictureInPictureMode ? View.GONE : View.VISIBLE);
+            instructionBadge.setTextSize(15);
         }
 
         if (isInPictureInPictureMode) {
             startLocationWatch();
+            updateNativePosition(true);
+        } else if (map != null && styleReady) {
+            // Restore a useful full-screen navigation zoom after expanding PiP.
+            double lat = displayInitialized ? displayLat : driverLat;
+            double lng = displayInitialized ? displayLng : driverLng;
+            if (valid(lat, lng)) {
+                CameraPosition restored = new CameraPosition.Builder()
+                        .target(new LatLng(lat, lng))
+                        .zoom(17.8d)
+                        .bearing(smoothCameraBearing)
+                        .tilt(42d)
+                        .build();
+                map.moveCamera(CameraUpdateFactory.newCameraPosition(restored));
+            }
         }
     }
 
