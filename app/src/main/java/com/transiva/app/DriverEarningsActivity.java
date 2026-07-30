@@ -6,6 +6,8 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
@@ -15,14 +17,35 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.transiva.app.driver.ui.DriverBottomNavigation;
+import com.transiva.app.driver.data.DriverDashboardRepositoryImpl;
+import com.transiva.app.driver.domain.DriverDashboardRepository;
+import com.transiva.app.driver.domain.DriverDashboardState;
 
 import java.text.NumberFormat;
 import java.util.Locale;
 
 public class DriverEarningsActivity extends Activity {
 
+    private static final long REFRESH_INTERVAL_MS = 3000L;
+
     private SessionManager session;
     private TextView balanceText;
+    private TextView todayEarningText;
+    private TextView pendingDepositText;
+    private TextView pendingWithdrawText;
+    private DriverDashboardRepository dashboardRepository;
+    private final Handler realtimeHandler = new Handler(Looper.getMainLooper());
+    private boolean refreshInFlight = false;
+    private boolean screenVisible = false;
+
+    private final Runnable realtimeRefresh = new Runnable() {
+        @Override
+        public void run() {
+            if (!screenVisible) return;
+            loadRealtimeWallet();
+            realtimeHandler.postDelayed(this, REFRESH_INTERVAL_MS);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -37,6 +60,7 @@ public class DriverEarningsActivity extends Activity {
         );
 
         session = new SessionManager(this);
+        dashboardRepository = new DriverDashboardRepositoryImpl(session);
 
         if (!validDriverSession()) {
             redirectLogin();
@@ -50,16 +74,70 @@ public class DriverEarningsActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        screenVisible = true;
 
+        // Tampilkan cache terlebih dahulu agar UI tidak kosong, kemudian langsung
+        // sinkronkan dengan endpoint dashboard yang juga dipakai halaman utama.
+        renderCachedBalance();
+        realtimeHandler.removeCallbacks(realtimeRefresh);
+        realtimeHandler.post(realtimeRefresh);
+    }
+
+    @Override
+    protected void onPause() {
+        screenVisible = false;
+        realtimeHandler.removeCallbacks(realtimeRefresh);
+        super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        screenVisible = false;
+        realtimeHandler.removeCallbacksAndMessages(null);
+        if (dashboardRepository != null) dashboardRepository.destroy();
+        super.onDestroy();
+    }
+
+    private void renderCachedBalance() {
         if (balanceText != null) {
-            balanceText.setText(
-                    rupiah(
-                            parseLong(
-                                    session.getBalance()
-                            )
-                    )
-            );
+            balanceText.setText(rupiah(parseLong(session.getBalance())));
         }
+    }
+
+    private void loadRealtimeWallet() {
+        if (refreshInFlight || dashboardRepository == null || !screenVisible) return;
+        refreshInFlight = true;
+
+        dashboardRepository.loadDashboard(new DriverDashboardRepository.DashboardCallback() {
+            @Override
+            public void onSuccess(DriverDashboardState state) {
+                runOnUiThread(() -> {
+                    refreshInFlight = false;
+                    if (!screenVisible || state == null) return;
+
+                    balanceText.setText(rupiah(state.balance));
+                    if (todayEarningText != null) todayEarningText.setText(rupiah(state.todayEarning));
+                    if (pendingDepositText != null) pendingDepositText.setText(rupiah(state.pendingDeposit));
+                    if (pendingWithdrawText != null) pendingWithdrawText.setText(rupiah(state.pendingWithdraw));
+
+                    // Simpan saldo terbaru supaya halaman withdraw/profile yang masih
+                    // membaca SessionManager juga langsung memperoleh angka terbaru.
+                    session.put("balance", String.valueOf(state.balance));
+                });
+            }
+
+            @Override
+            public void onError(int httpCode, String code, String message) {
+                runOnUiThread(() -> {
+                    refreshInFlight = false;
+                    if (httpCode == 401 || httpCode == 403
+                            || "UNAUTHORIZED".equalsIgnoreCase(code)
+                            || "SESSION_EXPIRED".equalsIgnoreCase(code)) {
+                        redirectLogin();
+                    }
+                });
+            }
+        });
     }
 
     private boolean validDriverSession() {
@@ -306,7 +384,8 @@ public class DriverEarningsActivity extends Activity {
         stats.addView(
                 statCard(
                         "Rp0",
-                        "Hari ini"
+                        "Hari ini",
+                        0
                 ),
                 statLp(false)
         );
@@ -314,7 +393,8 @@ public class DriverEarningsActivity extends Activity {
         stats.addView(
                 statCard(
                         "Rp0",
-                        "Minggu ini"
+                        "Deposit pending",
+                        1
                 ),
                 statLp(true)
         );
@@ -322,7 +402,8 @@ public class DriverEarningsActivity extends Activity {
         stats.addView(
                 statCard(
                         "Rp0",
-                        "Diproses"
+                        "Withdraw pending",
+                        2
                 ),
                 statLp(true)
         );
@@ -448,7 +529,8 @@ public class DriverEarningsActivity extends Activity {
 
     private View statCard(
             String value,
-            String label
+            String label,
+            int slot
     ) {
         LinearLayout box =
                 card();
@@ -471,6 +553,10 @@ public class DriverEarningsActivity extends Activity {
 
         amount.setGravity(Gravity.CENTER);
         box.addView(amount);
+
+        if (slot == 0) todayEarningText = amount;
+        else if (slot == 1) pendingDepositText = amount;
+        else if (slot == 2) pendingWithdrawText = amount;
 
         TextView caption =
                 text(
