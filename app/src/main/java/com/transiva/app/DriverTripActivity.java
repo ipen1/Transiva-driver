@@ -725,7 +725,7 @@ public class DriverTripActivity extends Activity {
     }
     private String endpoint(String n){
         // pickup_orders memakai endpoint unified karena endpoint lama hanya membaca tabel orders.
-        if(isPickupOrder() && !(n.equals("finished") || n.equals("completed"))) return "driver_update_unified_status.php";
+        if(isPickupOrder()) return "driver_update_unified_status.php";
         if(n.equals("arrived_pickup"))return "driverArrivedPickup.php";
         if(n.equals("on_delivery"))return "driverStartDelivery.php";
         if(n.equals("arrived_delivery"))return "driverArrivedDelivery.php";
@@ -801,7 +801,34 @@ public class DriverTripActivity extends Activity {
             }catch(Exception ignored){}
         }).start();
     }
-    private void openChat(){ try{ String roomId = first(order.optString("room_id"), pref("active_chat_room_id"), "ROOM-" + orderId()).trim().replace("_", "-").toUpperCase(Locale.US).replaceAll("[^A-Z0-9\\-]", ""); if(!roomId.startsWith("ROOM-")) roomId = "ROOM-" + roomId; String customerName = first(order.optString("customer_name"), order.optString("customer"), order.optString("username"), order.optString("user_id"), "Customer"); getSharedPreferences(PREF_NAME, MODE_PRIVATE).edit().putString("active_order_id", orderId()).putString("active_chat_order_id", orderId()).putString("active_chat_room_id", roomId).putString("active_chat_driver_name", driverUsername).putString("active_chat_customer_name", customerName).putString("active_chat_order_status", status()).apply(); Intent i = new Intent(this, DriverChatActivity.class); i.putExtra("order_id", orderId()); i.putExtra("room_id", roomId); i.putExtra("driver_name", driverUsername); i.putExtra("customer_name", customerName); i.putExtra("order_status", status()); startActivity(i); }catch(Exception e){ info("Chat", "Gagal membuka chat."); } }
+    private void openChat(){
+        try{
+            String roomId = first(order.optString("room_id"), pref("active_chat_room_id"), "ROOM-" + orderId())
+                    .trim().replace("_", "-").toUpperCase(Locale.US).replaceAll("[^A-Z0-9\\-]", "");
+            if(!roomId.startsWith("ROOM-")) roomId = "ROOM-" + roomId;
+            String customerName = first(order.optString("customer_name"), order.optString("customer"),
+                    order.optString("username"), order.optString("user_id"), "Customer");
+            getSharedPreferences(PREF_NAME, MODE_PRIVATE).edit()
+                    .putString("active_order_id", orderId())
+                    .putString("active_chat_order_id", orderId())
+                    .putString("active_chat_room_id", roomId)
+                    .putString("active_chat_driver_name", driverUsername)
+                    .putString("active_chat_customer_name", customerName)
+                    .putString("active_chat_order_status", status()).apply();
+            Intent i = new Intent(this, DriverChatRoomActivity.class);
+            i.putExtra("order_id", orderId());
+            i.putExtra("order_db_id", internalId());
+            i.putExtra("room_id", roomId);
+            i.putExtra("participant_name", customerName);
+            i.putExtra("customer_name", customerName);
+            i.putExtra("order_type", isPickupOrder() ? "TransPickup" : first(order.optString("order_type"), "Order"));
+            i.putExtra("order_status", status());
+            i.putExtra("order_source", isPickupOrder() ? "pickup_orders" : "orders");
+            i.putExtra("read_only", false);
+            startActivity(i);
+        }catch(Exception e){ info("Chat", "Gagal membuka chat."); }
+    }
+
     private void openNativeNavigation(boolean pickup){
         double lat = pickup ? coord("pickup_lat","user_lat") : coord("delivery_lat","destination_lat");
         double lng = pickup ? coord("pickup_lng","user_lng") : coord("delivery_lng","destination_lng");
