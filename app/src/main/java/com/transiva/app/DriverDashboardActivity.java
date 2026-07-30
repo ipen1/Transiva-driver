@@ -599,7 +599,7 @@ public class DriverDashboardActivity extends Activity
                     showMessage("Tawaran order sudah berakhir.");
                     return;
                 }
-                presenter.acceptOrder(order.id);
+                presenter.acceptOrder(order.id, clean(order.source));
             });
             add(card, action, 0, dp(12), 0, 0);
         }
