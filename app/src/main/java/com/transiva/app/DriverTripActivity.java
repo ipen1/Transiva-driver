@@ -66,7 +66,7 @@ public class DriverTripActivity extends Activity {
     private ProgressBar progressBar;
     private TextView statusBadge, distanceInfo, distanceHint;
     private WebView mapView;
-    private Button arrivedPickupBtn, startDeliveryBtn, arrivedDeliveryBtn, finishBtn;
+    private Button arrivedPickupBtn, startDeliveryBtn, arrivedDeliveryBtn, finishBtn, updatePriceBtn;
     private JSONObject order;
     private String driverUsername = "";
     private String driverType = "motor";
@@ -254,6 +254,7 @@ public class DriverTripActivity extends Activity {
         mini(stats, "💰", "Total Bayar", rupiah(optDouble("price", "fare", "total"))); mini(stats, vehicleEmoji(), "Jarak", one(optDouble("distance_km")) + " KM"); mini(stats, "⏱️", "Estimasi", zero(optDouble("duration_minutes")) + " menit");
         distanceInfo = text("📡 Mengukur jarak driver...", 13, "#64748B", false); distanceInfo.setPadding(0, dp(10),0,0); h.addView(distanceInfo);
         distanceHint = text("", 13, "#059669", true); distanceHint.setPadding(dp(12), dp(9), dp(12), dp(9)); distanceHint.setBackground(stroke("#ECFDF5", "#86EFAC", dp(14), 1)); LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-1,-2); hp.setMargins(0, dp(8),0,0); h.addView(distanceHint, hp);
+        TextView pay = text(isNonCash() ? "💳 NON-TUNAI • TransPay" : "💵 TUNAI • Tagih customer", 13, isNonCash() ? "#1D4ED8" : "#B45309", true); pay.setGravity(Gravity.CENTER); pay.setPadding(dp(12),dp(9),dp(12),dp(9)); pay.setBackground(stroke(isNonCash()?"#EFF6FF":"#FFFBEB", isNonCash()?"#93C5FD":"#FCD34D", dp(14),1)); LinearLayout.LayoutParams payLp=new LinearLayout.LayoutParams(-1,-2); payLp.setMargins(0,dp(8),0,0); h.addView(pay,payLp);
         add(h,0,dp(8),0,dp(12));
     }
     private void mini(LinearLayout parent, String icon, String label, String value){
@@ -440,6 +441,7 @@ public class DriverTripActivity extends Activity {
         arrivedPickupBtn = green("📍 Tiba di Lokasi Pickup"); arrivedPickupBtn.setOnClickListener(v -> confirm("Konfirmasi bahwa Anda sudah tiba di lokasi pickup?", "arrived_pickup")); c.addView(arrivedPickupBtn, btnLp(10));
         startDeliveryBtn = green(orderKind.equals("pickup") ? "📦 Paket Sudah Diambil • Mulai Antar" : vehicleEmoji() + " Mulai Perjalanan ke Tujuan"); startDeliveryBtn.setOnClickListener(v -> confirm("Pesanan sudah siap dan mulai perjalanan ke lokasi pengantaran?", "on_delivery")); c.addView(startDeliveryBtn, btnLp(10));
         arrivedDeliveryBtn = green("🏁 Tiba di Lokasi Pengantaran"); arrivedDeliveryBtn.setOnClickListener(v -> confirm("Konfirmasi bahwa Anda sudah tiba di lokasi pengantaran?", "arrived_delivery")); c.addView(arrivedDeliveryBtn, btnLp(10));
+        updatePriceBtn = outline("💰 Update Total Dibayar"); updatePriceBtn.setOnClickListener(v -> showUpdatePriceDialog()); c.addView(updatePriceBtn, btnLp(10));
         finishBtn = green("✅ Pesanan Diterima • Selesaikan Order"); finishBtn.setOnClickListener(v -> { if (isPickupOrder()) showPickupOtpDialog(); else confirm("Pastikan pesanan sudah diterima customer. Selesaikan order sekarang?", "finished"); }); c.addView(finishBtn, btnLp(10));
 
         LinearLayout quick = new LinearLayout(this); quick.setOrientation(LinearLayout.HORIZONTAL);
@@ -629,6 +631,7 @@ public class DriverTripActivity extends Activity {
         hideAction(startDeliveryBtn);
         hideAction(arrivedDeliveryBtn);
         hideAction(finishBtn);
+        hideAction(updatePriceBtn);
         if(statusBadge != null) statusBadge.setText(statusLabel(st));
 
         if(st.equals("taken")){
@@ -649,12 +652,14 @@ public class DriverTripActivity extends Activity {
         }
         if(st.equals("arrived_pickup")){
             showAction(startDeliveryBtn, true);
+            showAction(updatePriceBtn, true);
             distanceInfo.setText("✅ Anda sudah tiba di lokasi pickup.");
             distanceHint.setText(orderKind.equals("pickup") ? "Ambil paket, lalu tekan Mulai Antar." : "Pastikan pesanan sudah siap, lalu mulai perjalanan ke tujuan.");
             return;
         }
         if(st.equals("on_delivery")){
             showAction(arrivedDeliveryBtn, false);
+            showAction(updatePriceBtn, true);
             float dd = distanceTo(coord("delivery_lat","destination_lat"), coord("delivery_lng","destination_lng"));
             if(dd >= 0){
                 boolean near = dd <= ARRIVE_RADIUS_METER;
@@ -670,6 +675,7 @@ public class DriverTripActivity extends Activity {
         }
         if(st.equals("arrived_delivery")){
             showAction(finishBtn, true);
+            showAction(updatePriceBtn, true);
             distanceInfo.setText("🏁 Anda sudah tiba di lokasi pengantaran.");
             distanceHint.setText("Serahkan pesanan ke customer. Setelah diterima, tekan Selesaikan Order.");
             return;
@@ -830,9 +836,33 @@ public class DriverTripActivity extends Activity {
             }catch(Exception ignored){}
         }).start();
     }
+    private boolean isNonCash(){
+        String p = first(order == null ? "" : order.optString("payment_method"), "cash").toLowerCase(Locale.US);
+        return p.equals("balance") || p.contains("transpay") || p.contains("transiva_pay") || p.equals("wallet") || p.equals("saldo");
+    }
+    private void showUpdatePriceDialog(){
+        if(order == null) return;
+        final EditText input = new EditText(this); input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER); input.setHint("Total baru"); input.setText(String.valueOf((long)optDouble("price","fare","total")));
+        final EditText reason = new EditText(this); reason.setHint("Alasan perubahan, contoh: 1 menu habis");
+        LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(dp(20),dp(4),dp(20),0); box.addView(input); box.addView(reason);
+        new AlertDialog.Builder(this).setTitle("Update Total Dibayar").setMessage("Harga turun langsung berlaku. Harga naik wajib disetujui customer.").setView(box).setNegativeButton("Batal",null).setPositiveButton("Kirim",(d,w)->{
+            try{
+                double value=Double.parseDouble(input.getText().toString().trim()); String why=reason.getText().toString().trim();
+                if(value<=0||why.isEmpty()){ info("Harga","Harga dan alasan wajib diisi."); return; }
+                requestPriceChange(value,why);
+            }catch(Exception e){ info("Harga","Nominal tidak valid."); }
+        }).show();
+    }
+    private void requestPriceChange(double value,String reason){
+        setLoading(true); new Thread(()->{ try{
+            JSONObject p=new JSONObject(); p.put("source",isPickupOrder()?"pickup_orders":"orders"); p.put("id",Integer.parseInt(internalId())); p.put("driver",driverUsername); p.put("new_price",value); p.put("reason",reason);
+            JSONObject r=postJson(BASE_URL+"driver_request_price_change.php",p); boolean ok=r.optBoolean("success",false); String m=first(r.optString("message"),ok?"Harga diperbarui":"Gagal memperbarui harga");
+            mainHandler.post(()->{setLoading(false); if(ok){ try{ if(!r.optBoolean("approval_required",false)) order.put("price",value); }catch(Exception ignored){} info("Total Pembayaran",m); renderOrder(); refreshButtons(); } else info("Gagal",m);});
+        }catch(Exception e){mainHandler.post(()->{setLoading(false);info("Gagal","Koneksi server bermasalah.");});}},"price-change").start();
+    }
     private void openChat(){
         try{
-            String roomId = first(order.optString("room_id"), pref("active_chat_room_id"), "ROOM-" + orderId())
+            String roomId = first(order.optString("room_id"), (isPickupOrder()?"ROOM-SEND-":"ROOM-ORDER-") + orderId())
                     .trim().replace("_", "-").toUpperCase(Locale.US).replaceAll("[^A-Z0-9\\-]", "");
             if(!roomId.startsWith("ROOM-")) roomId = "ROOM-" + roomId;
             String customerName = first(order.optString("customer_name"), order.optString("customer"),

@@ -541,7 +541,7 @@ public class DriverDashboardActivity extends Activity
         add(card, text("Tujuan:\n" + order.destinationAddress,
                 13, "#334155", false), 0, dp(6), 0, 0);
 
-        String meta = "Pendapatan " + rupiah(order.driverEarning);
+        String meta = "Pendapatan " + rupiah(order.driverEarning) + " • " + ("balance".equalsIgnoreCase(order.paymentMethod) ? "💳 TransPay" : "💵 Tunai");
         if (!clean(order.pickupDistanceText).isEmpty()) {
             meta += " • " + order.pickupDistanceText;
         }
