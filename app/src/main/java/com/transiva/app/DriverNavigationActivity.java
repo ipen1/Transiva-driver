@@ -2,6 +2,7 @@ package com.transiva.app;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.PictureInPictureParams;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -15,6 +16,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.util.Rational;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -132,6 +134,8 @@ public class DriverNavigationActivity extends Activity {
     private long lastRouteRequestAt;
 
     private boolean styleReady;
+    private boolean inPictureInPicture = false;
+    private boolean mapViewResumed = false;
     private boolean routeInFlight;
     private boolean userAdjustedZoom = false;
 
@@ -242,6 +246,7 @@ public class DriverNavigationActivity extends Activity {
         MapLibre.getInstance(getApplicationContext());
 
         buildUi(savedInstanceState);
+        configurePictureInPicture();
 
         // Start route calculation immediately; it runs in parallel with native map/style loading.
         requestRoute(true);
@@ -1475,18 +1480,97 @@ public class DriverNavigationActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
-        if (mapView != null) mapView.onResume();
+        if (mapView != null && !mapViewResumed) {
+            mapView.onResume();
+            mapViewResumed = true;
+        }
         startLocationWatch();
     }
 
+    /**
+     * When the driver presses Home while navigation is active, Android 8+ keeps
+     * this Activity visible in a small Picture-in-Picture window. We deliberately
+     * keep MapLibre and the GPS listener alive while PiP is visible so the vehicle
+     * marker, route progress and instructions continue moving in real time.
+     */
+    @Override public void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        enterNavigationPictureInPicture();
+    }
+
+    private void configurePictureInPicture() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+        try {
+            PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder()
+                    .setAspectRatio(new Rational(9, 16));
+            // Android 12+: Home gesture/button enters PiP more smoothly.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                builder.setAutoEnterEnabled(true);
+                builder.setSeamlessResizeEnabled(true);
+            }
+            setPictureInPictureParams(builder.build());
+        } catch (Exception ignored) {}
+    }
+
+    private void enterNavigationPictureInPicture() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || isFinishing()) return;
+        try {
+            if (isInPictureInPictureMode()) return;
+            PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder()
+                    .setAspectRatio(new Rational(9, 16));
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                builder.setAutoEnterEnabled(true);
+                builder.setSeamlessResizeEnabled(true);
+            }
+            enterPictureInPictureMode(builder.build());
+        } catch (Exception ignored) {}
+    }
+
+    @Override public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode,
+                                                         android.content.res.Configuration newConfig) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        inPictureInPicture = isInPictureInPictureMode;
+
+        // Hide large controls in the tiny window; keep route instruction visible.
+        if (routeBadge != null) routeBadge.setVisibility(isInPictureInPictureMode ? View.GONE : View.VISIBLE);
+        if (speedBadge != null) speedBadge.setVisibility(isInPictureInPictureMode ? View.GONE : View.VISIBLE);
+        if (instructionBadge != null) {
+            instructionBadge.setVisibility(View.VISIBLE);
+            instructionBadge.setTextSize(isInPictureInPictureMode ? 11 : 15);
+        }
+
+        if (isInPictureInPictureMode) {
+            startLocationWatch();
+        }
+    }
+
     @Override protected void onPause() {
-        stopLocationWatch();
-        if (mapView != null) mapView.onPause();
+        // Entering PiP triggers Activity lifecycle transitions. Do not stop the
+        // navigation engine while the floating map is still visible.
+        boolean pip = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                (inPictureInPicture || isInPictureInPictureMode());
+        if (!pip) {
+            stopLocationWatch();
+            if (mapView != null && mapViewResumed) {
+                mapView.onPause();
+                mapViewResumed = false;
+            }
+        }
         super.onPause();
     }
 
     @Override protected void onStop() {
-        if (mapView != null) mapView.onStop();
+        boolean pip = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && isInPictureInPictureMode();
+        if (!pip) {
+            stopLocationWatch();
+            if (mapView != null) {
+                if (mapViewResumed) {
+                    mapView.onPause();
+                    mapViewResumed = false;
+                }
+                mapView.onStop();
+            }
+        }
         super.onStop();
     }
 
