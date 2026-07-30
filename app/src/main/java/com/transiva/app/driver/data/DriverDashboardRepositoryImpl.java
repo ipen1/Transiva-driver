@@ -94,6 +94,7 @@ public final class DriverDashboardRepositoryImpl implements DriverDashboardRepos
     @Override
     public void acceptOrder(
             String orderId,
+            String source,
             String idempotencyKey,
             ActionCallback callback
     ) {
@@ -101,6 +102,7 @@ public final class DriverDashboardRepositoryImpl implements DriverDashboardRepos
             try {
                 JSONObject body = new JSONObject();
                 body.put("order_id", orderId);
+                body.put("source", source);
                 body.put("idempotency_key", idempotencyKey);
 
                 DriverApiClient.Result result =
