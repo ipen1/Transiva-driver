@@ -12,6 +12,8 @@ public final class DriverOrder {
     public final long driverEarning;
     public final String pickupDistanceText;
     public final int remainingSeconds;
+    public final String paymentMethod;
+    public final String paymentLabel;
     public final JSONObject raw;
 
     public DriverOrder(
@@ -24,6 +26,8 @@ public final class DriverOrder {
             long driverEarning,
             String pickupDistanceText,
             int remainingSeconds,
+            String paymentMethod,
+            String paymentLabel,
             JSONObject raw
     ) {
         this.id = id;
@@ -35,6 +39,8 @@ public final class DriverOrder {
         this.driverEarning = driverEarning;
         this.pickupDistanceText = pickupDistanceText;
         this.remainingSeconds = remainingSeconds;
+        this.paymentMethod = paymentMethod;
+        this.paymentLabel = paymentLabel;
         this.raw = raw;
     }
 }
