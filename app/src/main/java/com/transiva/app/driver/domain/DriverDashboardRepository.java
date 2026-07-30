@@ -14,7 +14,7 @@ public interface DriverDashboardRepository {
 
     void loadDashboard(DashboardCallback callback);
     void setOnline(boolean online, String driverType, ActionCallback callback);
-    void acceptOrder(String orderId, String idempotencyKey, ActionCallback callback);
+    void acceptOrder(String orderId, String source, String idempotencyKey, ActionCallback callback);
     void cancelOrder(
             String orderId,
             String source,
