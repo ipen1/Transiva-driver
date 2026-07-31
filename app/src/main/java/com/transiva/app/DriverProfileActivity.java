@@ -57,6 +57,9 @@ public class DriverProfileActivity extends Activity {
     private TextView speedValue;
     private TextView balanceValue;
     private TextView noteValue;
+    private TextView ratingValue;
+    private TextView ratingCountValue;
+    private TextView ratingStarsValue;
     private TextView bpjsStatusValue;
     private TextView bpjsSummaryValue;
     private JSONObject latestProfile;
@@ -127,6 +130,7 @@ public class DriverProfileActivity extends Activity {
 
         content.addView(buildHeader());
         content.addView(buildIdentityCard(), sectionLp());
+        content.addView(buildRatingCard(), sectionLp());
         content.addView(buildDriverInfoCard(), sectionLp());
         content.addView(buildStatusCard(), sectionLp());
         content.addView(buildBpjsCard(), sectionLp());
@@ -217,6 +221,36 @@ public class DriverProfileActivity extends Activity {
         LinearLayout.LayoutParams typeLp = new LinearLayout.LayoutParams(-2, -2);
         typeLp.setMargins(dp(7), 0, 0, 0);
         badges.addView(driverTypeBadge, typeLp);
+        return card;
+    }
+
+    private View buildRatingCard() {
+        LinearLayout card = whiteCard();
+        card.addView(sectionTitle("Rating Driver", "Dihitung otomatis dari seluruh pesanan yang telah dinilai customer"));
+
+        LinearLayout summary = new LinearLayout(this);
+        summary.setGravity(Gravity.CENTER_VERTICAL);
+        summary.setPadding(dp(4), dp(8), dp(4), dp(8));
+
+        LinearLayout scoreBox = new LinearLayout(this);
+        scoreBox.setOrientation(LinearLayout.VERTICAL);
+        ratingValue = text("0.0", 34, "#0B3A78", true);
+        ratingValue.setGravity(Gravity.CENTER);
+        scoreBox.addView(ratingValue);
+        ratingCountValue = text("Belum ada penilaian", 10, "#718096", false);
+        ratingCountValue.setGravity(Gravity.CENTER);
+        scoreBox.addView(ratingCountValue);
+        summary.addView(scoreBox, new LinearLayout.LayoutParams(0, -2, 1));
+
+        ratingStarsValue = text("☆☆☆☆☆", 26, "#FFB300", true);
+        ratingStarsValue.setGravity(Gravity.CENTER);
+        summary.addView(ratingStarsValue, new LinearLayout.LayoutParams(0, -2, 1));
+        card.addView(summary);
+
+        TextView info = text("Rating diperbarui dari review TransRide, TransCar, TransFood, dan TransSend.", 9, "#718096", false);
+        info.setGravity(Gravity.CENTER);
+        info.setPadding(0, dp(8), 0, 0);
+        card.addView(info);
         return card;
     }
 
@@ -346,6 +380,16 @@ public class DriverProfileActivity extends Activity {
         balanceValue.setText(rupiah(profile.optDouble("balance", 0)));
         noteValue.setText(first(profile.optString("verification_note"), "-"));
 
+        double driverRating = profile.optDouble("rating", 0);
+        int ratingCount = profile.optInt("rating_count", profile.optInt("review_count", 0));
+        if (ratingValue != null) ratingValue.setText(String.format(Locale.US, "%.1f", driverRating));
+        if (ratingCountValue != null) {
+            ratingCountValue.setText(ratingCount > 0
+                    ? ratingCount + " penilaian customer"
+                    : "Belum ada penilaian");
+        }
+        if (ratingStarsValue != null) ratingStarsValue.setText(stars(driverRating));
+
         boolean bpjsActive = readFlag(profile, "bpjs_active", "bpjs_is_active");
         if (bpjsStatusValue != null) {
             bpjsStatusValue.setText(bpjsActive ? "Aktif" : "Tidak Aktif");
@@ -457,6 +501,13 @@ public class DriverProfileActivity extends Activity {
         if ("rejected".equals(status)) return "#C62828";
         if ("suspended".equals(status)) return "#B45309";
         return "#C96A05";
+    }
+
+    private String stars(double rating) {
+        int filled = (int) Math.round(Math.max(0, Math.min(5, rating)));
+        StringBuilder value = new StringBuilder(5);
+        for (int i = 1; i <= 5; i++) value.append(i <= filled ? '★' : '☆');
+        return value.toString();
     }
 
     private String formatDate(String value) {
