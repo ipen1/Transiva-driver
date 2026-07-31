@@ -862,7 +862,7 @@ public class DriverTripActivity extends Activity {
     }
     private void openChat(){
         try{
-            String roomId = first(order.optString("room_id"), (isPickupOrder()?"ROOM-SEND-":"ROOM-ORDER-") + orderId())
+            String roomId = first(order.optString("room_id"), "ROOM-" + orderId())
                     .trim().replace("_", "-").toUpperCase(Locale.US).replaceAll("[^A-Z0-9\\-]", "");
             if(!roomId.startsWith("ROOM-")) roomId = "ROOM-" + roomId;
             String customerName = first(order.optString("customer_name"), order.optString("customer"),
