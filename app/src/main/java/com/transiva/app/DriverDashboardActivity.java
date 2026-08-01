@@ -450,8 +450,6 @@ public class DriverDashboardActivity extends Activity
         if (!state.online) {
             offerBox.addView(emptyCard(
                     "Driver OFFLINE.\nAktifkan ONLINE untuk menerima order."));
-        } else if (state.activeOrders != null && state.activeOrders.size() >= 2) {
-            offerBox.addView(emptyCard("Batas maksimal 2 order berjalan sudah tercapai. Selesaikan salah satu order untuk menerima tawaran berikutnya."));
         } else if (state.offers.isEmpty()) {
             offerBox.addView(emptyCard("Belum ada tawaran order."));
         } else {
@@ -599,6 +597,12 @@ public class DriverDashboardActivity extends Activity
             countdownViews.put(key, countdown);
         }
 
+        boolean capacityReached = !active
+                && !queued
+                && currentState != null
+                && currentState.activeOrders != null
+                && currentState.activeOrders.size() >= 2;
+
         Button action = primaryButton(active ? "Lanjutkan Trip" : (queued ? "Menunggu Order Aktif Selesai" : "Ambil Order"));
 
         if (active) {
@@ -613,6 +617,14 @@ public class DriverDashboardActivity extends Activity
         } else if (queued) {
             action.setEnabled(false);
             add(card, action, 0, dp(12), 0, 0);
+        } else if (capacityReached) {
+            TextView capacityNotice = text(
+                    "Maksimal 2 orderan yang berjalan. Selesaikan salah satu order aktif untuk menerima order ini.",
+                    14, "#B45309", true);
+            capacityNotice.setPadding(dp(14), dp(12), dp(14), dp(12));
+            capacityNotice.setBackground(roundStroke(
+                    "#FFF7E6", "#F59E0B", dp(14), 1));
+            add(card, capacityNotice, 0, dp(12), 0, 0);
         } else {
             String key = offerKey(order);
             offerButtons.put(key, action);
