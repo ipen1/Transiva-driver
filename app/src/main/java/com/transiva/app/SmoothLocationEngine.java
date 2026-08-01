@@ -5,9 +5,9 @@ import android.os.Build;
 import android.os.SystemClock;
 
 /**
- * Lightweight location filter for driver navigation/trip.
- * Keeps database updates responsive while preventing stale provider fixes from
- * pulling the vehicle back to an old point.
+ * Adaptive navigation location filter.
+ * Rejects stale/teleport fixes, blends noisy fixes by accuracy and speed, and
+ * keeps responsive fixes intact while the vehicle is moving.
  */
 public final class SmoothLocationEngine {
     public static final class Fix {
@@ -31,52 +31,70 @@ public final class SmoothLocationEngine {
     private final long uploadIntervalMs;
 
     public SmoothLocationEngine(long uploadIntervalMs) {
-        this.uploadIntervalMs = Math.max(1500L, uploadIntervalMs);
+        this.uploadIntervalMs = Math.max(1200L, uploadIntervalMs);
     }
 
     public synchronized Fix offer(Location incoming) {
         if (!isUsable(incoming)) return null;
-        Location next = new Location(incoming);
+        Location raw = new Location(incoming);
         long now = System.currentTimeMillis();
 
         if (accepted != null) {
-            if (isOlder(next, accepted, 1200L)) return null;
+            if (isOlder(raw, accepted, 1200L)) return null;
 
-            float jump = accepted.distanceTo(next);
-            long dt = Math.max(250L, fixTime(next) - fixTime(accepted));
+            float jump = accepted.distanceTo(raw);
+            long dt = Math.max(250L, fixTime(raw) - fixTime(accepted));
             float impliedMps = jump / (dt / 1000f);
-
-            // Reject only obvious stale/teleport fixes. A mock-location test can
-            // still move slowly because there is no hard minimum-distance gate.
-            if (jump > 250f && dt < 3000L && impliedMps > 70f) return null;
-
             float oldAcc = accuracy(accepted);
-            float newAcc = accuracy(next);
-            if (jump > 80f && newAcc > Math.max(80f, oldAcc * 3f) && dt < 8000L) return null;
+            float newAcc = accuracy(raw);
 
-            // Weak-provider hysteresis: do not let a fresh but much less accurate
-            // network fix pull a stable GPS trace sideways. A later consistent fix
-            // is still accepted, so navigation recovers naturally in covered areas.
-            if (dt < 6000L && newAcc > Math.max(45f, oldAcc * 2.2f)) {
-                float allowedJump = Math.max(18f, oldAcc * 1.6f);
-                if (jump > allowedJump) return null;
-            }
+            if (jump > 250f && dt < 3000L && impliedMps > 70f) return null;
+            if (jump > 80f && newAcc > Math.max(80f, oldAcc * 3f) && dt < 8000L) return null;
+            if (dt < 6000L && newAcc > Math.max(45f, oldAcc * 2.2f)
+                    && jump > Math.max(18f, oldAcc * 1.6f)) return null;
             if (dt < 2500L && newAcc >= 35f && jump > Math.max(28f, newAcc * 0.9f)) return null;
+
+            raw = adaptiveBlend(accepted, raw, jump, dt, oldAcc, newAcc);
         }
 
-        accepted = next;
-        float moved = rendered == null ? Float.MAX_VALUE : rendered.distanceTo(next);
-        float threshold = renderThreshold(next);
-        boolean render = rendered == null || moved >= threshold;
-        if (render) rendered = new Location(next);
+        accepted = raw;
+        float moved = rendered == null ? Float.MAX_VALUE : rendered.distanceTo(raw);
+        boolean render = rendered == null || moved >= renderThreshold(raw);
+        if (render) rendered = new Location(raw);
 
         boolean upload = uploaded == null || now - lastUploadAt >= uploadIntervalMs;
-        if (!upload && uploaded != null && uploaded.distanceTo(next) >= 10f) upload = true;
+        if (!upload && uploaded != null && uploaded.distanceTo(raw) >= 10f) upload = true;
         if (upload) {
-            uploaded = new Location(next);
+            uploaded = new Location(raw);
             lastUploadAt = now;
         }
-        return new Fix(new Location(next), render, upload, moved);
+        return new Fix(new Location(raw), render, upload, moved);
+    }
+
+    private static Location adaptiveBlend(Location previous, Location raw, float jump,
+                                          long dtMs, float oldAcc, float newAcc) {
+        float speed = raw.hasSpeed() ? Math.max(0f, raw.getSpeed())
+                : (dtMs > 0 ? jump / (dtMs / 1000f) : 0f);
+
+        // Good GPS at driving speed stays highly responsive. At low speed or with
+        // poor accuracy, trust history more to suppress side-to-side wandering.
+        double alpha;
+        if (newAcc <= 8f) alpha = speed > 5f ? 0.90d : 0.72d;
+        else if (newAcc <= 18f) alpha = speed > 5f ? 0.78d : 0.56d;
+        else if (newAcc <= 35f) alpha = speed > 5f ? 0.62d : 0.40d;
+        else alpha = speed > 5f ? 0.48d : 0.28d;
+
+        if (jump > Math.max(12f, oldAcc + newAcc)) alpha = Math.min(0.92d, alpha + 0.12d);
+        if (speed < 0.7f && jump < Math.max(5f, newAcc * 0.55f)) alpha *= 0.45d;
+
+        Location out = new Location(raw);
+        out.setLatitude(previous.getLatitude() + (raw.getLatitude() - previous.getLatitude()) * alpha);
+        out.setLongitude(previous.getLongitude() + (raw.getLongitude() - previous.getLongitude()) * alpha);
+        if (raw.hasBearing() && previous.hasBearing()) {
+            float delta = ((raw.getBearing() - previous.getBearing() + 540f) % 360f) - 180f;
+            out.setBearing((previous.getBearing() + (float) (delta * alpha) + 360f) % 360f);
+        }
+        return out;
     }
 
     public synchronized Location latest() {
@@ -90,14 +108,12 @@ public final class SmoothLocationEngine {
     }
 
     private static float renderThreshold(Location l) {
-        // Visual marker must stay alive even at walking / slow mock-GPS speed.
-        // The JS layer performs interpolation, so Java only suppresses tiny GPS jitter.
         float acc = accuracy(l);
         float speed = l.hasSpeed() ? Math.max(0f, l.getSpeed()) : 0f;
-        if (speed < 0.8f) return acc <= 15f ? 1.5f : 2.5f;
-        if (speed < 5f) return 1.8f;
-        if (speed < 15f) return 2.5f;
-        return 3.5f;
+        if (speed < 0.8f) return acc <= 15f ? 1.2f : 2.2f;
+        if (speed < 5f) return 1.4f;
+        if (speed < 15f) return 1.8f;
+        return 2.4f;
     }
 
     private static boolean isUsable(Location l) {

@@ -74,6 +74,7 @@ public class DriverNavigationActivity extends Activity {
             "https://transiva.my.id/server/driver_update_location_native.php";
 
     private static final String ROUTE_SOURCE = "transiva-route-source";
+    private static final String ROUTE_GLOW_LAYER = "transiva-route-glow";
     private static final String ROUTE_CASE_LAYER = "transiva-route-case";
     private static final String ROUTE_LAYER = "transiva-route-line";
 
@@ -129,6 +130,9 @@ public class DriverNavigationActivity extends Activity {
     private double driverLng;
     private double currentBearing;
     private double currentSpeedKmh;
+    private double previousSpeedKmh;
+    private double smoothedAccelerationMps2;
+    private long lastSpeedRealtimeMs;
     private double averageSpeedKmh;
     private double speedSum;
     private long speedSamples;
@@ -149,6 +153,8 @@ public class DriverNavigationActivity extends Activity {
     private static final float CAMERA_BEARING_ALPHA = 0.075f;
     private double smoothCameraBearing = Double.NaN;
     private double smoothMarkerBearing = Double.NaN;
+    private double smoothCameraZoom = Double.NaN;
+    private double smoothCameraTilt = Double.NaN;
     private String pendingRouteGeoJson = "";
     private double pendingRouteKm;
     private double pendingRouteSeconds;
@@ -427,10 +433,21 @@ public class DriverNavigationActivity extends Activity {
             if (style.getSource(ROUTE_SOURCE) == null) {
                 style.addSource(new GeoJsonSource(ROUTE_SOURCE, emptyFeatureCollection()));
             }
+            // Wide translucent glow makes the active route readable on both light
+            // and dark basemaps without obscuring junction details.
+            if (style.getLayer(ROUTE_GLOW_LAYER) == null) {
+                style.addLayer(new LineLayer(ROUTE_GLOW_LAYER, ROUTE_SOURCE).withProperties(
+                        lineColor(Color.parseColor("#48A8FF")),
+                        lineOpacity(0.20f),
+                        lineWidth(18f),
+                        lineCap(LINE_CAP_ROUND),
+                        lineJoin(LINE_JOIN_ROUND)
+                ));
+            }
             if (style.getLayer(ROUTE_CASE_LAYER) == null) {
                 style.addLayer(new LineLayer(ROUTE_CASE_LAYER, ROUTE_SOURCE).withProperties(
-                        lineColor(Color.parseColor("#174A7E")),
-                        lineOpacity(0.32f),
+                        lineColor(Color.parseColor("#073A71")),
+                        lineOpacity(0.60f),
                         lineWidth(10f),
                         lineCap(LINE_CAP_ROUND),
                         lineJoin(LINE_JOIN_ROUND)
@@ -581,7 +598,8 @@ public class DriverNavigationActivity extends Activity {
                     : (lastGpsAccuracyM >= 30f ? 2.2d : 1.15d);
             double ageSec = Math.max(0d, Math.min(maxPredictionSec,
                     (SystemClock.elapsedRealtime() - lastFixRealtimeMs) / 1000d));
-            double lookAheadMeters = Math.min(35d, (currentSpeedKmh / 3.6d) * ageSec);
+            double predictedSpeedMps = Math.max(0d, currentSpeedKmh / 3.6d + smoothedAccelerationMps2 * ageSec);
+            double lookAheadMeters = Math.min(42d, predictedSpeedMps * ageSec);
             target = advanceAlongRoute(base, lookAheadMeters);
         }
 
@@ -651,26 +669,47 @@ public class DriverNavigationActivity extends Activity {
         smoothCameraBearing = easeBearing(smoothCameraBearing, desiredBearing,
                 immediate ? 1.0f : 0.065f);
         double cameraBearing = smoothCameraBearing;
+        smoothMarkerBearing = easeBearing(smoothMarkerBearing, desiredBearing,
+                immediate ? 1.0f : (currentSpeedKmh < 5d ? 0.10f : 0.16f));
+        if (driverMarker != null) {
+            try { driverMarker.setRotation((float) smoothMarkerBearing); } catch (Exception ignored) {}
+        }
         boolean pipCamera = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
                 (inPictureInPicture || isInPictureInPictureMode());
 
-        // PiP is physically small, therefore use a much wider overview instead of
-        // preserving the full-screen zoom level. This keeps the vehicle, route ahead,
-        // and nearby junctions visible inside a stable portrait window.
-        double zoom = pipCamera ? 15.0d : 18.4d;
-        if (!pipCamera) {
-            try {
-                if (map != null && map.getCameraPosition() != null && map.getCameraPosition().zoom > 2d) {
-                    zoom = map.getCameraPosition().zoom;
-                }
-            } catch (Exception ignored) {}
+        // Speed-aware camera: close and detailed when stopping, progressively wider
+        // when travelling quickly so upcoming turns remain visible.
+        double desiredZoom;
+        double desiredTilt;
+        if (pipCamera) {
+            desiredZoom = 14.8d;
+            desiredTilt = 0d;
+        } else if (currentSpeedKmh < 3d) {
+            desiredZoom = 18.2d;
+            desiredTilt = 34d;
+        } else if (currentSpeedKmh < 25d) {
+            desiredZoom = 17.7d;
+            desiredTilt = 40d;
+        } else if (currentSpeedKmh < 55d) {
+            desiredZoom = 17.0d;
+            desiredTilt = 44d;
+        } else if (currentSpeedKmh < 80d) {
+            desiredZoom = 16.2d;
+            desiredTilt = 47d;
+        } else {
+            desiredZoom = 15.5d;
+            desiredTilt = 49d;
         }
+        smoothCameraZoom = Double.isNaN(smoothCameraZoom) ? desiredZoom
+                : smoothCameraZoom + (desiredZoom - smoothCameraZoom) * (immediate ? 1d : 0.035d);
+        smoothCameraTilt = Double.isNaN(smoothCameraTilt) ? desiredTilt
+                : smoothCameraTilt + (desiredTilt - smoothCameraTilt) * (immediate ? 1d : 0.04d);
 
         CameraPosition cp = new CameraPosition.Builder()
                 .target(new LatLng(lat, lng))
-                .zoom(zoom)
+                .zoom(smoothCameraZoom)
                 .bearing(cameraBearing)
-                .tilt(pipCamera ? 0d : 42d)
+                .tilt(smoothCameraTilt)
                 .build();
 
         // Do NOT start a new easeCamera animation every frame. Repeatedly cancelling
@@ -694,8 +733,17 @@ public class DriverNavigationActivity extends Activity {
         }
         if (!Double.isFinite(instant) || instant < 0d) instant = 0d;
         if (instant > 180d) instant = 180d;
+        long nowRealtime = SystemClock.elapsedRealtime();
+        previousSpeedKmh = currentSpeedKmh;
         currentSpeedKmh = currentSpeedKmh <= 0 ? instant :
-                currentSpeedKmh * 0.68d + instant * 0.32d;
+                currentSpeedKmh * 0.72d + instant * 0.28d;
+        if (lastSpeedRealtimeMs > 0L) {
+            double dtSec = Math.max(0.25d, Math.min(3d, (nowRealtime - lastSpeedRealtimeMs) / 1000d));
+            double acceleration = ((currentSpeedKmh - previousSpeedKmh) / 3.6d) / dtSec;
+            acceleration = Math.max(-4.5d, Math.min(4.5d, acceleration));
+            smoothedAccelerationMps2 = smoothedAccelerationMps2 * 0.78d + acceleration * 0.22d;
+        }
+        lastSpeedRealtimeMs = nowRealtime;
         if (currentSpeedKmh >= 1d) {
             speedSum += currentSpeedKmh;
             speedSamples++;
