@@ -56,68 +56,32 @@ public final class NativeSessionGuard {
     }
 
     public static void stopAllNativeServices(Context context) {
-        if (context == null) return;
-
-        try {
-            Intent location = new Intent(context, LocationService.class);
-            location.setAction(LocationService.ACTION_STOP);
-            context.startService(location);
-        } catch (Exception e) {
-            Log.e(TAG, "Stop LocationService gagal", e);
-        }
-
-        try {
-            BackgroundSyncService.stop(context);
-        } catch (Exception e) {
-            Log.e(TAG, "Stop BackgroundSyncService gagal", e);
-        }
-
-        try {
-            Intent driverForeground = new Intent(context, TransivaDriverForegroundService.class);
-            driverForeground.setAction(TransivaDriverForegroundService.ACTION_STOP);
-            context.startService(driverForeground);
-        } catch (Exception ignored) {}
+        DriverServiceController.stopAll(context);
     }
 
     public static boolean startAllowedServices(Context context) {
         if (context == null) return false;
-
         if (!canRunNativeServices(context)) {
-            stopAllNativeServices(context);
+            DriverServiceController.stopAll(context);
             return false;
         }
-
         try {
             SessionManager sessionManager = new SessionManager(context);
             sessionManager.touchSession();
-
             String role = sessionManager.getRole();
-
             if ("driver".equals(role)) {
-                /*
-                 * Jangan memulai service lokasi hanya karena driver sudah login.
-                 * Driver wajib menekan ONLINE dari dashboard terlebih dahulu.
-                 */
                 if (isDriverOnline(context) && hasLocationPermission(context)) {
-                    startLocationService(context);
-                    BackgroundSyncService.start(context);
-                    startDriverForegroundService(context);
+                    DriverServiceController.start(context);
                     return true;
                 }
-
-                stopAllNativeServices(context);
+                DriverServiceController.stopAll(context);
                 return false;
             }
-
-            if ("merchant".equals(role) || "admin".equals(role) || "wisata".equals(role)) {
-                BackgroundSyncService.start(context);
-                return true;
-            }
-
+            // Merchant/admin tidak menjalankan service lokasi driver.
+            DriverServiceController.stopAll(context);
         } catch (Exception e) {
             Log.e(TAG, "Start allowed services gagal", e);
         }
-
         return false;
     }
 
@@ -154,33 +118,4 @@ public final class NativeSessionGuard {
         }
     }
 
-    private static void startLocationService(Context context) {
-        try {
-            Intent intent = new Intent(context, LocationService.class);
-            intent.setAction(LocationService.ACTION_START);
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent);
-            } else {
-                context.startService(intent);
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Start LocationService gagal", e);
-        }
-    }
-
-    private static void startDriverForegroundService(Context context) {
-        try {
-            Intent intent = new Intent(context, TransivaDriverForegroundService.class);
-            intent.setAction(TransivaDriverForegroundService.ACTION_START);
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent);
-            } else {
-                context.startService(intent);
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Start DriverForegroundService gagal", e);
-        }
-    }
 }

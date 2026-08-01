@@ -226,12 +226,12 @@ public class DriverTopUpActivity extends Activity {
 
     private void loadQrisImage() {
         setLoading(true);
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             Bitmap bm = null;
             try { HttpURLConnection c = (HttpURLConnection)new URL(BASE_URL + "assets/qris.jpg?v=" + System.currentTimeMillis()).openConnection(); c.setConnectTimeout(10000); c.setReadTimeout(10000); bm = BitmapFactory.decodeStream(c.getInputStream()); c.disconnect(); } catch (Exception ignored) {}
             Bitmap finalBm = bm;
             mainHandler.post(() -> { setLoading(false); if (finalBm != null) qrisImage.setImageBitmap(finalBm); else showInfo("QRIS", "Gagal memuat gambar QRIS."); });
-        }).start();
+        });
     }
 
     private void pickProofImage() {
@@ -253,14 +253,14 @@ public class DriverTopUpActivity extends Activity {
         if (proofUri == null) { showInfo("Bukti Belum Ada", "Upload bukti transfer terlebih dahulu."); return; }
         if (username.length() == 0) { showInfo("Sesi Tidak Valid", "Data username tidak ditemukan. Silakan login ulang."); return; }
         setLoading(true); setSubmitEnabled(false); setStatus("⏳ Mengirim bukti pembayaran...", false);
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             try {
                 JSONObject res = uploadDeposit(proofUri, selectedAmount);
                 boolean ok = res.optBoolean("success", false);
                 String msg = firstNonEmpty(res.optString("message"), ok ? "Deposit berhasil dikirim" : "Upload gagal");
                 mainHandler.post(() -> { setLoading(false); setSubmitEnabled(true); if (ok) { setStatus("✅ Bukti dikirim dan menunggu verifikasi admin", true); loadBalanceAndPending(); showInfo("Deposit Terkirim", "Deposit driver berhasil dikirim. Saldo masuk setelah admin setujui."); } else { setStatus(msg, false); showInfo("Upload Gagal", msg); } });
             } catch (Exception e) { mainHandler.post(() -> { setLoading(false); setSubmitEnabled(true); setStatus("❌ Koneksi bermasalah", false); showInfo("Koneksi Bermasalah", "Gagal mengirim bukti deposit."); }); }
-        }).start();
+        });
     }
 
     private JSONObject uploadDeposit(Uri fileUri, int amount) throws Exception {
@@ -280,13 +280,13 @@ public class DriverTopUpActivity extends Activity {
     private void loadBalanceAndPending() {
         if (username.length() == 0) return;
         setLoading(true);
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             String bal = rupiah(0), pending = "Rp 0";
             try { JSONObject json = getJson(BASE_URL + "server/driver_get_dashboard.php?username=" + Uri.encode(username) + "&v=" + System.currentTimeMillis()); if (json.optBoolean("success", false)) { bal = rupiah(json.optDouble("balance", json.optDouble("saldo", 0))); pending = rupiah(json.optDouble("pending_deposit", 0)); } }
             catch (Exception e) { try { JSONObject json = getJson(BASE_URL + "server/getBalance.php?username=" + Uri.encode(username)); if (json.optBoolean("success", false)) bal = rupiah(json.optDouble("balance", 0)); } catch (Exception ignored) {} }
             String finalBal = bal, finalPending = pending;
             mainHandler.post(() -> { setLoading(false); if (balanceText != null) balanceText.setText(finalBal); if (pendingText != null) pendingText.setText("Pending deposit: " + finalPending); });
-        }).start();
+        });
     }
 
     private JSONObject getJson(String urlText) throws Exception { HttpURLConnection conn = null; try { conn = (HttpURLConnection)new URL(urlText).openConnection(); conn.setRequestMethod("GET"); conn.setConnectTimeout(TIMEOUT_MS); conn.setReadTimeout(TIMEOUT_MS); conn.setRequestProperty("Accept", "application/json"); int code = conn.getResponseCode(); InputStream is = code >= 200 && code < 300 ? conn.getInputStream() : conn.getErrorStream(); String body = readStream(is).trim(); return body.length() == 0 ? new JSONObject() : new JSONObject(body); } finally { if (conn != null) conn.disconnect(); } }

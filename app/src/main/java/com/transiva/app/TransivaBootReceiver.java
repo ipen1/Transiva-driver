@@ -115,38 +115,15 @@ public class TransivaBootReceiver extends BroadcastReceiver {
     }
 
     private void startDriverForegroundServiceSafe(Context context) {
-        try {
-            Intent serviceIntent = new Intent(context, TransivaDriverForegroundService.class);
-            serviceIntent.setAction(TransivaDriverForegroundService.ACTION_START);
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(serviceIntent);
-            } else {
-                context.startService(serviceIntent);
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Gagal start foreground service: " + safe(e.getMessage()));
-        }
+        DriverServiceController.startAfterSystemEvent(context);
     }
 
     private void startBackgroundSyncServiceSafe(Context context) {
-        try {
-            BackgroundSyncService.start(context);
-        } catch (Exception e) {
-            Log.e(TAG, "Gagal start background sync: " + safe(e.getMessage()));
-        }
+        // DriverServiceController already starts background sync.
     }
 
     private void stopAllServices(Context context) {
-        try {
-            BackgroundSyncService.stop(context);
-        } catch (Exception ignored) {}
-
-        try {
-            Intent serviceIntent = new Intent(context, TransivaDriverForegroundService.class);
-            serviceIntent.setAction(TransivaDriverForegroundService.ACTION_STOP);
-            context.startService(serviceIntent);
-        } catch (Exception ignored) {}
+        DriverServiceController.stopAll(context);
     }
 
     private void clearOnlineFlags(Context context) {

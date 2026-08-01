@@ -20,5 +20,6 @@ public final class DriverNetworkExecutor {
             new ArrayBlockingQueue<>(96), FACTORY,
             new ThreadPoolExecutor.DiscardOldestPolicy());
     private DriverNetworkExecutor() {}
+    public static ExecutorService executor() { return EXECUTOR; }
     public static void execute(Runnable work) { if (work != null) EXECUTOR.execute(work); }
 }

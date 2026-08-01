@@ -202,7 +202,7 @@ public class BackgroundSyncService extends Service {
     }
 
     private void runSyncOnce() {
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             try {
                 if (!hasValidLoginSession()) {
                     stopSyncServiceSilent("Belum login");
@@ -220,7 +220,7 @@ public class BackgroundSyncService extends Service {
                 }
 
             } catch (Exception ignored) {}
-        }).start();
+        });
     }
 
     private void doSync() {

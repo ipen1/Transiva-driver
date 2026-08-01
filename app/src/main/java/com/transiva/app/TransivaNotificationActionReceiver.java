@@ -41,7 +41,7 @@ public class TransivaNotificationActionReceiver extends BroadcastReceiver {
 
         final PendingResult pendingResult = goAsync();
 
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             try {
                 handleAction(context.getApplicationContext(), intent);
             } catch (Exception e) {
@@ -52,7 +52,7 @@ public class TransivaNotificationActionReceiver extends BroadcastReceiver {
                     pendingResult.finish();
                 } catch (Exception ignored) {}
             }
-        }).start();
+        });
     }
 
     private void handleAction(Context context, Intent intent) throws Exception {

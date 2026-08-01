@@ -168,16 +168,8 @@ public class TransivaDriverForegroundService extends Service {
                         .getBoolean("merchant_online", false);
 
         if (driverOnline || merchantOnline) {
-            Intent restart = new Intent(getApplicationContext(), TransivaDriverForegroundService.class);
-            restart.setAction(ACTION_START);
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                getApplicationContext().startForegroundService(restart);
-            } else {
-                getApplicationContext().startService(restart);
-            }
-
-            Log.d(TAG, "Service dicoba restart setelah task removed");
+            DriverServiceController.startAfterSystemEvent(getApplicationContext());
+            Log.d(TAG, "Restart service didelegasikan ke controller dengan pembatas.");
         }
     }
 

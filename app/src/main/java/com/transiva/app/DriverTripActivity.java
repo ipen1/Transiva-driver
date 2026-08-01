@@ -585,7 +585,7 @@ public class DriverTripActivity extends Activity {
         routeRequestInFlight=true;
         lastRouteRequestAt=now;
         final double startLat=tripStartLat, startLng=tripStartLng;
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             try{
                 StableRouteEngine.Result firstLeg=StableRouteEngine.fetch(startLat,startLng,pLat,pLng);
                 StableRouteEngine.Result secondLeg=StableRouteEngine.fetch(pLat,pLng,dLat,dLng);
@@ -603,7 +603,7 @@ public class DriverTripActivity extends Activity {
             }finally{
                 routeRequestInFlight=false;
             }
-        },"transiva-trip-overview-route").start();
+        });
     }
 
     private void applyPendingRoute(){
@@ -741,7 +741,7 @@ public class DriverTripActivity extends Activity {
     private void confirm(String msg, String next){ if(updatingStatus)return; new AlertDialog.Builder(this).setTitle("Konfirmasi").setMessage(msg).setNegativeButton("Batal",null).setPositiveButton("Ya",(d,w)->updateStatus(next)).show(); }
     private void updateStatus(String next){
         updatingStatus = true; setLoading(true);
-        new Thread(() -> { try{
+        DriverNetworkExecutor.execute(() -> { try{
             JSONObject p = new JSONObject();
             p.put("id", internalId());
             p.put("order_id", orderId());
@@ -756,7 +756,7 @@ public class DriverTripActivity extends Activity {
             boolean ok = r.optBoolean("success", false);
             String m = first(r.optString("message"), ok ? "Status berhasil diperbarui." : "Gagal update status.");
             mainHandler.post(() -> { updatingStatus=false; setLoading(false); if(ok){ pendingFinishOtp = ""; try{ order.put("status", next); }catch(Exception ignored){} saveActiveOrder(); refreshButtons(); mainHandler.postDelayed(() -> updateMap(), 250); info("Berhasil", m); if(next.equals("finished") || next.equals("completed")){ clearActiveOrder(); finish(); } } else info("Gagal", m); });
-        }catch(Exception e){ mainHandler.post(() -> { updatingStatus=false; setLoading(false); info("Koneksi gagal", "Tidak bisa update status ke server."); }); }}).start();
+        }catch(Exception e){ mainHandler.post(() -> { updatingStatus=false; setLoading(false); info("Koneksi gagal", "Tidak bisa update status ke server."); }); }});
     }
     private String endpoint(String n){
         // pickup_orders memakai endpoint unified karena endpoint lama hanya membaca tabel orders.
@@ -817,7 +817,7 @@ public class DriverTripActivity extends Activity {
         lastPostedLat = lat;
         lastPostedLng = lng;
 
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             try{
                 JSONObject p = new JSONObject();
                 p.put("username", driverUsername);
@@ -834,7 +834,7 @@ public class DriverTripActivity extends Activity {
                 }
                 postJson(BASE_URL + "driver_update_location_native.php", p);
             }catch(Exception ignored){}
-        }).start();
+        });
     }
     private boolean isNonCash(){
         String p = first(order == null ? "" : order.optString("payment_method"), "cash").toLowerCase(Locale.US);
@@ -854,11 +854,11 @@ public class DriverTripActivity extends Activity {
         }).show();
     }
     private void requestPriceChange(double value,String reason){
-        setLoading(true); new Thread(()->{ try{
+        setLoading(true); DriverNetworkExecutor.execute(()->{ try{
             JSONObject p=new JSONObject(); p.put("source",isPickupOrder()?"pickup_orders":"orders"); p.put("id",Integer.parseInt(internalId())); p.put("driver",driverUsername); p.put("new_price",value); p.put("reason",reason);
             JSONObject r=postJson(BASE_URL+"driver_request_price_change.php",p); boolean ok=r.optBoolean("success",false); String m=first(r.optString("message"),ok?"Harga diperbarui":"Gagal memperbarui harga");
             mainHandler.post(()->{setLoading(false); if(ok){ try{ if(!r.optBoolean("approval_required",false)) order.put("price",value); }catch(Exception ignored){} info("Total Pembayaran",m); renderOrder(); refreshButtons(); } else info("Gagal",m);});
-        }catch(Exception e){mainHandler.post(()->{setLoading(false);info("Gagal","Koneksi server bermasalah.");});}},"price-change").start();
+        }catch(Exception e){mainHandler.post(()->{setLoading(false);info("Gagal","Koneksi server bermasalah.");});}});
     }
     private void openChat(){
         try{

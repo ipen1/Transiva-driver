@@ -27,6 +27,9 @@ public final class TransivaDriverCrashReporter {
         } catch (Throwable ignored) {}
     }
     public static void screen(String name) { key("last_screen", sanitize(name)); }
+    public static void message(String message) {
+        try { FirebaseCrashlytics.getInstance().log(sanitize(message)); } catch (Throwable ignored) {}
+    }
     public static void key(String name, String value) {
         try { FirebaseCrashlytics.getInstance().setCustomKey(sanitize(name), sanitize(value)); } catch (Throwable ignored) {}
     }

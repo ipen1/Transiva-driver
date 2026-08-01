@@ -36,6 +36,11 @@ public final class MockLocationGuard {
     private static final AtomicBoolean CHECK_RUNNING = new AtomicBoolean(false);
     private static final AtomicBoolean DIALOG_VISIBLE = new AtomicBoolean(false);
     private static final long MAX_STALE_MOCK_MS = 15_000L;
+    private static final String[] KNOWN_MOCK_PACKAGES = new String[]{
+            "com.lexa.fakegps",
+            "com.blogspot.newapphorizons.fakegps",
+            "com.incorporateapps.fakegps.fre"
+    };
 
     private MockLocationGuard() {}
 
@@ -80,6 +85,10 @@ public final class MockLocationGuard {
             return DetectionResult.blocked("Aplikasi lokasi palsu aktif: " + label);
         }
 
+        String known = findEnabledKnownMockApp(context);
+        if (!TextUtils.isEmpty(known)) {
+            return DetectionResult.blocked("Aplikasi lokasi palsu terpasang dan aktif: " + getAppLabel(context, known));
+        }
         if (hasFreshMockLocation(context)) {
             return DetectionResult.blocked("Perangkat masih mengirim koordinat dari lokasi palsu.");
         }
@@ -109,6 +118,34 @@ public final class MockLocationGuard {
                 int mode = appOps.checkOpNoThrow(AppOpsManager.OPSTR_MOCK_LOCATION,
                         info.uid, info.packageName);
                 if (mode == AppOpsManager.MODE_ALLOWED) return info.packageName;
+            } catch (Throwable ignored) { }
+        }
+        return null;
+    }
+
+
+    /** Called from every live location callback. */
+    public static boolean isMock(Location location) {
+        if (location == null) return false;
+        try {
+            return Build.VERSION.SDK_INT >= 31 ? location.isMock() : location.isFromMockProvider();
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static String findEnabledKnownMockApp(Context context) {
+        PackageManager pm = context.getPackageManager();
+        for (String packageName : KNOWN_MOCK_PACKAGES) {
+            try {
+                ApplicationInfo info;
+                if (Build.VERSION.SDK_INT >= 33) {
+                    info = pm.getApplicationInfo(packageName, PackageManager.ApplicationInfoFlags.of(0));
+                } else {
+                    //noinspection deprecation
+                    info = pm.getApplicationInfo(packageName, 0);
+                }
+                if (info.enabled) return packageName;
             } catch (Throwable ignored) { }
         }
         return null;

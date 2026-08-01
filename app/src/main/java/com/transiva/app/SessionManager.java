@@ -749,4 +749,5 @@ public class SessionManager {
     public String getLastLocationString() {
         return getLastLocationJson().toString();
     }
+    public Context getContext() { return appContext; }
 }

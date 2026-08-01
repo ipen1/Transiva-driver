@@ -282,7 +282,7 @@ public class DriverWithdrawActivity extends Activity {
     private void loadAll(boolean show) {
         if (loading) return;
         setBusy(true, show);
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             String balanceJson = "", wdJson = "";
             try { balanceJson = get(SERVER + "getBalance.php?username=" + enc(username) + "&v=" + System.currentTimeMillis()); } catch (Exception ignored) {}
             try { wdJson = get(SERVER + "getDriverWithdrawals.php?username=" + enc(username) + "&v=" + System.currentTimeMillis()); } catch (Exception ignored) {}
@@ -292,7 +292,7 @@ public class DriverWithdrawActivity extends Activity {
                 showBalance(fb);
                 showHistory(fw);
             });
-        }).start();
+        });
     }
 
     private void showBalance(String json) {
@@ -404,7 +404,7 @@ public class DriverWithdrawActivity extends Activity {
         if (loading) return;
         setBusy(true, true);
         submitBtn.setText("Memproses...");
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             try {
                 JSONObject p = new JSONObject();
                 p.put("username", username);
@@ -441,7 +441,7 @@ public class DriverWithdrawActivity extends Activity {
                     showInfo("Gagal", "Koneksi gagal mengajukan WD.");
                 });
             }
-        }).start();
+        });
     }
 
     private void setBusy(boolean b, boolean show) {
