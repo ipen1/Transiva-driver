@@ -425,12 +425,23 @@ public class DriverDashboardActivity extends Activity
         lastUpdateText.setText("Baru diperbarui");
 
         activeBox.removeAllViews();
-        if (state.activeOrder == null) {
+        if (state.activeOrders == null || state.activeOrders.isEmpty()) {
             session.remove("current_order_id");
             activeBox.addView(emptyCard("Belum ada order aktif."));
         } else {
-            session.put("current_order_id", state.activeOrder.id);
-            activeBox.addView(orderCard(state.activeOrder, true));
+            session.put("current_order_id", state.activeOrders.get(0).id);
+            int slot = 0;
+            for (DriverOrder activeOrder : state.activeOrders) {
+                slot++;
+                if (activeOrder.raw != null) {
+                    try {
+                        activeOrder.raw.put("concurrent_slot", slot);
+                        activeOrder.raw.put("active_count", state.activeOrders.size());
+                        activeOrder.raw.put("max_active_orders", 2);
+                    } catch (Exception ignored) { }
+                }
+                activeBox.addView(orderCard(activeOrder, true));
+            }
         }
 
         offerBox.removeAllViews();
@@ -439,6 +450,8 @@ public class DriverDashboardActivity extends Activity
         if (!state.online) {
             offerBox.addView(emptyCard(
                     "Driver OFFLINE.\nAktifkan ONLINE untuk menerima order."));
+        } else if (state.activeOrders != null && state.activeOrders.size() >= 2) {
+            offerBox.addView(emptyCard("Batas maksimal 2 order berjalan sudah tercapai. Selesaikan salah satu order untuk menerima tawaran berikutnya."));
         } else if (state.offers.isEmpty()) {
             offerBox.addView(emptyCard("Belum ada tawaran order."));
         } else {
@@ -533,7 +546,8 @@ public class DriverDashboardActivity extends Activity
         LinearLayout card = card();
         boolean queued = !active && order.raw != null && order.raw.optBoolean("queued", false);
         int queuePosition = order.raw == null ? 0 : order.raw.optInt("queue_position", 0);
-        String cardTitle = active ? "Order Aktif" : (queued ? "Order Antrean" : "Tawaran");
+        int concurrentSlot = order.raw == null ? 0 : order.raw.optInt("concurrent_slot", 0);
+        String cardTitle = active ? (concurrentSlot > 0 ? "Order Aktif " + concurrentSlot + "/2" : "Order Aktif") : (queued ? "Order Antrean" : "Tawaran");
         card.addView(text(
                 cardTitle + " #" + order.id,
                 17, "#0B3A78", true));
@@ -786,20 +800,10 @@ public class DriverDashboardActivity extends Activity
             return;
         }
 
-        // Polling normal menghasilkan deadline absolut yang hampir sama dan
-        // tidak boleh memperpanjang timer. Namun redispatch dapat memakai ID
-        // order yang sama dengan offer_expired_at baru. Bila timer lokal sudah
-        // habis dan server kembali memberi waktu positif, hidupkan jendela
-        // tawaran baru (maksimal 60 detik) agar order dapat diterima kembali.
-        boolean localExpired = current <= now;
-        boolean serverIssuedFreshWindow = order.remainingSeconds > 0
-                && candidate > now + SERVER_DRIFT_TOLERANCE_MS;
-
-        if (localExpired && serverIssuedFreshWindow) {
-            long cappedCandidate = now + Math.min(60, order.remainingSeconds) * 1000L;
-            offerDeadlines.put(key, cappedCandidate);
-            expiredRefreshRequested.remove(key);
-        } else if (candidate < current - SERVER_DRIFT_TOLERANCE_MS) {
+        // Server polling must never extend the same visible offer. This is
+        // important for public TransPickup offers that use a fresh 30-second
+        // window when first loaded by the driver.
+        if (candidate < current - SERVER_DRIFT_TOLERANCE_MS) {
             offerDeadlines.put(key, candidate);
         }
     }
