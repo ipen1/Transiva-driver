@@ -786,10 +786,20 @@ public class DriverDashboardActivity extends Activity
             return;
         }
 
-        // Server polling must never extend the same visible offer. This is
-        // important for public TransPickup offers that use a fresh 30-second
-        // window when first loaded by the driver.
-        if (candidate < current - SERVER_DRIFT_TOLERANCE_MS) {
+        // Polling normal menghasilkan deadline absolut yang hampir sama dan
+        // tidak boleh memperpanjang timer. Namun redispatch dapat memakai ID
+        // order yang sama dengan offer_expired_at baru. Bila timer lokal sudah
+        // habis dan server kembali memberi waktu positif, hidupkan jendela
+        // tawaran baru (maksimal 60 detik) agar order dapat diterima kembali.
+        boolean localExpired = current <= now;
+        boolean serverIssuedFreshWindow = order.remainingSeconds > 0
+                && candidate > now + SERVER_DRIFT_TOLERANCE_MS;
+
+        if (localExpired && serverIssuedFreshWindow) {
+            long cappedCandidate = now + Math.min(60, order.remainingSeconds) * 1000L;
+            offerDeadlines.put(key, cappedCandidate);
+            expiredRefreshRequested.remove(key);
+        } else if (candidate < current - SERVER_DRIFT_TOLERANCE_MS) {
             offerDeadlines.put(key, candidate);
         }
     }
