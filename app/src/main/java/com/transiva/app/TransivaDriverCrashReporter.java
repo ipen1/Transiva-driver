@@ -2,6 +2,7 @@ package com.transiva.app;
 
 import android.content.Context;
 import android.os.Build;
+import android.content.pm.ApplicationInfo;
 import com.google.firebase.crashlytics.FirebaseCrashlytics;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
@@ -16,7 +17,9 @@ public final class TransivaDriverCrashReporter {
     public static void initialize(Context context) {
         try {
             FirebaseCrashlytics c = FirebaseCrashlytics.getInstance();
-            c.setCrashlyticsCollectionEnabled(!BuildConfig.DEBUG);
+            boolean debugBuild = (context.getApplicationInfo().flags
+                    & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+            c.setCrashlyticsCollectionEnabled(!debugBuild);
             c.setCustomKey("app_role", "driver");
             c.setCustomKey("android_sdk", Build.VERSION.SDK_INT);
             c.setCustomKey("device_brand", safe(Build.BRAND));

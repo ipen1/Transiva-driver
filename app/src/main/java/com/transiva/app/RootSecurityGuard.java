@@ -21,9 +21,26 @@ public final class RootSecurityGuard {
     public static void checkAsync(Context c, Callback cb){
         if(c==null)return; Context app=c.getApplicationContext();
         if(!RUNNING.compareAndSet(false,true)){ MAIN.postDelayed(()->checkAsync(app,cb),250); return; }
-        DriverNetworkExecutor.execute(()->{ Result r; try{r=detect(app);}catch(Throwable e){r=new Result(false,"");} RUNNING.set(false); MAIN.post(()->{if(cb!=null){if(r.blocked)cb.onBlocked(r.reason);else cb.onSafe();}}); });
+        DriverNetworkExecutor.execute(() -> {
+            final Result result = safeDetect(app);
+            RUNNING.set(false);
+            MAIN.post(() -> {
+                if (cb != null) {
+                    if (result.blocked) cb.onBlocked(result.reason);
+                    else cb.onSafe();
+                }
+            });
+        });
     }
     public static void enforce(Activity a){ if(a==null||a.isFinishing()||a.isDestroyed())return; checkAsync(a,new Callback(){public void onSafe(){} public void onBlocked(String r){show(a,r);}}); }
+    private static Result safeDetect(Context context) {
+        try {
+            return detect(context);
+        } catch (Throwable ignored) {
+            // Gagal memeriksa bukan alasan untuk memblokir perangkat normal.
+            return new Result(false, "");
+        }
+    }
     private static Result detect(Context c){ int score=0; StringBuilder why=new StringBuilder();
         String tags=Build.TAGS==null?"":Build.TAGS; if(tags.contains("test-keys")){score+=1;why.append("test-keys, ");}
         String[] paths={"/system/bin/su","/system/xbin/su","/sbin/su","/data/adb/magisk","/data/adb/ksu","/data/adb/ap","/system/framework/XposedBridge.jar"};
