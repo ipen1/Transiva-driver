@@ -3,6 +3,7 @@ package com.transiva.app.driver.presentation;
 import android.os.Handler;
 import android.os.Looper;
 
+import com.transiva.app.DriverRequestGate;
 import com.transiva.app.driver.domain.DriverDashboardRepository;
 import com.transiva.app.driver.domain.DriverDashboardState;
 import com.transiva.app.driver.domain.DriverOrder;
@@ -72,8 +73,10 @@ public final class DriverDashboardPresenter {
     }
 
     public void acceptOrder(String orderId, String source) {
-        if (!actionRunning.compareAndSet(false, true)) return;
-        String action = "accept:" + orderId;
+        String gateKey = "accept:" + orderId;
+        if (!DriverRequestGate.enter(gateKey)) return;
+        if (!actionRunning.compareAndSet(false, true)) { DriverRequestGate.leave(gateKey); return; }
+        String action = gateKey;
         if (view != null) view.showActionLoading(action, true);
 
         repository.acceptOrder(
@@ -82,10 +85,12 @@ public final class DriverDashboardPresenter {
                 UUID.randomUUID().toString(),
                 new DriverDashboardRepository.ActionCallback() {
                     @Override public void onSuccess(String message, DriverOrder order) {
+                        DriverRequestGate.leave(gateKey);
                         finishAction(action, message, true, order);
                     }
 
                     @Override public void onError(int httpCode, String code, String message) {
+                        DriverRequestGate.leave(gateKey);
                         failAction(action, httpCode, code, message);
                     }
                 }
@@ -98,8 +103,10 @@ public final class DriverDashboardPresenter {
             String currentStatus,
             String reason
     ) {
-        if (!actionRunning.compareAndSet(false, true)) return;
-        String action = "cancel:" + orderId;
+        String gateKey = "cancel:" + orderId;
+        if (!DriverRequestGate.enter(gateKey)) return;
+        if (!actionRunning.compareAndSet(false, true)) { DriverRequestGate.leave(gateKey); return; }
+        String action = gateKey;
         if (view != null) view.showActionLoading(action, true);
 
         repository.cancelOrder(
@@ -109,10 +116,12 @@ public final class DriverDashboardPresenter {
                 reason,
                 new DriverDashboardRepository.ActionCallback() {
                     @Override public void onSuccess(String message, DriverOrder order) {
+                        DriverRequestGate.leave(gateKey);
                         finishAction(action, message, false, null);
                     }
 
                     @Override public void onError(int httpCode, String code, String message) {
+                        DriverRequestGate.leave(gateKey);
                         failAction(action, httpCode, code, message);
                     }
                 }
