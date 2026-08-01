@@ -16,6 +16,7 @@ public final class DriverDashboardState {
     public final int todayTrips;
     public final double rating;
     public final DriverOrder activeOrder;
+    public final List<DriverOrder> activeOrders;
     public final List<DriverOrder> offers;
     public final long serverTimeMillis;
 
@@ -32,6 +33,7 @@ public final class DriverDashboardState {
             int todayTrips,
             double rating,
             DriverOrder activeOrder,
+            List<DriverOrder> activeOrders,
             List<DriverOrder> offers,
             long serverTimeMillis
     ) {
@@ -47,6 +49,7 @@ public final class DriverDashboardState {
         this.todayTrips = todayTrips;
         this.rating = rating;
         this.activeOrder = activeOrder;
+        this.activeOrders = activeOrders == null ? Collections.emptyList() : activeOrders;
         this.offers = offers == null ? Collections.emptyList() : offers;
         this.serverTimeMillis = serverTimeMillis;
     }
