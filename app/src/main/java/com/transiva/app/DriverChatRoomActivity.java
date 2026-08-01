@@ -2,6 +2,7 @@ package com.transiva.app;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.app.AlertDialog;
 import android.app.KeyguardManager;
 import android.app.Dialog;
@@ -103,6 +104,7 @@ public class DriverChatRoomActivity extends Activity {
     private boolean destroyed;
     private boolean chatVisible;
     private volatile long focusedSinceElapsedMs = 0L;
+    private volatile int readVisibilityGeneration = 0;
     private static final long MIN_READ_VISIBILITY_MS = 1500L;
     private int lastId;
     private boolean firstLoad = true;
@@ -807,6 +809,14 @@ public class DriverChatRoomActivity extends Activity {
                 (KeyguardManager) getSystemService(KEYGUARD_SERVICE);
         if (keyguardManager != null && keyguardManager.isKeyguardLocked()) return false;
 
+        View decor = getWindow() == null ? null : getWindow().getDecorView();
+        if (decor == null || decor.getWindowVisibility() != View.VISIBLE || !decor.isShown()) return false;
+
+        ActivityManager.RunningAppProcessInfo processInfo =
+                new ActivityManager.RunningAppProcessInfo();
+        ActivityManager.getMyMemoryState(processInfo);
+        if (processInfo.importance != ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND) return false;
+
         long focusedFor =
                 SystemClock.elapsedRealtime() - focusedSinceElapsedMs;
         return focusedSinceElapsedMs > 0L
@@ -816,13 +826,14 @@ public class DriverChatRoomActivity extends Activity {
     private void markMessagesReadThrough(int readThroughId) {
         if (readThroughId <= 0 || !isChatActuallyVisible()) return;
 
+        final int generation = readVisibilityGeneration;
         new Thread(() -> {
             try {
                 // Wajib terlihat dan fokus terus-menerus. Membuka panel notifikasi,
                 // layar terkunci, atau hanya melihat preview tidak mengirim receipt.
                 Thread.sleep(MIN_READ_VISIBILITY_MS);
 
-                if (!isChatActuallyVisible()) return;
+                if (generation != readVisibilityGeneration || !isChatActuallyVisible()) return;
 
                 long visibleMs =
                         SystemClock.elapsedRealtime() - focusedSinceElapsedMs;
@@ -845,6 +856,7 @@ public class DriverChatRoomActivity extends Activity {
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
 
+        readVisibilityGeneration++;
         if (hasFocus && chatVisible) {
             focusedSinceElapsedMs = SystemClock.elapsedRealtime();
         } else {
@@ -924,7 +936,7 @@ public class DriverChatRoomActivity extends Activity {
                 message.optString("created_at", ""));
         if (!time.isEmpty()) {
             String receiptText = mine
-                    ? (message.optString("read_at", "").trim().isEmpty()
+                    ? (message.optInt("is_read", message.optString("read_at", "").trim().isEmpty() ? 0 : 1) == 0
                     ? "  ✓ Terkirim" : "  ✓✓ Dibaca")
                     : "";
             TextView view = text(time + receiptText, 9, "#94A3B8", false);
@@ -947,7 +959,7 @@ public class DriverChatRoomActivity extends Activity {
         if (!"driver".equals(sender)) return;
 
         String time = formatTime(message.optString("created_at", ""));
-        boolean read = !message.optString("read_at", "").trim().isEmpty();
+        boolean read = message.optInt("is_read", message.optString("read_at", "").trim().isEmpty() ? 0 : 1) == 1;
         String next = time + (read ? "  ✓✓ Dibaca" : "  ✓ Terkirim");
         if (!next.contentEquals(receipt.getText())) {
             receipt.setText(next);
@@ -1297,6 +1309,7 @@ public class DriverChatRoomActivity extends Activity {
     protected void onResume() {
         super.onResume();
         chatVisible = true;
+        readVisibilityGeneration++;
         focusedSinceElapsedMs = hasWindowFocus()
                 ? SystemClock.elapsedRealtime() : 0L;
         DriverChatNotificationPoller.setOpenRoom(roomId);
@@ -1310,6 +1323,7 @@ public class DriverChatRoomActivity extends Activity {
     @Override
     protected void onPause() {
         chatVisible = false;
+        readVisibilityGeneration++;
         focusedSinceElapsedMs = 0L;
         main.removeCallbacks(refreshRunnable);
         DriverChatNotificationPoller.clearOpenRoom(roomId);
