@@ -671,9 +671,9 @@ public class DriverNavigationActivity extends Activity {
         double cameraBearing = smoothCameraBearing;
         smoothMarkerBearing = easeBearing(smoothMarkerBearing, desiredBearing,
                 immediate ? 1.0f : (currentSpeedKmh < 5d ? 0.10f : 0.16f));
-        if (driverMarker != null) {
-            try { driverMarker.setRotation((float) smoothMarkerBearing); } catch (Exception ignored) {}
-        }
+        // MapLibre Marker annotation tidak menyediakan setRotation(float).
+        // Ikon kendaraan tetap menghadap ke atas layar, sedangkan kamera diputar
+        // secara halus mengikuti bearing perjalanan sehingga arah kendaraan tetap selaras.
         boolean pipCamera = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
                 (inPictureInPicture || isInPictureInPictureMode());
 
