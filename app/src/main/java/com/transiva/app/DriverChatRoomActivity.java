@@ -871,7 +871,7 @@ public class DriverChatRoomActivity extends Activity {
                         + "&visible_ms=" + visibleMs
                         + "&read_through_id=" + readThroughId;
 
-                String raw = DriverMessageApi.get(session, endpoint);
+                String raw = DriverMessageApi.get(session, endpoint).toString();
                 JSONObject result = new JSONObject(raw == null ? "{}" : raw);
 
                 if (result.optBoolean("success", false)) {
