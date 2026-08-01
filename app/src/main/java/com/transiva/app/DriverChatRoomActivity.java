@@ -105,7 +105,19 @@ public class DriverChatRoomActivity extends Activity {
     private boolean chatVisible;
     private volatile long focusedSinceElapsedMs = 0L;
     private volatile int readVisibilityGeneration = 0;
-    private static final long MIN_READ_VISIBILITY_MS = 1500L;
+    private volatile int pendingReadThroughId = 0;
+    private static final long MIN_READ_VISIBILITY_MS = 1200L;
+
+    /*
+     * Receipt dijadwalkan ulang setelah Chat Room benar-benar fokus.
+     * Dengan begitu status Dibaca berubah tanpa menunggu pesan balasan.
+     */
+    private final Runnable readReceiptRunnable =
+            () -> {
+                int throughId = pendingReadThroughId;
+                if (throughId <= 0 || !isChatActuallyVisible()) return;
+                sendReadReceiptNow(throughId);
+            };
     private int lastId;
     private boolean firstLoad = true;
     private final SparseArray<TextView> receiptViews = new SparseArray<>();
@@ -793,8 +805,8 @@ public class DriverChatRoomActivity extends Activity {
         firstLoad = false;
         if (added || reset) scrollBottom();
 
-        if (chatVisible && hasWindowFocus() && lastId > 0) {
-            markMessagesReadThrough(lastId);
+        if (lastId > 0) {
+            scheduleMessagesReadThrough(lastId);
         }
     }
 
@@ -823,31 +835,63 @@ public class DriverChatRoomActivity extends Activity {
                 && focusedFor >= MIN_READ_VISIBILITY_MS;
     }
 
-    private void markMessagesReadThrough(int readThroughId) {
+    private void scheduleMessagesReadThrough(int readThroughId) {
+        if (readThroughId <= 0 || readOnly || destroyed) return;
+
+        pendingReadThroughId = Math.max(pendingReadThroughId, readThroughId);
+        main.removeCallbacks(readReceiptRunnable);
+
+        if (!chatVisible || !hasWindowFocus()) return;
+
+        long focusedFor = focusedSinceElapsedMs > 0L
+                ? SystemClock.elapsedRealtime() - focusedSinceElapsedMs
+                : 0L;
+        long delay = Math.max(0L, MIN_READ_VISIBILITY_MS - focusedFor);
+        main.postDelayed(readReceiptRunnable, delay);
+    }
+
+    private void sendReadReceiptNow(int readThroughId) {
         if (readThroughId <= 0 || !isChatActuallyVisible()) return;
 
         final int generation = readVisibilityGeneration;
+        final long visibleMs = Math.max(
+                MIN_READ_VISIBILITY_MS,
+                SystemClock.elapsedRealtime() - focusedSinceElapsedMs
+        );
+
         new Thread(() -> {
             try {
-                // Wajib terlihat dan fokus terus-menerus. Membuka panel notifikasi,
-                // layar terkunci, atau hanya melihat preview tidak mengirim receipt.
-                Thread.sleep(MIN_READ_VISIBILITY_MS);
-
                 if (generation != readVisibilityGeneration || !isChatActuallyVisible()) return;
-
-                long visibleMs =
-                        SystemClock.elapsedRealtime() - focusedSinceElapsedMs;
 
                 String endpoint = GET_CHAT_URL
                         + "?room_id=" + URLEncoder.encode(roomId, StandardCharsets.UTF_8.name())
                         + "&viewer_type=driver"
                         + "&mark_read=1"
-                        + "&read_source=chat_room_foreground_v2"
+                        + "&read_source=chat_room_foreground_v3"
                         + "&visible_ms=" + visibleMs
                         + "&read_through_id=" + readThroughId;
-                DriverMessageApi.get(session, endpoint);
+
+                String raw = DriverMessageApi.get(session, endpoint);
+                JSONObject result = new JSONObject(raw == null ? "{}" : raw);
+
+                if (result.optBoolean("success", false)) {
+                    if (pendingReadThroughId <= readThroughId) {
+                        pendingReadThroughId = 0;
+                    }
+                    main.postDelayed(() -> {
+                        if (!destroyed && chatVisible) loadMessages(false);
+                    }, 250L);
+                } else {
+                    main.postDelayed(
+                            () -> scheduleMessagesReadThrough(readThroughId),
+                            800L
+                    );
+                }
             } catch (Exception ignored) {
-                // Dicoba lagi pada refresh berikutnya saat chat benar-benar terlihat.
+                main.postDelayed(
+                        () -> scheduleMessagesReadThrough(readThroughId),
+                        1200L
+                );
             }
         }, "chat-read-ack").start();
     }
@@ -857,8 +901,12 @@ public class DriverChatRoomActivity extends Activity {
         super.onWindowFocusChanged(hasFocus);
 
         readVisibilityGeneration++;
+        main.removeCallbacks(readReceiptRunnable);
         if (hasFocus && chatVisible) {
             focusedSinceElapsedMs = SystemClock.elapsedRealtime();
+            if (lastId > 0) {
+                scheduleMessagesReadThrough(lastId);
+            }
         } else {
             focusedSinceElapsedMs = 0L;
         }
@@ -1316,6 +1364,9 @@ public class DriverChatRoomActivity extends Activity {
         main.removeCallbacks(refreshRunnable);
         if (!readOnly) {
             loadMessages(false);
+            if (lastId > 0) {
+                scheduleMessagesReadThrough(lastId);
+            }
             main.postDelayed(refreshRunnable, REFRESH_MS);
         }
     }
@@ -1326,6 +1377,7 @@ public class DriverChatRoomActivity extends Activity {
         readVisibilityGeneration++;
         focusedSinceElapsedMs = 0L;
         main.removeCallbacks(refreshRunnable);
+        main.removeCallbacks(readReceiptRunnable);
         DriverChatNotificationPoller.clearOpenRoom(roomId);
         super.onPause();
     }
@@ -1334,6 +1386,7 @@ public class DriverChatRoomActivity extends Activity {
     protected void onDestroy() {
         destroyed = true;
         DriverChatNotificationPoller.clearOpenRoom(roomId);
+        main.removeCallbacks(readReceiptRunnable);
         main.removeCallbacksAndMessages(null);
         super.onDestroy();
     }
