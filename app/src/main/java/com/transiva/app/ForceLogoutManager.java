@@ -13,6 +13,8 @@ public final class ForceLogoutManager {
         Context app = context.getApplicationContext();
         String cleanReason = reason == null || reason.trim().isEmpty() ? "SESSION_REVOKED" : reason.trim();
 
+        DriverChatNotificationPoller.stop();
+        DriverServiceController.stopAll(app);
         NativeSessionGuard.clearAndStop(app, cleanReason);
         TransivaSession.logout(app, cleanReason);
 

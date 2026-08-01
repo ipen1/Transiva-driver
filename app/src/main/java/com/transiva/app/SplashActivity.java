@@ -56,6 +56,13 @@ public class SplashActivity extends Activity {
         if (routed || checking || isFinishing() || isDestroyed()) return;
         checking = true;
         statusText.setText("Memeriksa keamanan lokasi...");
+        RootSecurityGuard.checkAsync(this, new RootSecurityGuard.Callback() {
+            @Override public void onSafe() { checkMockLocation(); }
+            @Override public void onBlocked(String reason) { checking = false; statusText.setText("Perangkat tidak aman"); finishAffinity(); }
+        });
+    }
+
+    private void checkMockLocation() {
         MockLocationGuard.checkAsync(this, new MockLocationGuard.Callback() {
             @Override public void onSafe() {
                 checking = false;

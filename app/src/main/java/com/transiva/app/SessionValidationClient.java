@@ -9,6 +9,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import javax.net.ssl.HttpsURLConnection;
 
 public final class SessionValidationClient {
     private static final String URL_VALIDATE = "https://transiva.my.id/server/native_validate_session.php";
@@ -21,7 +22,7 @@ public final class SessionValidationClient {
         String token = session.getToken() == null ? "" : session.getToken().trim();
         if (!session.isLoggedIn() || token.isEmpty()) return;
 
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             HttpURLConnection conn = null;
             try {
                 conn = (HttpURLConnection) new URL(URL_VALIDATE).openConnection();
@@ -34,6 +35,7 @@ public final class SessionValidationClient {
                 conn.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(app));
 
                 int status = conn.getResponseCode();
+                if (conn instanceof HttpsURLConnection) DriverTlsPinning.verify(app, (HttpsURLConnection) conn);
                 InputStream stream = status >= 200 && status < 400 ? conn.getInputStream() : conn.getErrorStream();
                 String raw = read(stream);
                 String code = "";
@@ -45,11 +47,12 @@ public final class SessionValidationClient {
                     session.touchSession();
                 }
             } catch (Exception ignored) {
+                TransivaDriverCrashReporter.nonFatal("session_validate", ignored);
                 // Gangguan internet tidak boleh memaksa logout.
             } finally {
                 if (conn != null) conn.disconnect();
             }
-        }, "transiva-session-validate").start();
+        });
     }
 
     private static String read(InputStream stream) throws Exception {

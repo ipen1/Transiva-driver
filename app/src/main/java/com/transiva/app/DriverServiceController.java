@@ -1,38 +1,7 @@
 package com.transiva.app;
-
-import android.content.Context;
-import android.content.Intent;
-import android.os.Build;
-import android.util.Log;
-
-public final class DriverServiceController {
-
-    private static final String TAG = "DriverServiceController";
-
-    private DriverServiceController() {}
-
-    public static void start(Context context) {
-        try {
-            Intent intent = new Intent(context, LocationService.class);
-            intent.setAction(LocationService.ACTION_START);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent);
-            } else {
-                context.startService(intent);
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Gagal memulai tracking", e);
-        }
-    }
-
-    public static void stop(Context context) {
-        try {
-            Intent intent = new Intent(context, LocationService.class);
-            intent.setAction(LocationService.ACTION_STOP);
-            context.startService(intent);
-        } catch (Exception e) {
-            Log.e(TAG, "Gagal menghentikan tracking", e);
-            context.stopService(new Intent(context, LocationService.class));
-        }
-    }
+import android.content.Context; import android.content.Intent; import android.os.Build;
+public final class DriverServiceController { private DriverServiceController(){}
+ public static synchronized void start(Context c){if(c==null)return;SessionManager s=new SessionManager(c);if(!s.canRunDriverLocation())return;try{Intent i=new Intent(c,LocationService.class).setAction(LocationService.ACTION_START);if(Build.VERSION.SDK_INT>=26)c.startForegroundService(i);else c.startService(i);}catch(Throwable e){TransivaDriverCrashReporter.nonFatal("service_start",e);}}
+ public static synchronized void stop(Context c){if(c==null)return;try{c.stopService(new Intent(c,LocationService.class));}catch(Throwable e){TransivaDriverCrashReporter.nonFatal("service_stop",e);}}
+ public static synchronized void stopAll(Context c){if(c==null)return;stop(c);try{BackgroundSyncService.stop(c);}catch(Throwable ignored){}try{c.stopService(new Intent(c,TransivaDriverForegroundService.class));}catch(Throwable ignored){}}
 }

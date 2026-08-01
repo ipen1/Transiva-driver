@@ -83,6 +83,13 @@ public class SessionManager {
             }
 
             String role = clean.optString("role", "customer");
+            String secureToken = clean.optString("token", "");
+            SecureTokenStore.save(appContext, secureToken);
+            clean.remove("token");
+            clean.remove("access_token");
+            clean.remove("auth_token");
+            clean.remove("api_token");
+            clean.remove("session_token");
 
             SharedPreferences.Editor e = prefs.edit();
 
@@ -104,7 +111,7 @@ public class SessionManager {
             e.putString("name", clean.optString("name", ""));
             e.putString("role", role);
             e.putString("phone", clean.optString("phone", ""));
-            e.putString("token", clean.optString("token", ""));
+            e.remove("token");
             e.putString("restaurant_id", clean.optString("restaurant_id", ""));
             e.putString("balance", clean.optString("balance", "0"));
             e.putString("driver_type", clean.optString("driver_type", "bike"));
@@ -244,6 +251,9 @@ public class SessionManager {
 
             e.apply();
 
+            SecureTokenStore.clear(appContext);
+            DriverChatNotificationPoller.stop();
+            DriverServiceController.stopAll(appContext);
             clearLegacyOnlineFlags();
             TransivaSession.logout(appContext, safe(reason));
 
@@ -602,6 +612,7 @@ public class SessionManager {
 
     public String getToken() {
         String token = firstNonEmpty(
+                SecureTokenStore.read(appContext),
                 prefs.getString("token", ""),
                 prefs.getString("access_token", ""),
                 prefs.getString("auth_token", ""),
@@ -629,7 +640,8 @@ public class SessionManager {
         }
 
         if (!token.isEmpty() && !token.equals(prefs.getString("token", ""))) {
-            prefs.edit().putString("token", token).apply();
+            SecureTokenStore.save(appContext, token);
+            prefs.edit().remove("token").apply();
         }
         return token;
     }

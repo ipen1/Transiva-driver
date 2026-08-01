@@ -17,6 +17,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import javax.net.ssl.HttpsURLConnection;
 
 public class ApiClient {
 
@@ -58,7 +59,7 @@ public class ApiClient {
             final String jsonBody,
             final String callbackId
     ) {
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
 
             HttpURLConnection conn = null;
 
@@ -105,6 +106,8 @@ public class ApiClient {
                 }
 
                 int status = conn.getResponseCode();
+                if (conn instanceof HttpsURLConnection) DriverTlsPinning.verify(activity, (HttpsURLConnection) conn);
+                TransivaDriverCrashReporter.http(cleanPath, status);
 
                 InputStream stream =
                         status >= 200 && status < 400
@@ -131,6 +134,7 @@ public class ApiClient {
                 sendToWeb("api_response", result.toString());
 
             } catch (Exception e) {
+                TransivaDriverCrashReporter.nonFatal("api_request", e);
                 sendToWeb(
                         "api_error",
                         makeError("request", e, callbackId)
@@ -141,7 +145,7 @@ public class ApiClient {
                 } catch (Exception ignored) {}
             }
 
-        }).start();
+        });
     }
 
     private String cleanPath(String path) {
