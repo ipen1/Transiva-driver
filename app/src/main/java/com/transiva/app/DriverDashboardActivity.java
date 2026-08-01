@@ -801,6 +801,7 @@ public class DriverDashboardActivity extends Activity
 
     private void syncOfferDeadline(DriverOrder order) {
         if (order == null || order.remainingSeconds < 0) return;
+
         String key = offerKey(order);
         long now = SystemClock.elapsedRealtime();
         long candidate = now + order.remainingSeconds * 1000L;
@@ -812,9 +813,32 @@ public class DriverDashboardActivity extends Activity
             return;
         }
 
-        // Server polling must never extend the same visible offer. This is
-        // important for public TransPickup offers that use a fresh 30-second
-        // window when first loaded by the driver.
+        long currentRemaining = current - now;
+        long candidateRemaining = candidate - now;
+
+        /*
+         * Backend adalah sumber waktu tawaran. Ketika order dengan ID yang sama
+         * di-redispatch, offer_expired_at akan dibuat ulang +60 detik. Versi lama
+         * hanya mengizinkan deadline memendek sehingga order yang sudah pernah
+         * habis tetap terkunci pada "Tawaran berakhir".
+         *
+         * Reset deadline bila:
+         * 1. deadline lokal sudah habis tetapi server memberi waktu baru; atau
+         * 2. deadline server lebih panjang secara nyata (siklus redispatch baru).
+         * Selisih kecil tetap diabaikan agar polling biasa tidak menambah waktu.
+         */
+        boolean revivedByServer = currentRemaining <= 0L
+                && candidateRemaining > 0L;
+        boolean newerOfferWindow = candidate > current
+                + Math.max(SERVER_DRIFT_TOLERANCE_MS, 3000L);
+
+        if (revivedByServer || newerOfferWindow) {
+            offerDeadlines.put(key, candidate);
+            expiredRefreshRequested.remove(key);
+            return;
+        }
+
+        // Jika server memperpendek waktu, ikuti deadline server.
         if (candidate < current - SERVER_DRIFT_TOLERANCE_MS) {
             offerDeadlines.put(key, candidate);
         }
