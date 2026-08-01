@@ -531,9 +531,16 @@ public class DriverDashboardActivity extends Activity
 
     private View orderCard(DriverOrder order, boolean active) {
         LinearLayout card = card();
+        boolean queued = !active && order.raw != null && order.raw.optBoolean("queued", false);
+        int queuePosition = order.raw == null ? 0 : order.raw.optInt("queue_position", 0);
+        String cardTitle = active ? "Order Aktif" : (queued ? "Order Antrean" : "Tawaran");
         card.addView(text(
-                (active ? "Order Aktif" : "Tawaran") + " #" + order.id,
+                cardTitle + " #" + order.id,
                 17, "#0B3A78", true));
+        if (queued) {
+            add(card, text("Sudah diterima • antrean " + Math.max(1, queuePosition) + ". Selesaikan order aktif terlebih dahulu.",
+                    13, "#B45309", true), 0, dp(6), 0, 0);
+        }
         add(card, text(order.serviceName, 14, "#0B7CFF", true),
                 0, dp(5), 0, 0);
         add(card, text("Pickup:\n" + order.pickupAddress,
@@ -578,7 +585,7 @@ public class DriverDashboardActivity extends Activity
             countdownViews.put(key, countdown);
         }
 
-        Button action = primaryButton(active ? "Lanjutkan Trip" : "Ambil Order");
+        Button action = primaryButton(active ? "Lanjutkan Trip" : (queued ? "Menunggu Order Aktif Selesai" : "Ambil Order"));
 
         if (active) {
             action.setOnClickListener(v -> openTrip(order));
@@ -589,6 +596,9 @@ public class DriverDashboardActivity extends Activity
                 cancel.setOnClickListener(v -> showCancelOrderDialog(order));
                 add(card, cancel, 0, dp(9), 0, 0);
             }
+        } else if (queued) {
+            action.setEnabled(false);
+            add(card, action, 0, dp(12), 0, 0);
         } else {
             String key = offerKey(order);
             offerButtons.put(key, action);
