@@ -24,6 +24,16 @@ public final class DriverDashboardMapper {
         if (performance == null) performance = new JSONObject();
 
         DriverOrder active = mapOrder(root.optJSONObject("active_order"));
+        List<DriverOrder> activeOrders = new ArrayList<>();
+        JSONArray activeArray = root.optJSONArray("active_orders");
+        if (activeArray != null) {
+            for (int i = 0; i < activeArray.length(); i++) {
+                DriverOrder order = mapOrder(activeArray.optJSONObject(i));
+                if (order != null) activeOrders.add(order);
+            }
+        }
+        if (activeOrders.isEmpty() && active != null) activeOrders.add(active);
+        if (active == null && !activeOrders.isEmpty()) active = activeOrders.get(0);
         List<DriverOrder> offers = new ArrayList<>();
 
         JSONArray array = root.optJSONArray("offers");
@@ -48,6 +58,7 @@ public final class DriverDashboardMapper {
                 readInt(performance, "today_trips", 0),
                 readDouble(performance, "rating", 0),
                 active,
+                activeOrders,
                 offers,
                 readLong(root, "server_time_millis", System.currentTimeMillis())
         );
