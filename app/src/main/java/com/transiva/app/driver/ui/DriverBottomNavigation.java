@@ -52,7 +52,7 @@ public final class DriverBottomNavigation {
                 ActiveItem.ACTIVITY, activeItem, DriverActivityHistoryActivity.class));
         add(navigation, navItem(activity, "Pesan", "ic_nav_chat",
                 ActiveItem.CHAT, activeItem, DriverChatActivity.class));
-        add(navigation, navItem(activity, "Pendapatan", "ic_nav_wallet",
+        add(navigation, navItem(activity, "Transaksi", "ic_nav_wallet",
                 ActiveItem.EARNINGS, activeItem, DriverEarningsActivity.class));
         add(navigation, navItem(activity, "Akun", "ic_nav_profile",
                 ActiveItem.PROFILE, activeItem, DriverProfileActivity.class));

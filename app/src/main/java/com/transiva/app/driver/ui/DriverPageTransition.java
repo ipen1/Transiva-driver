@@ -60,15 +60,14 @@ public final class DriverPageTransition {
 
         activity.startActivity(intent);
 
-        boolean moveRight = toIndex > fromIndex;
+        activity.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+    }
 
-        activity.overridePendingTransition(
-                moveRight
-                        ? R.anim.transiva_page_enter_right
-                        : R.anim.transiva_page_enter_left,
-                moveRight
-                        ? R.anim.transiva_page_exit_left
-                        : R.anim.transiva_page_exit_right
-        );
+    public static void animateResume(Activity activity, android.view.View root) {
+        if (activity == null || root == null) return;
+        root.setAlpha(0.96f);
+        root.setTranslationY(Math.round(5 * activity.getResources().getDisplayMetrics().density));
+        root.animate().alpha(1f).translationY(0f).setDuration(180L)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
     }
 }
