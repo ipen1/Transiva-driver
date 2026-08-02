@@ -158,6 +158,7 @@
             android:theme="@style/AppTheme" />
         <activity android:name=".DriverChatActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
         <activity android:name=".DriverActivityHistoryActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
+        <activity android:name=".DriverTransferActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
         <activity android:name=".DriverEarningsActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
         <activity android:name=".DriverBpjsActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
         <activity android:name=".DriverProfileActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
