@@ -989,7 +989,7 @@ public class DriverDashboardActivity extends Activity
 
     private int countdownColor(int seconds) {
         if (seconds <= 0) return Color.parseColor("#991B1B");
-        float normalized = Math.max(0f, Math.min(1f, (seconds - 1f) / 19f));
+        float normalized = Math.max(0f, Math.min(1f, (seconds - 1f) / 14f));
         float hue = 120f * normalized;
         return Color.HSVToColor(new float[]{hue, 0.88f, 0.82f});
     }
@@ -1012,7 +1012,7 @@ public class DriverDashboardActivity extends Activity
     }
 
     private void maybeVibrateCountdown(String key, int seconds) {
-        if (seconds < 1 || seconds > 6) return;
+        if (seconds < 1 || seconds > 9) return;
         Integer last = lastVibratedSecond.get(key);
         if (last != null && last == seconds) return;
         lastVibratedSecond.put(key, seconds);
