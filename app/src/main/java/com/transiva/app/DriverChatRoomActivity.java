@@ -701,6 +701,8 @@ public class DriverChatRoomActivity extends Activity {
                         orderId,
                         StandardCharsets.UTF_8.name()
                 )
+                        + "&order_db_id="
+                        + URLEncoder.encode(orderDbId, StandardCharsets.UTF_8.name())
                         + "&source="
                         + URLEncoder.encode(
                         orderSource,
@@ -741,6 +743,11 @@ public class DriverChatRoomActivity extends Activity {
             boolean reset
     ) {
         orderStatus = response.optString("status", orderStatus);
+        String canonicalRoom = normalizeRoom(response.optString("room_id", ""));
+        if (!canonicalRoom.isEmpty() && !canonicalRoom.equals(roomId)) {
+            roomId = canonicalRoom;
+            DriverChatNotificationPoller.setOpenRoom(roomId);
+        }
 
         boolean ended = response.optBoolean("ended", false)
                 || DriverMessageStatus.isEnded(orderStatus);
@@ -867,7 +874,7 @@ public class DriverChatRoomActivity extends Activity {
                         + "?room_id=" + URLEncoder.encode(roomId, StandardCharsets.UTF_8.name())
                         + "&viewer_type=driver"
                         + "&mark_read=1"
-                        + "&read_source=chat_room_foreground_v3"
+                        + "&read_source=chat_room_foreground_v2"
                         + "&visible_ms=" + visibleMs
                         + "&read_through_id=" + readThroughId;
 
@@ -1152,8 +1159,18 @@ public class DriverChatRoomActivity extends Activity {
                     setSendingEnabled(true);
 
                     if (response.optBoolean("success", false)) {
-                        if (pending != null) messagesBox.removeView(pending.root);
-                        loadMessages(false);
+                        JSONObject sentChat = response.optJSONObject("chat");
+                        if (sentChat != null) {
+                            String canonical = normalizeRoom(sentChat.optString("room_id", ""));
+                            if (!canonical.isEmpty()) roomId = canonical;
+                            if (pending != null) messagesBox.removeView(pending.root);
+                            int sentId = sentChat.optInt("id", 0);
+                            if (sentId > lastId) { lastId = sentId; addBubble(sentChat, true); scrollBottom(); }
+                        } else if (pending != null) {
+                            messagesBox.removeView(pending.root);
+                        }
+                        DriverChatNotificationPoller.setOpenRoom(roomId);
+                        main.postDelayed(() -> loadMessages(false), 180L);
                     } else {
                         if (pending != null) pending.markNetworkPending();
                         toast(first(
