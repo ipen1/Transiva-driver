@@ -155,6 +155,9 @@ public class DriverReceiptHistoryActivity extends Activity {
     }
 
     private View receiptCard(JSONObject item) {
+        boolean walletEntry = "wallet".equalsIgnoreCase(item.optString("entry_kind"));
+        if (walletEntry) return walletCard(item);
+
         LinearLayout c = card();
         c.setPadding(dp(16), dp(14), dp(16), dp(14));
         c.setOnClickListener(v -> openDetail(item));
@@ -175,12 +178,7 @@ public class DriverReceiptHistoryActivity extends Activity {
         price.setGravity(Gravity.RIGHT);
         top.addView(price, new LinearLayout.LayoutParams(-2, -2));
 
-        View divider = new View(this);
-        divider.setBackgroundColor(Color.parseColor("#E2E8F0"));
-        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(-1, dp(1));
-        dlp.setMargins(0, dp(12), 0, dp(10));
-        c.addView(divider, dlp);
-
+        c.addView(transactionDivider());
         c.addView(row("💸 Potongan", "- " + rupiah(item.optDouble("total_potongan", 0)), "#DC2626", false));
         c.addView(row("💳 Sisa Saldo", rupiah(item.optDouble("sisa_saldo", 0)), "#0F172A", false));
 
@@ -196,6 +194,64 @@ public class DriverReceiptHistoryActivity extends Activity {
         footer.addView(badge, new LinearLayout.LayoutParams(0, -2, 1));
         footer.addView(text("→", 24, "#0B7CFF", true));
         return c;
+    }
+
+    private View walletCard(JSONObject item) {
+        String direction = item.optString("direction", "out").toLowerCase(Locale.US);
+        boolean incoming = "in".equals(direction);
+        String counterpart = firstNonEmpty(item.optString("counterparty_username"), "Driver tidak diketahui");
+        double amount = item.optDouble("amount", 0);
+        double fee = item.optDouble("admin_fee", 0);
+
+        LinearLayout c = card();
+        c.setPadding(dp(16), dp(14), dp(16), dp(14));
+        c.setOnClickListener(v -> openDetail(item));
+
+        LinearLayout top = new LinearLayout(this);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        c.addView(top, new LinearLayout.LayoutParams(-1, -2));
+
+        LinearLayout left = new LinearLayout(this);
+        left.setOrientation(LinearLayout.VERTICAL);
+        top.addView(left, new LinearLayout.LayoutParams(0, -2, 1));
+        left.addView(text(firstNonEmpty(item.optString("reference"), "TRANSFER"), 17, "#0B3A78", true));
+        TextView date = text("🕒 " + firstNonEmpty(item.optString("created_at"), "-"), 12, "#64748B", false);
+        date.setPadding(0, dp(4), 0, 0);
+        left.addView(date);
+
+        TextView price = text((incoming ? "+ " : "- ") + rupiah(amount), 16, incoming ? "#16A34A" : "#DC2626", true);
+        price.setGravity(Gravity.RIGHT);
+        top.addView(price, new LinearLayout.LayoutParams(-2, -2));
+
+        c.addView(transactionDivider());
+        c.addView(row(incoming ? "👤 Diterima dari" : "👤 Dikirim ke", counterpart, "#0B3A78", false));
+        if (fee > 0) c.addView(row("⚙️ Biaya Admin", "- " + rupiah(fee), "#DC2626", false));
+        c.addView(row("💳 Saldo Setelah", rupiah(item.optDouble("balance_after", 0)), "#0F172A", false));
+
+        LinearLayout footer = new LinearLayout(this);
+        footer.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams flp = new LinearLayout.LayoutParams(-1, -2);
+        flp.setMargins(0, dp(12), 0, 0);
+        c.addView(footer, flp);
+        String badgeText = incoming ? "💰 Transfer Masuk" : "📤 Transfer Keluar";
+        String fill = incoming ? "#ECFDF5" : "#FFF7F7";
+        String stroke = incoming ? "#86EFAC" : "#FECACA";
+        String color = incoming ? "#047857" : "#DC2626";
+        TextView badge = text(badgeText, 12, color, true);
+        badge.setPadding(dp(10), dp(6), dp(10), dp(6));
+        badge.setBackground(roundStroke(fill, stroke, dp(16), 1));
+        footer.addView(badge, new LinearLayout.LayoutParams(0, -2, 1));
+        footer.addView(text("→", 24, "#0B7CFF", true));
+        return c;
+    }
+
+    private View transactionDivider() {
+        View divider = new View(this);
+        divider.setBackgroundColor(Color.parseColor("#E2E8F0"));
+        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(-1, dp(1));
+        dlp.setMargins(0, dp(12), 0, dp(10));
+        divider.setLayoutParams(dlp);
+        return divider;
     }
 
     private void openDetail(JSONObject item) {

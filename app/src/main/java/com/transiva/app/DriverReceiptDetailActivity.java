@@ -77,6 +77,11 @@ public class DriverReceiptDetailActivity extends Activity {
             return;
         }
 
+        if ("wallet".equalsIgnoreCase(data.optString("entry_kind"))) {
+            renderWalletDetail();
+            return;
+        }
+
         LinearLayout header = card();
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
@@ -130,6 +135,59 @@ public class DriverReceiptDetailActivity extends Activity {
         bal.addView(row("💰 Saldo Saat Ini", rupiah(num("saldo_saat_ini")), "#0F172A", false));
         bal.addView(divider());
         bal.addView(row("Sisa Saldo", rupiah(num("sisa_saldo")), "#0B7CFF", true));
+        root.addView(bal);
+
+        Button back = outlineButton("Kembali");
+        back.setOnClickListener(v -> finish());
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-1, dp(52));
+        blp.setMargins(0, dp(4), 0, 0);
+        root.addView(back, blp);
+    }
+
+    private void renderWalletDetail() {
+        String direction = data.optString("direction", "out").toLowerCase(Locale.US);
+        boolean incoming = "in".equals(direction);
+        String counterpart = firstNonEmpty(data.optString("counterparty_username"), "Driver tidak diketahui");
+        double amount = data.optDouble("amount", 0);
+        double fee = data.optDouble("admin_fee", 0);
+
+        LinearLayout header = card();
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(16), dp(14), dp(16), dp(14));
+        TextView icon = text(incoming ? "💰" : "📤", 30, "#FFFFFF", true);
+        icon.setGravity(Gravity.CENTER);
+        icon.setBackground(roundGradient(incoming ? "#059669" : "#DC2626", incoming ? "#34D399" : "#FB7185", dp(22)));
+        LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(dp(54), dp(54));
+        ilp.setMargins(0, 0, dp(12), 0);
+        header.addView(icon, ilp);
+        LinearLayout txt = new LinearLayout(this);
+        txt.setOrientation(LinearLayout.VERTICAL);
+        header.addView(txt, new LinearLayout.LayoutParams(0, -2, 1));
+        txt.addView(text(incoming ? "Transfer Masuk" : "Transfer Keluar", 13, "#64748B", true));
+        txt.addView(text(firstNonEmpty(data.optString("reference"), "TRANSFER"), 20, "#0B3A78", true));
+        root.addView(header);
+
+        LinearLayout status = sectionCard();
+        status.setBackground(roundStroke(incoming ? "#ECFDF5" : "#FFF7F7", incoming ? "#86EFAC" : "#FECACA", dp(22), 1));
+        status.addView(text(incoming ? "✅ Saldo Diterima" : "✅ Saldo Berhasil Dikirim", 18, incoming ? "#047857" : "#B91C1C", true));
+        TextView created = text(firstNonEmpty(data.optString("created_at"), "-"), 13, "#64748B", false);
+        created.setPadding(0, dp(4), 0, 0);
+        status.addView(created);
+        root.addView(status);
+
+        LinearLayout party = sectionCard();
+        party.addView(row(incoming ? "👤 Diterima dari" : "👤 Dikirim ke", counterpart, "#0B3A78", true));
+        party.addView(row("Nominal Transfer", rupiah(amount), incoming ? "#16A34A" : "#DC2626", true));
+        if (fee > 0) party.addView(row("Biaya Admin", "- " + rupiah(fee), "#DC2626", false));
+        String note = firstNonEmpty(data.optString("note"));
+        if (note.length() > 0) party.addView(row("Catatan", note, "#334155", false));
+        root.addView(party);
+
+        LinearLayout bal = sectionCard();
+        bal.setBackground(roundStroke("#F8FBFF", "#B9DBFF", dp(22), 1));
+        bal.addView(row("Saldo Sebelum", rupiah(data.optDouble("balance_before", 0)), "#0F172A", false));
+        bal.addView(row("Saldo Setelah", rupiah(data.optDouble("balance_after", 0)), "#0B7CFF", true));
         root.addView(bal);
 
         Button back = outlineButton("Kembali");
