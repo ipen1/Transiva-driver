@@ -18,10 +18,16 @@ public final class DriverDashboardMapper {
         JSONObject driver = root.optJSONObject("driver");
         JSONObject wallet = root.optJSONObject("wallet");
         JSONObject performance = root.optJSONObject("performance");
+        JSONObject queue = root.optJSONObject("smart_queue");
+        JSONObject assistant = root.optJSONObject("ai_assistant");
+        JSONObject hotspot = root.optJSONObject("hotspot");
 
         if (driver == null) driver = new JSONObject();
         if (wallet == null) wallet = new JSONObject();
         if (performance == null) performance = new JSONObject();
+        if (queue == null) queue = new JSONObject();
+        if (assistant == null) assistant = new JSONObject();
+        if (hotspot == null) hotspot = new JSONObject();
 
         DriverOrder active = mapOrder(root.optJSONObject("active_order"));
         List<DriverOrder> activeOrders = new ArrayList<>();
@@ -57,6 +63,16 @@ public final class DriverDashboardMapper {
                 readLong(performance, "today_earning", 0),
                 readInt(performance, "today_trips", 0),
                 readDouble(performance, "rating", 0),
+                readInt(performance, "online_minutes", 0),
+                readDouble(performance, "today_distance_km", 0),
+                readInt(queue, "rank", 0),
+                readInt(queue, "total", 0),
+                queue.optString("label", "Belum masuk antrean"),
+                assistant.optString("title", "Asisten Transiva"),
+                assistant.optString("message", "Aktifkan status online untuk menerima rekomendasi."),
+                hotspot.optString("name", "Area sekitar Anda"),
+                hotspot.optString("level", "NORMAL"),
+                readInt(hotspot, "score", 0),
                 active,
                 activeOrders,
                 offers,
