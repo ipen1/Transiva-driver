@@ -231,8 +231,8 @@ public class DriverEarningsActivity extends Activity {
 
         content.addView(
                 header(
-                        "Pendapatan",
-                        "Kelola saldo dan hasil kerja driver"
+                        "Transaksi",
+                        "Saldo masuk, saldo keluar, dan fee aplikasi"
                 )
         );
 
@@ -354,6 +354,14 @@ public class DriverEarningsActivity extends Activity {
                 withdrawLp
         );
 
+        Button transfer = whiteButton("Transfer");
+        transfer.setOnClickListener(view -> startActivity(
+                new Intent(this, DriverTransferActivity.class)
+        ));
+        LinearLayout.LayoutParams transferLp = new LinearLayout.LayoutParams(0, dp(46), 1);
+        transferLp.setMargins(dp(8), 0, 0, 0);
+        actions.addView(transfer, transferLp);
+
         wallet.addView(actions);
 
         LinearLayout.LayoutParams walletLp =
@@ -431,7 +439,7 @@ public class DriverEarningsActivity extends Activity {
 
         history.addView(
                 text(
-                        "Mutasi Pendapatan",
+                        "Riwayat Transaksi",
                         16,
                         "#0B3A78",
                         true
@@ -440,7 +448,7 @@ public class DriverEarningsActivity extends Activity {
 
         history.addView(
                 text(
-                        "Pendapatan order, komisi, deposit, dan withdraw akan ditampilkan pada tahap berikutnya.",
+                        "Lihat seluruh saldo masuk, saldo keluar, fee aplikasi, deposit, withdraw, dan transfer antar-driver.",
                         11,
                         "#718096",
                         false
