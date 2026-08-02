@@ -30,6 +30,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.transiva.app.driver.data.DriverDashboardRepositoryImpl;
+import com.transiva.app.driver.data.DriverApiClient;
 import com.transiva.app.driver.domain.DriverDashboardState;
 import com.transiva.app.driver.domain.DriverOrder;
 import com.transiva.app.driver.presentation.DriverDashboardContract;
@@ -77,6 +78,13 @@ public class DriverDashboardActivity extends Activity
     private TextView onlineLabel;
     private TextView readinessText;
     private TextView lastUpdateText;
+    private TextView onlineMinutesText;
+    private TextView distanceText;
+    private TextView queueText;
+    private TextView queueDetailText;
+    private TextView assistantTitleText;
+    private TextView assistantMessageText;
+    private TextView hotspotText;
 
     private Switch onlineSwitch;
     private boolean pendingOnlineAfterGps = false;
@@ -209,6 +217,8 @@ public class DriverDashboardActivity extends Activity
 
         buildReadiness();
         buildWalletAndPerformance();
+        buildSmartAssistant();
+        buildEmergency();
 
         orderSections = new LinearLayout(this);
         orderSections.setOrientation(LinearLayout.VERTICAL);
@@ -349,6 +359,12 @@ public class DriverDashboardActivity extends Activity
         ratingText = stat(stats, "0.0", "Rating");
 
         add(homeSections, stats, 0, dp(10), 0, 0);
+
+        LinearLayout workStats = new LinearLayout(this);
+        workStats.setOrientation(LinearLayout.HORIZONTAL);
+        onlineMinutesText = stat(workStats, "0 mnt", "Waktu Online");
+        distanceText = stat(workStats, "0 km", "Jarak Hari Ini");
+        add(homeSections, workStats, 0, dp(8), 0, 0);
     }
 
     private TextView stat(LinearLayout parent, String value, String label) {
@@ -362,6 +378,64 @@ public class DriverDashboardActivity extends Activity
         if (parent.getChildCount() > 0) lp.setMargins(dp(7), 0, 0, 0);
         parent.addView(box, lp);
         return number;
+    }
+
+
+    private void buildSmartAssistant() {
+        LinearLayout card = card();
+        LinearLayout titleRow = new LinearLayout(this);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+        titleRow.addView(text("🔥 Area Ramai & AI Assistant", 17, "#0B3A78", true), new LinearLayout.LayoutParams(0, -2, 1));
+        TextView badge = text("LIVE", 10, "#FFFFFF", true);
+        badge.setPadding(dp(9), dp(4), dp(9), dp(4));
+        badge.setBackground(round("#16A34A", dp(12)));
+        titleRow.addView(badge);
+        card.addView(titleRow);
+
+        hotspotText = text("Area sekitar Anda • NORMAL", 14, "#D97706", true);
+        add(card, hotspotText, 0, dp(12), 0, 0);
+        assistantTitleText = text("Asisten Transiva", 14, "#0B3A78", true);
+        add(card, assistantTitleText, 0, dp(12), 0, 0);
+        assistantMessageText = text("Memuat rekomendasi…", 12, "#475569", false);
+        add(card, assistantMessageText, 0, dp(5), 0, 0);
+
+        LinearLayout queueBox = new LinearLayout(this);
+        queueBox.setOrientation(LinearLayout.VERTICAL);
+        queueBox.setPadding(dp(12), dp(11), dp(12), dp(11));
+        queueBox.setBackground(round("#EEF6FF", dp(14)));
+        queueText = text("Smart Queue: -", 14, "#086BFF", true);
+        queueDetailText = text("Antrean dihitung otomatis dan adil.", 11, "#64748B", false);
+        queueBox.addView(queueText);
+        queueBox.addView(queueDetailText);
+        add(card, queueBox, 0, dp(12), 0, 0);
+        add(homeSections, card, 0, dp(12), 0, 0);
+    }
+
+    private void buildEmergency() {
+        Button sos = dangerOutlineButton("🆘  SOS DARURAT");
+        sos.setContentDescription("Kirim sinyal darurat ke admin Transiva");
+        sos.setOnClickListener(v -> new AlertDialog.Builder(this)
+                .setTitle("Kirim SOS Darurat?")
+                .setMessage("Admin akan menerima identitas driver, waktu, dan lokasi terakhir perangkat.")
+                .setNegativeButton("Batal", null)
+                .setPositiveButton("KIRIM SOS", (d, w) -> sendEmergency())
+                .show());
+        add(homeSections, sos, 0, dp(12), 0, 0);
+    }
+
+    private void sendEmergency() {
+        showLoading(true);
+        DriverApiClient api = new DriverApiClient(session);
+        api.executor().execute(() -> {
+            try {
+                JSONObject body = session.getLastLocationJson();
+                body.put("message", "SOS dari dashboard driver");
+                api.post("driver_sos_native.php", body);
+                runOnUiThread(() -> { showLoading(false); showMessage("SOS berhasil dikirim. Admin akan segera menghubungi Anda."); });
+            } catch (Exception error) {
+                runOnUiThread(() -> { showLoading(false); showMessage("SOS gagal dikirim. Hubungi admin melalui telepon bila kondisi darurat."); });
+            }
+        });
     }
 
     private void buildOrderSections() {
@@ -395,6 +469,15 @@ public class DriverDashboardActivity extends Activity
         earningText.setText(rupiah(state.todayEarning));
         tripText.setText(String.valueOf(state.todayTrips));
         ratingText.setText(String.format(Locale.US, "%.1f", state.rating));
+        onlineMinutesText.setText(formatMinutes(state.onlineMinutes));
+        distanceText.setText(String.format(Locale.US, "%.1f km", state.todayDistanceKm));
+        queueText.setText(state.queueRank > 0
+                ? "Smart Queue: posisi " + state.queueRank + " dari " + Math.max(state.queueTotal, state.queueRank)
+                : "Smart Queue: belum aktif");
+        queueDetailText.setText(first(state.queueLabel, "Antrean dihitung otomatis dan adil."));
+        assistantTitleText.setText(first(state.assistantTitle, "Asisten Transiva"));
+        assistantMessageText.setText(first(state.assistantMessage, "Belum ada rekomendasi."));
+        hotspotText.setText(first(state.hotspotName, "Area sekitar Anda") + " • " + first(state.hotspotLevel, "NORMAL") + " (" + state.hotspotScore + "% )");
 
         onlineLabel.setText(state.online ? "ONLINE" : "OFFLINE");
         onlineLabel.setTextColor(Color.parseColor(
@@ -1149,6 +1232,11 @@ public class DriverDashboardActivity extends Activity
     private int dp(int value) {
         return Math.round(
                 value * getResources().getDisplayMetrics().density);
+    }
+
+    private String formatMinutes(int minutes) {
+        if (minutes < 60) return minutes + " mnt";
+        return (minutes / 60) + "j " + (minutes % 60) + "m";
     }
 
     private String rupiah(long value) {
