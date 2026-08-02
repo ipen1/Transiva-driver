@@ -116,7 +116,10 @@ public class DriverActivityHistoryActivity extends Activity {
         LinearLayout c=card();
         LinearLayout top=new LinearLayout(this); top.setGravity(Gravity.CENTER_VERTICAL); top.setOrientation(LinearLayout.HORIZONTAL);
         TextView service=text(first(o.optString("service_name"),o.optString("order_type"),"Order"),15,"#0B3A78",true); top.addView(service,new LinearLayout.LayoutParams(0,-2,1));
-        String status=clean(o.optString("status")); TextView badge=text(statusLabel(status),10,statusColor(status),true); badge.setPadding(dp(9),dp(5),dp(9),dp(5)); badge.setBackground(round("#EEF6FF",14)); top.addView(badge); c.addView(top);
+        String status=clean(o.optString("status"));
+        String activityKind=clean(o.optString("activity_kind"));
+        String visualStatus=activityKind.isEmpty()?status:activityKind;
+        TextView badge=text(statusLabel(visualStatus),10,statusColor(visualStatus),true); badge.setPadding(dp(9),dp(5),dp(9),dp(5)); badge.setBackground(round("#EEF6FF",14)); top.addView(badge); c.addView(top);
         c.addView(text("Order #"+first(o.optString("order_id"),o.optString("id"),"-"),11,"#64748B",false));
         c.addView(text("Dari: "+first(o.optString("pickup_address"),"-"),12,"#334155",false));
         c.addView(text("Tujuan: "+first(o.optString("destination_address"),o.optString("delivery_address"),"-"),12,"#334155",false));
@@ -134,8 +137,8 @@ public class DriverActivityHistoryActivity extends Activity {
     private TextView text(String s,int size,String color,boolean bold){ TextView t=new TextView(this); t.setText(s); t.setTextSize(size); t.setTextColor(Color.parseColor(color)); t.setTypeface(Typeface.DEFAULT,bold?Typeface.BOLD:Typeface.NORMAL); t.setPadding(0,dp(2),0,dp(2)); return t; }
     private GradientDrawable round(String color,int radius){ GradientDrawable g=new GradientDrawable(); g.setColor(Color.parseColor(color)); g.setCornerRadius(dp(radius)); return g; }
     private GradientDrawable gradient(String a,String b,int radius){ GradientDrawable g=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{Color.parseColor(a),Color.parseColor(b)}); g.setCornerRadius(dp(radius)); return g; }
-    private String statusLabel(String s){ s=s.toLowerCase(Locale.US); if(s.contains("cancel"))return "Dibatalkan"; if(s.contains("finish")||s.contains("complete"))return "Selesai"; return "Berjalan"; }
-    private String statusColor(String s){ s=s.toLowerCase(Locale.US); if(s.contains("cancel"))return "#DC2626"; if(s.contains("finish")||s.contains("complete"))return "#16A34A"; return "#0B7CFF"; }
+    private String statusLabel(String s){ s=s.toLowerCase(Locale.US); if(s.contains("cancel"))return "Dibatalkan"; if(s.contains("finish")||s.contains("complete")||s.equals("done")||s.equals("delivered"))return "Selesai"; return "Berjalan"; }
+    private String statusColor(String s){ s=s.toLowerCase(Locale.US); if(s.contains("cancel"))return "#DC2626"; if(s.contains("finish")||s.contains("complete")||s.equals("done")||s.equals("delivered"))return "#16A34A"; return "#0B7CFF"; }
     private String rupiah(double v){ return NumberFormat.getCurrencyInstance(new Locale("id","ID")).format(v).replace(",00",""); }
     private String first(String...v){ for(String s:v)if(!clean(s).isEmpty())return clean(s); return ""; }
     private String clean(String v){ return v==null?"":v.trim(); }
