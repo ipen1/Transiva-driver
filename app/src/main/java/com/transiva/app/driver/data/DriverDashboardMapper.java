@@ -99,11 +99,26 @@ public final class DriverDashboardMapper {
                                 readLong(order, "total_price", 0))),
                 first(order.optString("pickup_distance_text"),
                         order.optString("distance_km"), ""),
-                readInt(order, "remaining_seconds", -1),
+                normalizeOfferSeconds(order),
                 first(order.optString("payment_method"), "cash"),
                 first(order.optString("payment_label"), order.optString("payment_method").equalsIgnoreCase("balance") ? "TransPay" : "Tunai"),
                 order
         );
+    }
+
+
+    private static int normalizeOfferSeconds(JSONObject order) {
+        int seconds = readInt(order, "remaining_seconds", -1);
+        if (seconds < 0) {
+            // Fallback defensif untuk server lama: tawaran tetap 15 detik,
+            // bukan tanpa countdown. Server final tetap menjadi sumber utama.
+            String status = order.optString("status", "").trim().toLowerCase(Locale.US);
+            boolean likelyOffer = status.equals("pending")
+                    || status.equals("offered")
+                    || status.equals("merchant_accepted");
+            return likelyOffer ? 15 : -1;
+        }
+        return Math.max(0, Math.min(15, seconds));
     }
 
     private static boolean readBoolean(JSONObject object, String key, boolean fallback) {
