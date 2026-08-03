@@ -492,9 +492,9 @@ public class DriverDashboardActivity extends Activity
         readinessText.setText(
                 state.online
                         ? (locationReady
-                            ? "Online • lokasi driver dijaga oleh foreground service."
-                            : "Online • GPS/lokasi mati. Login tetap aktif, tetapi pengiriman lokasi dijeda sampai GPS dinyalakan.")
-                        : "Offline • lokasi tidak dikirim dan order tidak ditawarkan."
+                            ? "Online • Siap Terima Orderan."
+                            : "Online • GPS/lokasi mati.")
+                        : "Offline • Order tidak ditawarkan."
         );
 
         lastUpdateText.setText("Baru diperbarui");
