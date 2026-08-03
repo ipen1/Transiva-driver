@@ -901,7 +901,16 @@ public class DriverDashboardActivity extends Activity
     }
 
     private String offerKey(DriverOrder order) {
-        return clean(order.source) + ":" + clean(order.id);
+        String cycle = "";
+        if (order != null && order.raw != null) {
+            cycle = firstNonEmpty(
+                    order.raw.optString("offer_cycle_key", ""),
+                    order.raw.optString("offer_action_token", ""),
+                    order.raw.optString("offer_expired_at", "")
+            );
+        }
+        return clean(order == null ? "" : order.source) + ":"
+                + clean(order == null ? "" : order.id) + ":" + clean(cycle);
     }
 
     private void syncOfferDeadline(DriverOrder order) {
@@ -923,7 +932,7 @@ public class DriverDashboardActivity extends Activity
 
         /*
          * Backend adalah sumber waktu tawaran. Ketika order dengan ID yang sama
-         * di-redispatch, offer_expired_at akan dibuat ulang +60 detik. Versi lama
+         * di-redispatch, offer_expired_at dan token siklus dibuat ulang +15 detik. Versi lama
          * hanya mengizinkan deadline memendek sehingga order yang sudah pernah
          * habis tetap terkunci pada "Tawaran berakhir".
          *
