@@ -8,6 +8,9 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.animation.AnimatorSet;
+import android.animation.ObjectAnimator;
+import android.view.animation.OvershootInterpolator;
 import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -85,6 +88,9 @@ public class DriverDashboardActivity extends Activity
     private TextView assistantTitleText;
     private TextView assistantMessageText;
     private TextView hotspotText;
+    private Button sosButton;
+    private final Set<String> seenOfferKeys = new HashSet<>();
+    private boolean firstOfferSnapshot = true;
 
     private Switch onlineSwitch;
     private boolean pendingOnlineAfterGps = false;
@@ -215,10 +221,9 @@ public class DriverDashboardActivity extends Activity
         homeSections.setOrientation(LinearLayout.VERTICAL);
         content.addView(homeSections);
 
-        buildReadiness();
+        buildStatusAndEmergency();
         buildWalletAndPerformance();
         buildSmartAssistant();
-        buildEmergency();
 
         orderSections = new LinearLayout(this);
         orderSections.setOrientation(LinearLayout.VERTICAL);
@@ -285,40 +290,46 @@ public class DriverDashboardActivity extends Activity
         content.addView(row);
     }
 
-    private void buildReadiness() {
-        LinearLayout card = card();
-        card.addView(text("Status Driver", 18, "#0B3A78", true));
-
+    private void buildStatusAndEmergency() {
         LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
 
-        onlineLabel = text("OFFLINE", 15, "#EF4444", true);
-        row.addView(onlineLabel, new LinearLayout.LayoutParams(0, -2, 1));
-
+        LinearLayout status = card();
+        status.setPadding(dp(13), dp(10), dp(13), dp(10));
+        LinearLayout statusLine = new LinearLayout(this);
+        statusLine.setGravity(Gravity.CENTER_VERTICAL);
+        onlineLabel = text("OFFLINE", 13, "#EF4444", true);
+        statusLine.addView(onlineLabel, new LinearLayout.LayoutParams(0, -2, 1));
         onlineSwitch = new Switch(this);
+        onlineSwitch.setScaleX(.82f);
+        onlineSwitch.setScaleY(.82f);
         onlineSwitch.setOnCheckedChangeListener((button, checked) -> {
             if (suppressSwitch) return;
-            if (checked && !ensureLocationReady()) {
-                setSwitch(false);
-                return;
-            }
-            presenter.setOnline(
-                    checked,
-                    normalizeDriverType(session.getDriverType())
-            );
+            if (checked && !ensureLocationReady()) { setSwitch(false); return; }
+            presenter.setOnline(checked, normalizeDriverType(session.getDriverType()));
         });
-        row.addView(onlineSwitch);
-        add(card, row, 0, dp(10), 0, 0);
+        statusLine.addView(onlineSwitch, new LinearLayout.LayoutParams(dp(50), dp(38)));
+        status.addView(statusLine);
+        readinessText = text("Siap menerima order", 9, "#64748B", false);
+        status.addView(readinessText);
 
-        readinessText = text(
-                "Izin lokasi dan GPS akan diperiksa sebelum online.",
-                12,
-                "#64748B",
-                false
-        );
-        add(card, readinessText, 0, dp(8), 0, 0);
+        sosButton = dangerOutlineButton("🆘  SOS");
+        sosButton.setTextSize(13);
+        sosButton.setContentDescription("Kirim sinyal darurat ke seluruh driver dan admin");
+        sosButton.setOnClickListener(v -> new AlertDialog.Builder(this)
+                .setTitle("Kirim SOS Darurat?")
+                .setMessage("Semua driver dan admin akan menerima nama, lokasi terakhir, serta order aktif Anda.")
+                .setNegativeButton("Batal", null)
+                .setPositiveButton("KIRIM SOS", (d, w) -> sendEmergency())
+                .show());
 
-        add(homeSections, card, 0, dp(16), 0, 0);
+        LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, dp(76), 1);
+        LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(0, dp(76), 1);
+        right.setMargins(dp(9), 0, 0, 0);
+        row.addView(status, left);
+        row.addView(sosButton, right);
+        add(homeSections, row, 0, dp(16), 0, 0);
     }
 
     private void buildWalletAndPerformance() {
@@ -351,20 +362,12 @@ public class DriverDashboardActivity extends Activity
 
         add(homeSections, wallet, 0, dp(12), 0, 0);
 
-        LinearLayout stats = new LinearLayout(this);
-        stats.setOrientation(LinearLayout.HORIZONTAL);
-
-        earningText = stat(stats, "Rp 0", "Hari ini");
-        tripText = stat(stats, "0", "Trip");
-        ratingText = stat(stats, "0.0", "Rating");
-
-        add(homeSections, stats, 0, dp(10), 0, 0);
-
-        LinearLayout workStats = new LinearLayout(this);
-        workStats.setOrientation(LinearLayout.HORIZONTAL);
-        onlineMinutesText = stat(workStats, "0 mnt", "Waktu Online");
-        distanceText = stat(workStats, "0 km", "Jarak Hari Ini");
-        add(homeSections, workStats, 0, dp(8), 0, 0);
+        // Statistik dipindahkan ke menu Aktivitas agar dashboard lebih fokus.
+        earningText = new TextView(this);
+        tripText = new TextView(this);
+        ratingText = new TextView(this);
+        onlineMinutesText = new TextView(this);
+        distanceText = new TextView(this);
     }
 
     private TextView stat(LinearLayout parent, String value, String label) {
@@ -411,27 +414,16 @@ public class DriverDashboardActivity extends Activity
         add(homeSections, card, 0, dp(12), 0, 0);
     }
 
-    private void buildEmergency() {
-        Button sos = dangerOutlineButton("🆘  SOS DARURAT");
-        sos.setContentDescription("Kirim sinyal darurat ke admin Transiva");
-        sos.setOnClickListener(v -> new AlertDialog.Builder(this)
-                .setTitle("Kirim SOS Darurat?")
-                .setMessage("Admin akan menerima identitas driver, waktu, dan lokasi terakhir perangkat.")
-                .setNegativeButton("Batal", null)
-                .setPositiveButton("KIRIM SOS", (d, w) -> sendEmergency())
-                .show());
-        add(homeSections, sos, 0, dp(12), 0, 0);
-    }
-
     private void sendEmergency() {
         showLoading(true);
         DriverApiClient api = new DriverApiClient(session);
         api.executor().execute(() -> {
             try {
                 JSONObject body = session.getLastLocationJson();
-                body.put("message", "SOS dari dashboard driver");
+                body.put("message", "Membutuhkan bantuan darurat");
+                body.put("current_order_id", clean(session.get("current_order_id")));
                 api.post("driver_sos_native.php", body);
-                runOnUiThread(() -> { showLoading(false); showMessage("SOS berhasil dikirim. Admin akan segera menghubungi Anda."); });
+                runOnUiThread(() -> { showLoading(false); showMessage("SOS terkirim ke seluruh driver dan admin."); });
             } catch (Exception error) {
                 runOnUiThread(() -> { showLoading(false); showMessage("SOS gagal dikirim. Hubungi admin melalui telepon bila kondisi darurat."); });
             }
@@ -537,6 +529,12 @@ public class DriverDashboardActivity extends Activity
             offerBox.addView(emptyCard("Belum ada tawaran order."));
         } else {
             Set<String> activeOfferKeys = new HashSet<>();
+            boolean hasFreshOffer = false;
+            for (DriverOrder offer : state.offers) {
+                String freshKey = offerKey(offer);
+                if (!seenOfferKeys.contains(freshKey)) hasFreshOffer = true;
+            }
+            if (!firstOfferSnapshot && hasFreshOffer) playIncomingOrderEffect();
             for (DriverOrder offer : state.offers) {
                 String key = offerKey(offer);
                 activeOfferKeys.add(key);
@@ -547,7 +545,31 @@ public class DriverDashboardActivity extends Activity
             lastVibratedSecond.keySet().retainAll(activeOfferKeys);
             expiredRefreshRequested.retainAll(activeOfferKeys);
             updateAllCountdowns();
+            seenOfferKeys.clear();
+            seenOfferKeys.addAll(activeOfferKeys);
+            firstOfferSnapshot = false;
         }
+        if (state.offers == null || state.offers.isEmpty()) {
+            seenOfferKeys.clear();
+            firstOfferSnapshot = false;
+        }
+    }
+
+    private void playIncomingOrderEffect() {
+        if (page == null || offerBox == null) return;
+        try {
+            ObjectAnimator sx1 = ObjectAnimator.ofFloat(offerBox, View.SCALE_X, 0.92f, 1.04f, 1f);
+            ObjectAnimator sy1 = ObjectAnimator.ofFloat(offerBox, View.SCALE_Y, 0.92f, 1.04f, 1f);
+            ObjectAnimator alpha = ObjectAnimator.ofFloat(offerBox, View.ALPHA, 0.35f, 1f);
+            AnimatorSet set = new AnimatorSet();
+            set.playTogether(sx1, sy1, alpha);
+            set.setDuration(650);
+            set.setInterpolator(new OvershootInterpolator());
+            set.start();
+            if (Build.VERSION.SDK_INT >= 26) vibrator.vibrate(VibrationEffect.createWaveform(new long[]{0,180,90,180,90,320}, -1));
+            else vibrator.vibrate(new long[]{0,180,90,180,90,320}, -1);
+            Toast.makeText(this, "🔥 ORDER BARU MASUK! Tetap semangat dan utamakan keselamatan.", Toast.LENGTH_LONG).show();
+        } catch (Throwable ignored) { }
     }
 
     @Override public void showActionLoading(String action, boolean visible) {

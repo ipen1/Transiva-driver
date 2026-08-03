@@ -30,6 +30,7 @@ public class DriverActivityHistoryActivity extends Activity {
     private SessionManager session;
     private LinearLayout listBox;
     private TextView runningCount, finishedCount, canceledCount, stateText;
+    private TextView todayEarning, todayTrips, rating, onlineTime, todayDistance;
     private ProgressBar progress;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
@@ -65,7 +66,17 @@ public class DriverActivityHistoryActivity extends Activity {
         LinearLayout shell = new LinearLayout(this); shell.setOrientation(LinearLayout.VERTICAL); page.addView(shell, new FrameLayout.LayoutParams(-1,-1));
         ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); shell.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setPadding(dp(14),dp(14),dp(14),dp(24)); scroll.addView(content,new ScrollView.LayoutParams(-1,-2));
-        content.addView(header("Aktivitas", "Riwayat pekerjaan dan perjalanan driver"));
+        content.addView(header("Aktivitas", "Statistik hari ini dan riwayat perjalanan"));
+
+        LinearLayout dailyTop = new LinearLayout(this); dailyTop.setOrientation(LinearLayout.HORIZONTAL);
+        todayEarning = statCard("Rp0", "Hari ini"); todayTrips = statCard("0", "Trip"); rating = statCard("0.0", "Rating");
+        dailyTop.addView(statContainer(todayEarning), statLp(false)); dailyTop.addView(statContainer(todayTrips), statLp(true)); dailyTop.addView(statContainer(rating), statLp(true));
+        LinearLayout.LayoutParams dtp = new LinearLayout.LayoutParams(-1,-2); dtp.setMargins(0,dp(14),0,dp(8)); content.addView(dailyTop,dtp);
+
+        LinearLayout dailyBottom = new LinearLayout(this); dailyBottom.setOrientation(LinearLayout.HORIZONTAL);
+        onlineTime = statCard("0 mnt", "Waktu Online"); todayDistance = statCard("0.0 km", "Jarak Hari Ini");
+        dailyBottom.addView(statContainer(onlineTime), statLp(false)); dailyBottom.addView(statContainer(todayDistance), statLp(true));
+        LinearLayout.LayoutParams dbp = new LinearLayout.LayoutParams(-1,-2); dbp.setMargins(0,0,0,dp(14)); content.addView(dailyBottom,dbp);
 
         LinearLayout summary = new LinearLayout(this); summary.setOrientation(LinearLayout.HORIZONTAL);
         runningCount = statCard("0","Berjalan"); finishedCount = statCard("0","Selesai"); canceledCount = statCard("0","Dibatalkan");
@@ -105,6 +116,12 @@ public class DriverActivityHistoryActivity extends Activity {
     private void render(JSONObject r){
         progress.setVisibility(View.GONE); listBox.removeAllViews();
         if(!r.optBoolean("success",false)){ stateText.setText(clean(r.optString("message","Gagal memuat aktivitas"))); listBox.addView(empty("Data aktivitas belum tersedia.")); return; }
+        JSONObject perf=r.optJSONObject("performance"); if(perf==null)perf=new JSONObject();
+        todayEarning.setText(rupiah(perf.optDouble("today_earning",0)));
+        todayTrips.setText(String.valueOf(perf.optInt("today_trips",0)));
+        rating.setText(String.format(Locale.US,"%.1f",perf.optDouble("rating",0)));
+        onlineTime.setText(formatMinutes(perf.optInt("online_minutes",0)));
+        todayDistance.setText(String.format(Locale.US,"%.1f km",perf.optDouble("today_distance_km",0)));
         JSONObject s=r.optJSONObject("summary"); if(s==null)s=new JSONObject();
         runningCount.setText(String.valueOf(s.optInt("running",0))); finishedCount.setText(String.valueOf(s.optInt("finished",0))); canceledCount.setText(String.valueOf(s.optInt("canceled",0)));
         JSONArray a=r.optJSONArray("activities"); int count=a==null?0:a.length(); stateText.setText(count+" aktivitas ditemukan");
@@ -139,6 +156,7 @@ public class DriverActivityHistoryActivity extends Activity {
     private GradientDrawable gradient(String a,String b,int radius){ GradientDrawable g=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{Color.parseColor(a),Color.parseColor(b)}); g.setCornerRadius(dp(radius)); return g; }
     private String statusLabel(String s){ s=s.toLowerCase(Locale.US); if(s.contains("cancel"))return "Dibatalkan"; if(s.contains("finish")||s.contains("complete")||s.equals("done")||s.equals("delivered"))return "Selesai"; return "Berjalan"; }
     private String statusColor(String s){ s=s.toLowerCase(Locale.US); if(s.contains("cancel"))return "#DC2626"; if(s.contains("finish")||s.contains("complete")||s.equals("done")||s.equals("delivered"))return "#16A34A"; return "#0B7CFF"; }
+    private String formatMinutes(int m){ if(m<60)return m+" mnt"; return (m/60)+"j "+(m%60)+"m"; }
     private String rupiah(double v){ return NumberFormat.getCurrencyInstance(new Locale("id","ID")).format(v).replace(",00",""); }
     private String first(String...v){ for(String s:v)if(!clean(s).isEmpty())return clean(s); return ""; }
     private String clean(String v){ return v==null?"":v.trim(); }

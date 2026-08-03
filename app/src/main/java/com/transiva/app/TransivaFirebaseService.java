@@ -393,6 +393,16 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
             return intent;
         }
 
+        if ("driver_emergency".equals(type)) {
+            Intent intent = new Intent(this, DriverEmergencyActivity.class);
+            if (data != null) {
+                for (Map.Entry<String,String> entry : data.entrySet()) intent.putExtra(entry.getKey(), entry.getValue());
+            }
+            intent.putExtra("order_id", orderId);
+            intent.putExtra("from_fcm", true);
+            return intent;
+        }
+
         if (isChat(type)) {
             Intent intent = new Intent(this, DriverChatActivity.class);
             intent.putExtra("room_id", first(roomId, orderId));
@@ -540,6 +550,7 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
         if ("webrtc_call".equals(type)) {
             return CH_CALL;
         }
+        if ("driver_emergency".equals(type)) return CH_ORDER;
 
         if (isChat(type)) {
             return CH_CHAT;
@@ -572,6 +583,7 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
 
         if (
                 "webrtc_call".equals(type)
+                        || "driver_emergency".equals(type)
                         || isChat(type)
                         || isOrder(type)
                         || isWallet(type)
