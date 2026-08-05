@@ -427,16 +427,6 @@ public class DriverTripActivity extends Activity {
         String note = first(order.optString("note"), order.optString("item_note"), order.optString("description"), "-");
         LinearLayout c = card(); c.setPadding(dp(16), dp(13), dp(16), dp(13)); c.addView(text(orderKind.equals("pickup") ? "📦 Detail Paket" : "📝 Catatan Customer", 16, "#0B3A78", true));
         TextView n = text(note, 14, "#111827", false); n.setPadding(0, dp(6),0,0); c.addView(n);
-        if (isPickupOrder()) {
-            String pickupCode = first(order.optString("pickup_code"), order.optString("delivery_otp"), "");
-            if (!pickupCode.isEmpty()) {
-                TextView divider = text("────────────────────", 12, "#CBD5E1", false);
-                divider.setPadding(0, dp(8), 0, dp(2)); c.addView(divider);
-                rowText(c, "🔐 Kode Penerima", pickupCode);
-                TextView hint = text("Masukkan kode ini saat menyelesaikan order setelah paket diterima.", 12, "#64748B", false);
-                hint.setPadding(0, dp(2), 0, 0); c.addView(hint);
-            }
-        }
         add(c,0,0,0,dp(12));
     }
     private void rowText(LinearLayout p, String l, String v){
