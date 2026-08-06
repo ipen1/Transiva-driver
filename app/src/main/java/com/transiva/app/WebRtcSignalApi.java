@@ -29,9 +29,14 @@ public final class WebRtcSignalApi {
             connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
             if (session != null) {
                 String token = safe(session.getToken());
-                if (!token.isEmpty()) connection.setRequestProperty("Authorization", "Bearer " + token);
-                if (!token.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(this));
-                if (!token.setRequestProperty("X-App-Scope", "driver");
+                if (!token.isEmpty()) {
+                    connection.setRequestProperty("Authorization", "Bearer " + token);
+                }
+                connection.setRequestProperty(
+                        "X-Device-UUID",
+                        DeviceIdentityManager.getInstallationUuid(session.getContext())
+                );
+                connection.setRequestProperty("X-App-Scope", "driver");
             }
             try (OutputStream out = connection.getOutputStream()) {
                 out.write(payload.toString().getBytes(StandardCharsets.UTF_8));

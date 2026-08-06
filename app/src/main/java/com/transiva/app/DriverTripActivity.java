@@ -936,9 +936,61 @@ public class DriverTripActivity extends Activity {
             info("Navigasi", pickup ? "Rute diarahkan ke titik penjemputan." : "Rute diarahkan ke titik pengantaran.");
         }
     }
-    private JSONObject postJson(String urlText, JSONObject payload)throws Exception{ HttpURLConnection c=(HttpURLConnection)new URL(urlText).openConnection(); c.setConnectTimeout(TIMEOUT_MS); c.setReadTimeout(TIMEOUT_MS); c.setRequestMethod("POST"); c.setRequestProperty("Content-Type","application/json; charset=utf-8"); c.setRequestProperty("Accept","application/json"); try{ String t=session==null?"":session.getToken(); if(t!=null&&!t.trim().isEmpty()) c.setRequestProperty("Authorization","Bearer "+t.trim()); }catch(Exception ignored){} c.setDoOutput(true); OutputStream os=c.getOutputStream(); os.write(payload.toString().getBytes(StandardCharsets.UTF_8)); os.flush(); os.close(); InputStream is=c.getResponseCode()>=400?c.getErrorStream():c.getInputStream(); BufferedReader br=new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8)); StringBuilder sb=new StringBuilder(); String line; while((line=br.readLine())!=null) sb.append(line); br.close(); c.disconnect(); String body=sb.toString().trim(); return body.isEmpty()?new JSONObject():new JSONObject(body); }
-    private JSONObject postJson(String urlText, JSONObject payload)throws Exception{ HttpURLConnection c=(HttpURLConnection)new URL(urlText).setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(this));
-    private JSONObject postJson(String urlText, JSONObject payload)throws Exception{ HttpURLConnection c=(HttpURLConnection)new URL(urlText).setRequestProperty("X-App-Scope", "driver");
+    private JSONObject postJson(String urlText, JSONObject payload) throws Exception {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL(urlText).openConnection();
+            connection.setConnectTimeout(TIMEOUT_MS);
+            connection.setReadTimeout(TIMEOUT_MS);
+            connection.setRequestMethod("POST");
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestProperty("X-App-Scope", "driver");
+            connection.setRequestProperty(
+                    "X-Device-UUID",
+                    DeviceIdentityManager.getInstallationUuid(this)
+            );
+
+            try {
+                String token = session == null ? "" : session.getToken();
+                if (token != null && !token.trim().isEmpty()) {
+                    connection.setRequestProperty("Authorization", "Bearer " + token.trim());
+                }
+            } catch (Exception ignored) {
+            }
+
+            try (OutputStream output = connection.getOutputStream()) {
+                output.write(payload.toString().getBytes(StandardCharsets.UTF_8));
+                output.flush();
+            }
+
+            int statusCode = connection.getResponseCode();
+            InputStream input = statusCode >= 400
+                    ? connection.getErrorStream()
+                    : connection.getInputStream();
+            if (input == null) {
+                throw new IllegalStateException("Respons server kosong (HTTP " + statusCode + ")");
+            }
+
+            StringBuilder response = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(input, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    response.append(line);
+                }
+            }
+
+            String body = response.toString().trim();
+            return body.isEmpty() ? new JSONObject() : new JSONObject(body);
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+    }
+
     private void saveActiveOrder(){ if(order==null)return; getSharedPreferences(PREF_NAME,MODE_PRIVATE).edit().putString("driver_active_order_json", order.toString()).putString("driver_active_order_id", orderId()).putString("driver_active_order_kind", orderKind).putString("driver_active_order_status", status()).putString("driver_active_pickup_address", pickupAddress()).putString("driver_active_delivery_address", deliveryAddress()).putString("driver_active_pickup_lat", String.valueOf(coord("pickup_lat","user_lat"))).putString("driver_active_pickup_lng", String.valueOf(coord("pickup_lng","user_lng"))).putString("driver_active_delivery_lat", String.valueOf(coord("delivery_lat","destination_lat"))).putString("driver_active_delivery_lng", String.valueOf(coord("delivery_lng","destination_lng"))).putString("driver_active_price", String.valueOf(optDouble("price","fare","total"))).putString("driver_type", resolveDriverTypeFromOrder()).putString("active_driver_type", resolveDriverTypeFromOrder()).apply(); }
     private void clearActiveOrder(){ getSharedPreferences(PREF_NAME,MODE_PRIVATE).edit().remove("driver_active_order_json").remove("driver_active_order_id").remove("driver_active_order_kind").remove("driver_active_order_status").apply(); }
     private String orderId(){ return first(order.optString("order_id"), order.optString("id"), "-"); } private String internalId(){ return first(order.optString("id"), order.optString("order_id"), ""); } private String status(){ return normalizeStatus(first(order.optString("status"), "taken")); }
