@@ -1449,6 +1449,8 @@ public class DriverNavigationActivity extends Activity {
                     String token = session == null ? "" : session.getToken();
                     if (token != null && !token.trim().isEmpty()) {
                         c.setRequestProperty("Authorization", "Bearer " + token.trim());
+                        c.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(this));
+                        c.setRequestProperty("X-App-Scope", "driver");
                     }
                 } catch (Exception ignored) {}
                 c.setDoOutput(true);

@@ -33,6 +33,7 @@ public final class SessionValidationClient {
                 conn.setRequestProperty("Accept", "application/json");
                 conn.setRequestProperty("Authorization", "Bearer " + token);
                 conn.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(app));
+                conn.setRequestProperty("X-App-Scope", "driver");
 
                 int status = conn.getResponseCode();
                 if (conn instanceof HttpsURLConnection) DriverTlsPinning.verify(app, (HttpsURLConnection) conn);

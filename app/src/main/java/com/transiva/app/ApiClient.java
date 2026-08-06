@@ -87,6 +87,7 @@ public class ApiClient {
                 if (!sessionToken.isEmpty()) {
                     conn.setRequestProperty("Authorization", "Bearer " + sessionToken);
                     conn.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(activity));
+                    conn.setRequestProperty("X-App-Scope", "driver");
                 }
 
                 if ("POST".equals(cleanMethod)) {

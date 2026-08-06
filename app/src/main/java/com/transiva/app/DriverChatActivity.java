@@ -312,6 +312,8 @@ public class DriverChatActivity extends Activity {
                     "Authorization",
                     "Bearer " + session.getToken()
             );
+            connection.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(this));
+            connection.setRequestProperty("X-App-Scope", "driver");
 
             int status = connection.getResponseCode();
             InputStream input = status >= 200 && status < 400

@@ -68,6 +68,7 @@ public final class DriverMessageApi {
                     "Bearer " + session.getToken()
             );
             connection.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(session.getContext()));
+            connection.setRequestProperty("X-App-Scope", "driver");
             connection.setRequestProperty(
                     "Content-Type",
                     "multipart/form-data; boundary=" + boundary
@@ -132,6 +133,7 @@ public final class DriverMessageApi {
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Authorization", "Bearer " + session.getToken());
             connection.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(session.getContext()));
+            connection.setRequestProperty("X-App-Scope", "driver");
             connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
             try (OutputStream output = connection.getOutputStream()) {
                 writeField(output, boundary, "order_id", orderId);
@@ -175,6 +177,7 @@ public final class DriverMessageApi {
                     "Bearer " + session.getToken()
             );
             connection.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(session.getContext()));
+            connection.setRequestProperty("X-App-Scope", "driver");
 
             if (body != null) {
                 connection.setDoOutput(true);

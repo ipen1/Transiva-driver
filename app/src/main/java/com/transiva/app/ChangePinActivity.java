@@ -198,6 +198,8 @@ public class ChangePinActivity extends Activity {
             connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Authorization", "Bearer " + safe(session.getToken()));
+            connection.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(this));
+            connection.setRequestProperty("X-App-Scope", "driver");
             connection.setRequestProperty("X-Transiva-Client", "Android-Native");
 
             JSONObject payload = new JSONObject();

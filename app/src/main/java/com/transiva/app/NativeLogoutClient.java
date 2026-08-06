@@ -65,6 +65,12 @@ public class NativeLogoutClient {
                 conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
                 conn.setRequestProperty("Cache-Control", "no-store");
                 conn.setRequestProperty("X-Transiva-App", "Android-Native");
+                String apiToken = session.getToken();
+                if (apiToken != null && !apiToken.trim().isEmpty()) {
+                    conn.setRequestProperty("Authorization", "Bearer " + apiToken.trim());
+                }
+                conn.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(appContext));
+                conn.setRequestProperty("X-App-Scope", "driver");
 
                 BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(conn.getOutputStream(), "UTF-8"));
                 writer.write(payload.toString());

@@ -429,6 +429,7 @@ public class LoginActivity extends Activity {
                     Build.MANUFACTURER + " " + Build.MODEL
             );
             payload.put("platform", "android_native");
+            payload.put("app_scope", "driver");
             payload.put("installation_uuid", DeviceIdentityManager.getInstallationUuid(this));
             payload.put("manufacturer", Build.MANUFACTURER);
             payload.put("model", Build.MODEL);
@@ -655,6 +656,7 @@ public class LoginActivity extends Activity {
                 payload.put("fcm_token", fcmToken.trim());
                 payload.put("token", fcmToken.trim());
                 payload.put("platform", "android_native");
+            payload.put("app_scope", "driver");
             payload.put("installation_uuid", DeviceIdentityManager.getInstallationUuid(this));
             payload.put("manufacturer", Build.MANUFACTURER);
             payload.put("model", Build.MODEL);
