@@ -36,7 +36,6 @@ public final class ForceLogoutManager {
                 || c.equals("DEVICE_BANNED")
                 || c.equals("DEVICE_MISMATCH")
                 || c.equals("SESSION_EXPIRED")
-                || c.equals("TOKEN_REVOKED")
-                || c.equals("UNAUTHORIZED");
+                || c.equals("TOKEN_REVOKED");
     }
 }

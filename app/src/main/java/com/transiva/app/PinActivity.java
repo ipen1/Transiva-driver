@@ -586,6 +586,16 @@ public class PinActivity extends Activity {
     }
 
     private void openRolePage() {
+        // PIN hanya membuka kunci lokal; jangan pernah menghapus sesi login yang masih valid.
+        if (session == null || !session.isLoggedIn() || safe(session.getToken()).trim().isEmpty()) {
+            showMessage("Sesi login tidak tersedia. Silakan login kembali.", false);
+            return;
+        }
+        session.touchSession();
+        try {
+            TransivaSession.saveUser(this, session.getSessionJson());
+        } catch (Exception ignored) {}
+
         Intent intent = new Intent(this, DriverDashboardActivity.class);
         intent.putExtra("native_role", "driver");
         intent.putExtra("request_gps_after_login", true);

@@ -41,8 +41,8 @@ public final class SessionValidationClient {
                 String code = "";
                 try { code = new JSONObject(raw).optString("code", ""); } catch (Exception ignored) {}
 
-                if (status == 401 || status == 403 || ForceLogoutManager.isForceLogoutCode(code)) {
-                    ForceLogoutManager.execute(app, code.isEmpty() ? "SESSION_REVOKED" : code);
+                if (ForceLogoutManager.isForceLogoutCode(code)) {
+                    ForceLogoutManager.execute(app, code);
                 } else if (status >= 200 && status < 300) {
                     session.touchSession();
                 }
