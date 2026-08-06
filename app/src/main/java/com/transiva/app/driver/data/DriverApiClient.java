@@ -4,6 +4,7 @@ import android.content.Context;
 import android.util.Log;
 
 import com.transiva.app.DriverNetworkExecutor;
+import com.transiva.app.DeviceIdentityManager;
 import com.transiva.app.DriverRetryPolicy;
 import com.transiva.app.DriverTlsPinning;
 import com.transiva.app.SessionManager;
@@ -88,7 +89,13 @@ public final class DriverApiClient {
             connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
             connection.setRequestProperty("X-Transiva-Client", "Android-Native");
             String token = clean(session.getToken());
-            if (!token.isEmpty()) connection.setRequestProperty("Authorization", "Bearer " + token);
+            if (!token.isEmpty()) {
+                connection.setRequestProperty("Authorization", "Bearer " + token);
+            }
+            connection.setRequestProperty(
+                    "X-Device-UUID",
+                    DeviceIdentityManager.getInstallationUuid(appContext)
+            );
 
             if ("POST".equals(method)) {
                 connection.setDoOutput(true);
