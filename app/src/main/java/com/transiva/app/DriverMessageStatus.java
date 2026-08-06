@@ -85,13 +85,13 @@ public final class DriverMessageStatus {
         if (status.equals("taken")) {
             return type.contains("food")
                     ? "Driver Menuju Restoran"
-                    : "Driver Menuju Pickup";
+                    : "Driver Menuju Penjemputan";
         }
 
         if (status.equals("arrived_pickup")) {
             return type.contains("food")
                     ? "Driver Tiba di Restoran"
-                    : "Driver Tiba di Pickup";
+                    : "Driver Tiba di Penjemputan";
         }
 
         if (
@@ -104,7 +104,7 @@ public final class DriverMessageStatus {
         }
 
         if (status.equals("arrived_delivery")) {
-            return "Tiba di Tujuan";
+            return "Tiba di Pengantaran";
         }
 
         if (

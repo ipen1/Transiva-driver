@@ -365,7 +365,7 @@ public class DriverNavigationActivity extends Activity {
         page.addView(backButton, backLp);
 
         routeBadge = new TextView(this);
-        routeBadge.setText(targetMode.equals("delivery") ? "Menyiapkan rute ke tujuan…" : "Menyiapkan rute ke pickup…");
+        routeBadge.setText(targetMode.equals("delivery") ? "Menyiapkan rute ke pengantaran…" : "Menyiapkan rute ke pickup…");
         routeBadge.setTextColor(Color.parseColor("#082F63"));
         routeBadge.setTextSize(17);
         routeBadge.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
@@ -822,7 +822,7 @@ public class DriverNavigationActivity extends Activity {
                     main.postDelayed(() -> {
                         if (!isFinishing() && routePoints.size() >= 2) {
                             routeBadge.setText(String.format(Locale.US, "%s • %.1f km • %d menit",
-                                    targetMode.equals("delivery") ? "Menuju tujuan" : "Menuju pickup",
+                                    targetMode.equals("delivery") ? "Menuju pengantaran" : "Menuju penjemputan",
                                     pendingRouteKm, mins));
                         }
                     }, 260L);
@@ -1378,7 +1378,7 @@ public class DriverNavigationActivity extends Activity {
             action = "Putar balik";
         } else if (type.contains("arrive")) {
             arrow = "⚑";
-            action = "Tiba di tujuan";
+            action = "Tiba di pengantaran";
         }
 
         String distText;

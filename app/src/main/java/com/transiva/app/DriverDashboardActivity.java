@@ -660,9 +660,9 @@ public class DriverDashboardActivity extends Activity
         }
         add(card, text(order.serviceName, 14, "#0B7CFF", true),
                 0, dp(5), 0, 0);
-        add(card, text("Pickup:\n" + order.pickupAddress,
+        add(card, text("Penjemputan:\n" + order.pickupAddress,
                 13, "#334155", false), 0, dp(8), 0, 0);
-        add(card, text("Tujuan:\n" + order.destinationAddress,
+        add(card, text("Pengantaran:\n" + order.destinationAddress,
                 13, "#334155", false), 0, dp(6), 0, 0);
 
         String meta = "Pendapatan " + rupiah(order.driverEarning) + " • " + ("balance".equalsIgnoreCase(order.paymentMethod) ? "💳 TransPay" : "💵 Tunai");
@@ -783,7 +783,7 @@ public class DriverDashboardActivity extends Activity
         final String[] reasons = new String[]{
                 "Kendaraan bermasalah",
                 "Kondisi darurat",
-                "Tidak dapat menemukan lokasi pickup",
+                "Tidak dapat menemukan titik penjemputan",
                 "Customer tidak dapat dihubungi",
                 "Order tidak sesuai",
                 "Alasan lainnya"

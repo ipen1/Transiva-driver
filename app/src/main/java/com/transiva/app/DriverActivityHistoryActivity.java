@@ -139,7 +139,7 @@ public class DriverActivityHistoryActivity extends Activity {
         TextView badge=text(statusLabel(visualStatus),10,statusColor(visualStatus),true); badge.setPadding(dp(9),dp(5),dp(9),dp(5)); badge.setBackground(round("#EEF6FF",14)); top.addView(badge); c.addView(top);
         c.addView(text("Order #"+first(o.optString("order_id"),o.optString("id"),"-"),11,"#64748B",false));
         c.addView(text("Dari: "+first(o.optString("pickup_address"),"-"),12,"#334155",false));
-        c.addView(text("Tujuan: "+first(o.optString("destination_address"),o.optString("delivery_address"),"-"),12,"#334155",false));
+        c.addView(text("Pengantaran: "+first(o.optString("destination_address"),o.optString("delivery_address"),"-"),12,"#334155",false));
         double price=o.optDouble("driver_earning",o.optDouble("price",0));
         String time=first(o.optString("activity_time"),o.optString("updated_at"),o.optString("created_at"),"");
         c.addView(text((price>0?rupiah(price)+"  •  ":"")+time,11,"#0B7CFF",true));
