@@ -164,10 +164,16 @@ public final class DriverDashboardPresenter {
     }
 
     private boolean isSessionError(int httpCode, String code) {
-        return httpCode == 401
-                || httpCode == 403
-                || "UNAUTHORIZED".equalsIgnoreCase(code)
-                || "SESSION_EXPIRED".equalsIgnoreCase(code);
+        String cleanCode = code == null ? "" : code.trim();
+        // Jangan menghapus sesi hanya berdasarkan HTTP 401/403 generik.
+        // Logout paksa hanya untuk kode final yang benar-benar menyatakan
+        // token/sesi/perangkat sudah tidak berlaku.
+        return "SESSION_REVOKED".equalsIgnoreCase(cleanCode)
+                || "SESSION_EXPIRED".equalsIgnoreCase(cleanCode)
+                || "TOKEN_REVOKED".equalsIgnoreCase(cleanCode)
+                || "DEVICE_MISMATCH".equalsIgnoreCase(cleanCode)
+                || "DEVICE_RESET".equalsIgnoreCase(cleanCode)
+                || "DEVICE_BANNED".equalsIgnoreCase(cleanCode);
     }
 
     public void destroy() {
