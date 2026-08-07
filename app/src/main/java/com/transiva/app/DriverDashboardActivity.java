@@ -645,6 +645,44 @@ public class DriverDashboardActivity extends Activity
         return "";
     }
 
+    private String customerNote(JSONObject raw) {
+        if (raw == null) return "";
+
+        String direct = firstNonEmpty(
+                raw.optString("customer_note", ""),
+                raw.optString("note_customer", ""),
+                raw.optString("order_note", ""),
+                raw.optString("special_instructions", ""),
+                raw.optString("instructions", "")
+        );
+        if (!direct.isEmpty()) return direct;
+
+        String note = clean(raw.optString("note", ""));
+        if (note.isEmpty() || "-".equals(note)) return "";
+
+        if (note.startsWith("{")) {
+            try {
+                JSONObject parsed = new JSONObject(note);
+                return firstNonEmpty(
+                        parsed.optString("customer_note", ""),
+                        parsed.optString("note_customer", ""),
+                        parsed.optString("text", ""),
+                        parsed.optString("note", ""),
+                        parsed.optString("special_instructions", ""),
+                        parsed.optString("instructions", ""),
+                        parsed.optString("message", ""),
+                        parsed.optString("remark", "")
+                );
+            } catch (Exception ignored) {
+                return "";
+            }
+        }
+
+        // Jangan menampilkan JSON/array mentah di kartu order.
+        if (note.startsWith("[")) return "";
+        return note;
+    }
+
     private View orderCard(DriverOrder order, boolean active) {
         LinearLayout card = card();
         boolean queued = !active && order.raw != null && order.raw.optBoolean("queued", false);
@@ -670,6 +708,12 @@ public class DriverDashboardActivity extends Activity
             meta += " • " + order.pickupDistanceText;
         }
         add(card, text(meta, 13, "#0F172A", true), 0, dp(8), 0, 0);
+
+        String customerNote = customerNote(order.raw);
+        if (!customerNote.isEmpty()) {
+            add(card, text("📝 Catatan customer: " + customerNote,
+                    13, "#7C2D12", true), 0, dp(7), 0, 0);
+        }
 
         if (isFoodOrder(order)) {
             JSONObject raw = order.raw == null ? new JSONObject() : order.raw;

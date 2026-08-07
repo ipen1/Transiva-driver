@@ -383,7 +383,8 @@ public class DriverTripActivity extends Activity {
             rowText(c, "🍳 Dapur", kitchen);
         }
         if(!readyAt.isEmpty()) rowText(c, "⏱ Siap sekitar", readyAt);
-        String customerNote = first(food.optString("customer_note"), food.optString("note_customer"), "");
+        String customerNote = first(food.optString("customer_note"), food.optString("note_customer"), food.optString("text"), "");
+        if(customerNote.isEmpty()) customerNote = customerNote();
         if(!customerNote.isEmpty()) rowText(c, "📝 Catatan customer", customerNote);
         add(c,0,0,0,dp(12));
     }
@@ -423,10 +424,48 @@ public class DriverTripActivity extends Activity {
     private JSONObject parseFoodNote(){
         try{ JSONObject d = new JSONObject(first(order.optString("note"), "{}")); return "food".equalsIgnoreCase(d.optString("type")) ? d : null; }catch(Exception e){ return null; }
     }
+    private String customerNote(){
+        String direct = first(
+                order.optString("customer_note"),
+                order.optString("note_customer"),
+                order.optString("order_note"),
+                order.optString("special_instructions"),
+                order.optString("instructions"),
+                ""
+        );
+        if(!direct.isEmpty()) return direct;
+
+        String raw = first(order.optString("note"), order.optString("item_note"), order.optString("description"), "");
+        if(raw.isEmpty() || "-".equals(raw)) return "";
+        if(raw.startsWith("{")){
+            try{
+                JSONObject d = new JSONObject(raw);
+                return first(
+                        d.optString("customer_note"),
+                        d.optString("note_customer"),
+                        d.optString("text"),
+                        d.optString("note"),
+                        d.optString("special_instructions"),
+                        d.optString("instructions"),
+                        d.optString("message"),
+                        d.optString("remark"),
+                        ""
+                );
+            }catch(Exception ignored){ return ""; }
+        }
+        if(raw.startsWith("[")) return "";
+        return raw;
+    }
+
     private void addPlainNoteCard(){
-        String note = first(order.optString("note"), order.optString("item_note"), order.optString("description"), "-");
-        LinearLayout c = card(); c.setPadding(dp(16), dp(13), dp(16), dp(13)); c.addView(text(orderKind.equals("pickup") ? "📦 Detail Paket" : "📝 Catatan Customer", 16, "#0B3A78", true));
-        TextView n = text(note, 14, "#111827", false); n.setPadding(0, dp(6),0,0); c.addView(n);
+        String note = customerNote();
+        LinearLayout c = card();
+        c.setPadding(dp(16), dp(13), dp(16), dp(13));
+        c.addView(text("📝 Catatan Customer", 16, "#0B3A78", true));
+        TextView n = text(note.isEmpty() ? "Tidak ada catatan customer." : note,
+                14, note.isEmpty() ? "#64748B" : "#111827", false);
+        n.setPadding(0, dp(6),0,0);
+        c.addView(n);
         add(c,0,0,0,dp(12));
     }
     private void rowText(LinearLayout p, String l, String v){
