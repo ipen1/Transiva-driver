@@ -902,30 +902,55 @@ public class DriverTripActivity extends Activity {
     }
     private void openChat(){
         try{
-            String roomId = first(order.optString("room_id"), "ROOM-" + orderId())
-                    .trim().replace("_", "-").toUpperCase(Locale.US).replaceAll("[^A-Z0-9\\-]", "");
-            if(!roomId.startsWith("ROOM-")) roomId = "ROOM-" + roomId;
-            String customerName = first(order.optString("customer_name"), order.optString("customer"),
-                    order.optString("username"), order.optString("user_id"), "Customer");
+            // Gunakan room_id asli dari server agar identik dengan room yang dibuka
+            // dari menu Pesan. Jangan mengubah underscore/case karena itu dapat
+            // membuat room baru yang berbeda dari customer.
+            String roomId = first(order.optString("room_id"), order.optString("chat_room_id"));
+            if(roomId.isEmpty()) roomId = "ROOM-" + orderId();
+
+            String customerName = first(
+                    order.optString("participant_name"),
+                    order.optString("customer_name"),
+                    order.optString("customer"),
+                    order.optString("username"),
+                    "Customer"
+            );
+            String source = first(
+                    order.optString("source"),
+                    order.optString("_transiva_table"),
+                    isPickupOrder() ? "pickup_orders" : "orders"
+            );
+            String service = first(
+                    order.optString("service_name"),
+                    order.optString("order_type"),
+                    isPickupOrder() ? "TransSend" : "Order"
+            );
+
             getSharedPreferences(PREF_NAME, MODE_PRIVATE).edit()
                     .putString("active_order_id", orderId())
                     .putString("active_chat_order_id", orderId())
                     .putString("active_chat_room_id", roomId)
                     .putString("active_chat_driver_name", driverUsername)
                     .putString("active_chat_customer_name", customerName)
-                    .putString("active_chat_order_status", status()).apply();
+                    .putString("active_chat_order_status", status())
+                    .apply();
+
             Intent i = new Intent(this, DriverChatRoomActivity.class);
             i.putExtra("order_id", orderId());
             i.putExtra("order_db_id", internalId());
+            i.putExtra("id", internalId());
             i.putExtra("room_id", roomId);
             i.putExtra("participant_name", customerName);
             i.putExtra("customer_name", customerName);
-            i.putExtra("order_type", isPickupOrder() ? "TransPickup" : first(order.optString("order_type"), "Order"));
+            i.putExtra("order_type", service);
             i.putExtra("order_status", status());
-            i.putExtra("order_source", isPickupOrder() ? "pickup_orders" : "orders");
+            i.putExtra("order_source", source);
+            i.putExtra("source", source);
             i.putExtra("read_only", false);
             startActivity(i);
-        }catch(Exception e){ info("Chat", "Gagal membuka chat."); }
+        }catch(Exception e){
+            info("Chat", "Gagal membuka chat order ini.");
+        }
     }
 
     private void openNativeNavigation(boolean pickup){

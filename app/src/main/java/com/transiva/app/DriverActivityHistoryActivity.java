@@ -140,6 +140,10 @@ public class DriverActivityHistoryActivity extends Activity {
         c.addView(text("Order #"+first(o.optString("order_id"),o.optString("id"),"-"),11,"#64748B",false));
         c.addView(text("Dari: "+first(o.optString("pickup_address"),"-"),12,"#334155",false));
         c.addView(text("Pengantaran: "+first(o.optString("destination_address"),o.optString("delivery_address"),"-"),12,"#334155",false));
+        String customerNote = customerNote(o);
+        if (!customerNote.isEmpty()) {
+            c.addView(text("📝 Catatan customer: " + customerNote,12,"#7C2D12",true));
+        }
         double price=o.optDouble("driver_earning",o.optDouble("price",0));
         String time=first(o.optString("activity_time"),o.optString("updated_at"),o.optString("created_at"),"");
         c.addView(text((price>0?rupiah(price)+"  •  ":"")+time,11,"#0B7CFF",true));
@@ -158,6 +162,34 @@ public class DriverActivityHistoryActivity extends Activity {
     private String statusColor(String s){ s=s.toLowerCase(Locale.US); if(s.contains("cancel"))return "#DC2626"; if(s.contains("finish")||s.contains("complete")||s.equals("done")||s.equals("delivered"))return "#16A34A"; return "#0B7CFF"; }
     private String formatMinutes(int m){ if(m<60)return m+" mnt"; return (m/60)+"j "+(m%60)+"m"; }
     private String rupiah(double v){ return NumberFormat.getCurrencyInstance(new Locale("id","ID")).format(v).replace(",00",""); }
+    private String customerNote(JSONObject o){
+        if(o==null) return "";
+        String note=first(
+                o.optString("customer_note"),
+                o.optString("note_customer"),
+                o.optString("special_instructions"),
+                o.optString("instructions"),
+                o.optString("note")
+        );
+        if(note.isEmpty()) return "";
+        String trimmed=note.trim();
+        if(trimmed.startsWith("{")){
+            try{
+                JSONObject parsed=new JSONObject(trimmed);
+                note=first(
+                        parsed.optString("text"),
+                        parsed.optString("note"),
+                        parsed.optString("customer_note"),
+                        parsed.optString("special_instructions"),
+                        parsed.optString("instructions"),
+                        parsed.optString("message"),
+                        parsed.optString("remark")
+                );
+            }catch(Exception ignored){ return ""; }
+        }
+        if(note.startsWith("[")) return "";
+        return clean(note);
+    }
     private String first(String...v){ for(String s:v)if(!clean(s).isEmpty())return clean(s); return ""; }
     private String clean(String v){ return v==null?"":v.trim(); }
     private int dp(int v){ return Math.round(v*getResources().getDisplayMetrics().density); }

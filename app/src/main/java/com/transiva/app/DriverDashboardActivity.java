@@ -468,8 +468,13 @@ public class DriverDashboardActivity extends Activity
                 : "Smart Queue: belum aktif");
         queueDetailText.setText(first(state.queueLabel, "Antrean dihitung otomatis dan adil."));
         assistantTitleText.setText(first(state.assistantTitle, "Asisten Transiva"));
-        assistantMessageText.setText(first(state.assistantMessage, "Belum ada rekomendasi."));
-        hotspotText.setText(first(state.hotspotName, "Area sekitar Anda") + " • " + first(state.hotspotLevel, "NORMAL") + " (" + state.hotspotScore + "% )");
+        assistantMessageText.setText(buildAssistantMessage(state));
+        int localHotspotScore = effectiveHotspotScore(state);
+        String localHotspotLevel = localHotspotScore > 0
+                ? effectiveHotspotLevel(state, localHotspotScore)
+                : first(state.hotspotLevel, "NORMAL");
+        hotspotText.setText(first(state.hotspotName, "Area sekitar Anda") + " • "
+                + localHotspotLevel + " (" + localHotspotScore + "% )");
 
         onlineLabel.setText(state.online ? "ONLINE" : "OFFLINE");
         onlineLabel.setTextColor(Color.parseColor(
@@ -681,6 +686,86 @@ public class DriverDashboardActivity extends Activity
         // Jangan menampilkan JSON/array mentah di kartu order.
         if (note.startsWith("[")) return "";
         return note;
+    }
+
+    private String buildAssistantMessage(DriverDashboardState state) {
+        if (state == null) return "Belum ada rekomendasi.";
+        java.util.LinkedHashSet<String> services = new java.util.LinkedHashSet<>();
+        int activeCount = 0;
+        int offerCount = 0;
+
+        if (state.activeOrders != null) {
+            for (DriverOrder order : state.activeOrders) {
+                if (order == null) continue;
+                activeCount++;
+                services.add(aiServiceLabel(order));
+            }
+        }
+        if (state.offers != null) {
+            for (DriverOrder order : state.offers) {
+                if (order == null) continue;
+                offerCount++;
+                services.add(aiServiceLabel(order));
+            }
+        }
+
+        if (activeCount > 0) {
+            String serviceText = joinServices(services);
+            return "Terdeteksi " + activeCount + " order aktif"
+                    + (serviceText.isEmpty() ? "" : " (" + serviceText + ")")
+                    + ". Fokus selesaikan perjalanan dengan aman. "
+                    + (offerCount > 0 ? offerCount + " tawaran lain juga terdeteksi." : "Smart Queue aktif kembali setelah order selesai.");
+        }
+        if (offerCount > 0) {
+            String serviceText = joinServices(services);
+            return "AI mendeteksi " + offerCount + " tawaran order"
+                    + (serviceText.isEmpty() ? "" : " (" + serviceText + ")")
+                    + ". Pilih order sesuai kendaraan dan jarak Anda.";
+        }
+        return first(state.assistantMessage, "Belum ada rekomendasi.");
+    }
+
+    private int effectiveHotspotScore(DriverDashboardState state) {
+        if (state == null) return 0;
+        int serverScore = Math.max(0, state.hotspotScore);
+        int activeCount = state.activeOrders == null ? 0 : state.activeOrders.size();
+        int offerCount = state.offers == null ? 0 : state.offers.size();
+
+        // Fallback lokal agar semua jenis order, termasuk TransSend/pickup,
+        // ikut terbaca walaupun backend hotspot lama hanya menghitung tabel orders.
+        int localScore = Math.min(100, (activeCount * 25) + (offerCount * 18));
+        return Math.max(serverScore, localScore);
+    }
+
+    private String effectiveHotspotLevel(DriverDashboardState state, int score) {
+        if (score >= 70) return "RAMAI";
+        if (score >= 35) return "SEDANG";
+        if (score > 0) return "ADA ORDER";
+        return state == null ? "NORMAL" : first(state.hotspotLevel, "NORMAL");
+    }
+
+    private String aiServiceLabel(DriverOrder order) {
+        if (order == null) return "";
+        String raw = first(order.serviceName,
+                order.raw == null ? "" : order.raw.optString("order_type"),
+                order.raw == null ? "" : order.raw.optString("service_type"),
+                order.source).toLowerCase(Locale.US);
+        if (raw.contains("pickup") || raw.contains("send")) return "TransSend";
+        if (raw.contains("food")) return "TransFood";
+        if (raw.contains("car") || raw.contains("mobil")) return "TransCar";
+        if (raw.contains("ride") || raw.contains("bike") || raw.contains("motor")) return "TransRide";
+        return clean(order.serviceName);
+    }
+
+    private String joinServices(java.util.LinkedHashSet<String> services) {
+        if (services == null || services.isEmpty()) return "";
+        StringBuilder out = new StringBuilder();
+        for (String service : services) {
+            if (clean(service).isEmpty()) continue;
+            if (out.length() > 0) out.append(", ");
+            out.append(service);
+        }
+        return out.toString();
     }
 
     private View orderCard(DriverOrder order, boolean active) {
