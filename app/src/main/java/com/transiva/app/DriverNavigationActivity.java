@@ -238,6 +238,8 @@ public class DriverNavigationActivity extends Activity {
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Navigation must remain visible while the driver is actively using it.
+        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         // Navigation remains portrait both in full screen and when returning from PiP.
         try {

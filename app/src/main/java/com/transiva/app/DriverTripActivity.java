@@ -121,6 +121,9 @@ public class DriverTripActivity extends Activity {
 
     @Override protected void onCreate(Bundle b){
         super.onCreate(b);
+        // Keep navigation/trip information visible while this Activity is in front.
+        // Android automatically releases this flag when the Activity window is gone.
+        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         try{
             getWindow().setStatusBarColor(Color.WHITE);
             getWindow().setNavigationBarColor(Color.WHITE);

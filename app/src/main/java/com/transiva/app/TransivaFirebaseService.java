@@ -10,6 +10,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.media.AudioAttributes;
 import android.os.Build;
+import android.os.PowerManager;
 import android.provider.Settings;
 import android.text.TextUtils;
 
@@ -336,6 +337,11 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
             );
         }
 
+        // For operationally urgent pushes, briefly wake the display so the
+        // heads-up notification can be noticed. Full-screen UI remains reserved
+        // for genuine incoming calls, matching modern Android restrictions.
+        wakeScreenForPriority(type, incomingCallNotification);
+
         if (
                 Build.VERSION.SDK_INT >= 33
                         && ContextCompat.checkSelfPermission(
@@ -354,6 +360,41 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                 && data != null
                 && "incoming_call".equalsIgnoreCase(first(data.get("event"), ""))) {
             openIncomingCallScreen(intent);
+        }
+    }
+
+    private void wakeScreenForPriority(String type, boolean incomingCall) {
+        type = first(type, "").toLowerCase();
+
+        // Promotions, ordinary broadcasts and wallet updates should not wake a
+        // sleeping phone. Wake only events that can require an immediate driver
+        // response: calls, SOS/emergency, new/updated orders, and customer chat.
+        boolean shouldWake = incomingCall
+                || "driver_emergency".equals(type)
+                || isOrder(type)
+                || isChat(type);
+
+        if (!shouldWake) return;
+
+        long timeoutMs = incomingCall ? 12_000L
+                : ("driver_emergency".equals(type) ? 10_000L
+                : (isOrder(type) ? 8_000L : 5_000L));
+
+        try {
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            if (pm == null) return;
+
+            // ACQUIRE_CAUSES_WAKEUP is intentionally used only for urgent FCM.
+            // It is best-effort on newer Android versions/OEM power managers.
+            @SuppressWarnings("deprecation")
+            PowerManager.WakeLock wakeLock = pm.newWakeLock(
+                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK
+                            | PowerManager.ACQUIRE_CAUSES_WAKEUP
+                            | PowerManager.ON_AFTER_RELEASE,
+                    "transiva:urgent_fcm_wake"
+            );
+            wakeLock.acquire(timeoutMs);
+        } catch (Throwable ignored) {
         }
     }
 
@@ -776,6 +817,23 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                         "Accept",
                         "application/json"
                 );
+
+                SessionManager secureSession = new SessionManager(this);
+                String authToken = safe(secureSession.getToken());
+                if (!authToken.isEmpty()) {
+                    connection.setRequestProperty(
+                            "Authorization",
+                            "Bearer " + authToken
+                    );
+                    connection.setRequestProperty(
+                            "X-Device-UUID",
+                            DeviceIdentityManager.getInstallationUuid(this)
+                    );
+                    connection.setRequestProperty(
+                            "X-App-Scope",
+                            "driver"
+                    );
+                }
 
                 try (
                         OutputStream output =
