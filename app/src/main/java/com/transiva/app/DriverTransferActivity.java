@@ -70,7 +70,24 @@ public class DriverTransferActivity extends Activity {
     }
 
     private JSONObject baseRequest() throws Exception { JSONObject o=new JSONObject(); o.put("user_id",parse(session.getUserId())); o.put("username",session.getUsername()); return o; }
-    private JSONObject post(String path,JSONObject body)throws Exception{ HttpURLConnection c=(HttpURLConnection)new URL(BASE+path).openConnection(); c.setConnectTimeout(15000);c.setReadTimeout(20000);c.setRequestMethod("POST");c.setDoOutput(true);c.setRequestProperty("Content-Type","application/json; charset=UTF-8"); byte[] b=body.toString().getBytes(StandardCharsets.UTF_8); try(OutputStream os=c.getOutputStream()){os.write(b);} InputStream in=c.getResponseCode()>=400?c.getErrorStream():c.getInputStream(); StringBuilder s=new StringBuilder(); try(BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8))){String l;while((l=r.readLine())!=null)s.append(l);} c.disconnect(); return new JSONObject(s.toString()); }
+    private JSONObject post(String path,JSONObject body)throws Exception{
+        HttpURLConnection c=(HttpURLConnection)new URL(BASE+path).openConnection();
+        c.setConnectTimeout(15000);c.setReadTimeout(20000);c.setRequestMethod("POST");c.setDoOutput(true);
+        c.setRequestProperty("Content-Type","application/json; charset=UTF-8");
+        c.setRequestProperty("Accept","application/json");
+        String token=session.getToken();
+        if(token!=null && !token.trim().isEmpty()) c.setRequestProperty("Authorization","Bearer "+token.trim());
+        c.setRequestProperty("X-Device-UUID",DeviceIdentityManager.getInstallationUuid(this));
+        c.setRequestProperty("X-App-Scope","driver");
+        byte[] b=body.toString().getBytes(StandardCharsets.UTF_8);
+        try(OutputStream os=c.getOutputStream()){os.write(b);}
+        InputStream in=c.getResponseCode()>=400?c.getErrorStream():c.getInputStream();
+        StringBuilder response=new StringBuilder();
+        if(in!=null){try(BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8))){String l;while((l=r.readLine())!=null)response.append(l);}}
+        c.disconnect();
+        if(response.length()==0) throw new IOException("Respons server kosong");
+        return new JSONObject(response.toString());
+    }
     private void loading(boolean x){submit.setEnabled(!x);submit.setText(x?"Memproses...":"Periksa & Transfer");}
     private void info(String m){new AlertDialog.Builder(this).setTitle("Informasi").setMessage(m==null?"Terjadi kesalahan":m).setPositiveButton("OK",null).show();}
     private LinearLayout card(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);v.setPadding(dp(16),dp(16),dp(16),dp(16));GradientDrawable g=new GradientDrawable();g.setColor(Color.WHITE);g.setCornerRadius(dp(18));v.setBackground(g);v.setElevation(dp(2));return v;}

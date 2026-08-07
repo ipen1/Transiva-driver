@@ -284,8 +284,8 @@ public class DriverWithdrawActivity extends Activity {
         setBusy(true, show);
         DriverNetworkExecutor.execute(() -> {
             String balanceJson = "", wdJson = "";
-            try { balanceJson = get(SERVER + "getBalance.php?username=" + enc(username) + "&v=" + System.currentTimeMillis()); } catch (Exception ignored) {}
-            try { wdJson = get(SERVER + "getDriverWithdrawals.php?username=" + enc(username) + "&v=" + System.currentTimeMillis()); } catch (Exception ignored) {}
+            try { balanceJson = get(SERVER + "driver_wallet_summary.php?v=" + System.currentTimeMillis()); } catch (Exception ignored) {}
+            try { wdJson = get(SERVER + "getDriverWithdrawals.php?v=" + System.currentTimeMillis()); } catch (Exception ignored) {}
             final String fb = balanceJson, fw = wdJson;
             mainHandler.post(() -> {
                 setBusy(false, false);
@@ -417,6 +417,7 @@ public class DriverWithdrawActivity extends Activity {
                 p.put("account_number", accNo);
                 p.put("account_name", accName);
                 p.put("note", note);
+                p.put("request_id", "WD-" + System.currentTimeMillis() + "-" + java.util.UUID.randomUUID().toString().substring(0, 8));
                 JSONObject res = post(SERVER + "requestDriverWithdraw.php", p);
                 boolean ok = res.optBoolean("success", false);
                 String msg = firstNonEmpty(res.optString("message"), ok ? "WD berhasil diajukan" : "WD gagal");
@@ -451,10 +452,20 @@ public class DriverWithdrawActivity extends Activity {
         if (backBtn != null) backBtn.setEnabled(!b);
     }
 
+    private void applySecurityHeaders(HttpURLConnection c) {
+        String token = sessionManager == null ? "" : sessionManager.getToken();
+        if (token != null && !token.trim().isEmpty()) {
+            c.setRequestProperty("Authorization", "Bearer " + token.trim());
+        }
+        c.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(this));
+        c.setRequestProperty("X-App-Scope", "driver");
+    }
+
     private String get(String link) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(link).openConnection();
         c.setConnectTimeout(TIMEOUT_MS); c.setReadTimeout(TIMEOUT_MS);
         c.setRequestMethod("GET"); c.setRequestProperty("Accept", "application/json");
+        applySecurityHeaders(c);
         InputStream is = c.getResponseCode() >= 400 ? c.getErrorStream() : c.getInputStream();
         String body = read(is); c.disconnect(); return body;
     }
@@ -465,6 +476,9 @@ public class DriverWithdrawActivity extends Activity {
         c.setRequestMethod("POST"); c.setDoOutput(true);
         c.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
         c.setRequestProperty("Accept", "application/json");
+        applySecurityHeaders(c);
+        String requestId = payload == null ? "" : payload.optString("request_id", "");
+        if (!requestId.isEmpty()) c.setRequestProperty("Idempotency-Key", requestId);
         OutputStream os = c.getOutputStream();
         BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(os, StandardCharsets.UTF_8));
         bw.write(payload == null ? "{}" : payload.toString()); bw.flush(); bw.close(); os.close();
