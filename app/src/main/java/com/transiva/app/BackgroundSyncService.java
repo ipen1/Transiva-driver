@@ -47,7 +47,7 @@ import java.net.URL;
  * - DriverDashboardActivity.java untuk sesi driver
  * - SessionManager.java
  * - LocationService.java
- * - server/updateDriverLocation.php
+ * - server/driver_update_location_native.php
  */
 
 public class BackgroundSyncService extends Service {
@@ -73,10 +73,11 @@ public class BackgroundSyncService extends Service {
             "https://transiva.my.id/";
 
     private static final String UPDATE_DRIVER_LOCATION_ENDPOINT =
-            "server/updateDriverLocation.php";
+            "server/driver_update_location_native.php";
 
-    private static final long NORMAL_SYNC_INTERVAL = 15000L;
-    private static final long FAST_RETRY_INTERVAL = 7000L;
+    private static final long IDLE_SYNC_INTERVAL = 25000L;
+    private static final long ACTIVE_SYNC_INTERVAL = 8000L;
+    private static final long FAST_RETRY_INTERVAL = 10000L;
 
     private static final int CONNECT_TIMEOUT = 15000;
     private static final int READ_TIMEOUT = 20000;
@@ -104,10 +105,9 @@ public class BackgroundSyncService extends Service {
                 doSync();
             } catch (Exception ignored) {}
 
-            long nextDelay =
-                    failCount > 0
-                            ? FAST_RETRY_INTERVAL
-                            : NORMAL_SYNC_INTERVAL;
+            long nextDelay = failCount > 0
+                    ? FAST_RETRY_INTERVAL
+                    : adaptiveSyncInterval();
 
             try {
                 if (handler != null && isRunning) {
@@ -449,6 +449,15 @@ public class BackgroundSyncService extends Service {
         }
     }
 
+    private long adaptiveSyncInterval() {
+        try {
+            String orderId = safe(sessionManager.get("current_order_id"));
+            return orderId.isEmpty() ? IDLE_SYNC_INTERVAL : ACTIVE_SYNC_INTERVAL;
+        } catch (Exception ignored) {
+            return IDLE_SYNC_INTERVAL;
+        }
+    }
+
     private boolean hasValidLoginSession() {
         try {
             if (sessionManager == null) {
@@ -558,6 +567,13 @@ public class BackgroundSyncService extends Service {
                     "X-Transiva-Client",
                     "Android-BackgroundSync"
             );
+
+            String token = safe(sessionManager.getToken());
+            if (!token.isEmpty()) {
+                conn.setRequestProperty("Authorization", "Bearer " + token);
+            }
+            conn.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(this));
+            conn.setRequestProperty("X-App-Scope", "driver");
 
             BufferedWriter writer =
                     new BufferedWriter(

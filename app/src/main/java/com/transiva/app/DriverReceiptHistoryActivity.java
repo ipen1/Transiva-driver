@@ -123,7 +123,7 @@ public class DriverReceiptHistoryActivity extends Activity {
         listBox.addView(emptyBox("🧾", "Memuat riwayat transaksi...", ""));
         new Thread(() -> {
             String body = "";
-            try { body = get(API_URL + "?driver=" + enc(username) + "&v=" + System.currentTimeMillis()); } catch (Exception ignored) {}
+            try { body = get(API_URL + "?v=" + System.currentTimeMillis()); } catch (Exception ignored) {}
             String finalBody = body;
             mainHandler.post(() -> {
                 progressBar.setVisibility(View.GONE);
@@ -307,6 +307,10 @@ public class DriverReceiptHistoryActivity extends Activity {
         c.setReadTimeout(TIMEOUT_MS);
         c.setRequestMethod("GET");
         c.setRequestProperty("Accept", "application/json");
+        String token = session == null ? "" : firstNonEmpty(session.getToken());
+        if (!token.isEmpty()) c.setRequestProperty("Authorization", "Bearer " + token);
+        c.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(this));
+        c.setRequestProperty("X-App-Scope", "driver");
         InputStream is = c.getResponseCode() >= 400 ? c.getErrorStream() : c.getInputStream();
         String r = read(is);
         c.disconnect();

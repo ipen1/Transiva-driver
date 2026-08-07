@@ -54,8 +54,10 @@ public class DriverDashboardActivity extends Activity
         implements DriverDashboardContract.View {
 
     private static final int REQ_LOCATION = 8702;
-    private static final long REFRESH_MS = 5000L;
-    private static final long COUNTDOWN_TICK_MS = 250L;
+    private static final long IDLE_REFRESH_MS = 10000L;
+    private static final long ACTIVE_REFRESH_MS = 8000L;
+    private static final long OFFER_REFRESH_MS = 5000L;
+    private static final long COUNTDOWN_TICK_MS = 1000L;
     private static final long SERVER_DRIFT_TOLERANCE_MS = 2500L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -109,9 +111,18 @@ public class DriverDashboardActivity extends Activity
     private final Runnable refreshRunnable = new Runnable() {
         @Override public void run() {
             if (presenter != null) presenter.load(false);
-            handler.postDelayed(this, REFRESH_MS);
+            handler.postDelayed(this, adaptiveRefreshMs());
         }
     };
+
+    private long adaptiveRefreshMs() {
+        DriverDashboardState state = currentState;
+        if (state != null) {
+            if (state.offers != null && !state.offers.isEmpty()) return OFFER_REFRESH_MS;
+            if (state.activeOrders != null && !state.activeOrders.isEmpty()) return ACTIVE_REFRESH_MS;
+        }
+        return IDLE_REFRESH_MS;
+    }
 
     private final Runnable countdownRunnable = new Runnable() {
         @Override public void run() {
@@ -145,7 +156,7 @@ public class DriverDashboardActivity extends Activity
         if (!validSession()) return;
         handler.removeCallbacks(refreshRunnable);
         handler.removeCallbacks(countdownRunnable);
-        handler.postDelayed(refreshRunnable, REFRESH_MS);
+        handler.postDelayed(refreshRunnable, adaptiveRefreshMs());
         handler.post(countdownRunnable);
         if (presenter != null) presenter.load(false);
 

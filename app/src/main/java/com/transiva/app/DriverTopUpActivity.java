@@ -48,6 +48,7 @@ public class DriverTopUpActivity extends Activity {
     private static final int MIN_DEPOSIT = 10000;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private SessionManager session;
     private LinearLayout root;
     private ProgressBar progressBar;
     private EditText amountInput;
@@ -74,7 +75,7 @@ public class DriverTopUpActivity extends Activity {
 
     private void loadSession() {
         try {
-            SessionManager session = new SessionManager(this);
+            session = new SessionManager(this);
             username = firstNonEmpty(session.getUsername(), session.getName());
             role = firstNonEmpty(session.getRole(), "driver");
         } catch (Exception ignored) {}
@@ -270,6 +271,7 @@ public class DriverTopUpActivity extends Activity {
             conn = (HttpURLConnection)new URL(BASE_URL + "server/uploadDeposit.php").openConnection();
             conn.setRequestMethod("POST"); conn.setConnectTimeout(TIMEOUT_MS); conn.setReadTimeout(TIMEOUT_MS); conn.setDoInput(true); conn.setDoOutput(true); conn.setUseCaches(false);
             conn.setRequestProperty("Accept", "application/json"); conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+            String token = firstNonEmpty(session == null ? "" : session.getToken()); if (!token.isEmpty()) conn.setRequestProperty("Authorization", "Bearer " + token); conn.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(this)); conn.setRequestProperty("X-App-Scope", "driver");
             OutputStream out = conn.getOutputStream();
             writeField(out, boundary, "username", username); writeField(out, boundary, "role", "driver"); writeField(out, boundary, "amount", String.valueOf(amount)); writeFile(out, boundary, "proof", getFileName(fileUri), fileUri);
             out.write(("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8)); out.flush(); out.close();
@@ -282,14 +284,14 @@ public class DriverTopUpActivity extends Activity {
         setLoading(true);
         DriverNetworkExecutor.execute(() -> {
             String bal = rupiah(0), pending = "Rp 0";
-            try { JSONObject json = getJson(BASE_URL + "server/driver_get_dashboard.php?username=" + Uri.encode(username) + "&v=" + System.currentTimeMillis()); if (json.optBoolean("success", false)) { bal = rupiah(json.optDouble("balance", json.optDouble("saldo", 0))); pending = rupiah(json.optDouble("pending_deposit", 0)); } }
-            catch (Exception e) { try { JSONObject json = getJson(BASE_URL + "server/getBalance.php?username=" + Uri.encode(username)); if (json.optBoolean("success", false)) bal = rupiah(json.optDouble("balance", 0)); } catch (Exception ignored) {} }
+            try { JSONObject json = getJson(BASE_URL + "server/driver_wallet_summary.php?username=" + Uri.encode(username) + "&v=" + System.currentTimeMillis()); if (json.optBoolean("success", false)) { bal = rupiah(json.optDouble("balance", json.optDouble("saldo", 0))); pending = rupiah(json.optDouble("pending_deposit", 0)); } }
+            catch (Exception e) { try { JSONObject json = getJson(BASE_URL + "server/driver_wallet_summary.php?username=" + Uri.encode(username)); if (json.optBoolean("success", false)) bal = rupiah(json.optDouble("balance", 0)); } catch (Exception ignored) {} }
             String finalBal = bal, finalPending = pending;
             mainHandler.post(() -> { setLoading(false); if (balanceText != null) balanceText.setText(finalBal); if (pendingText != null) pendingText.setText("Pending deposit: " + finalPending); });
         });
     }
 
-    private JSONObject getJson(String urlText) throws Exception { HttpURLConnection conn = null; try { conn = (HttpURLConnection)new URL(urlText).openConnection(); conn.setRequestMethod("GET"); conn.setConnectTimeout(TIMEOUT_MS); conn.setReadTimeout(TIMEOUT_MS); conn.setRequestProperty("Accept", "application/json"); int code = conn.getResponseCode(); InputStream is = code >= 200 && code < 300 ? conn.getInputStream() : conn.getErrorStream(); String body = readStream(is).trim(); return body.length() == 0 ? new JSONObject() : new JSONObject(body); } finally { if (conn != null) conn.disconnect(); } }
+    private JSONObject getJson(String urlText) throws Exception { HttpURLConnection conn = null; try { conn = (HttpURLConnection)new URL(urlText).openConnection(); conn.setRequestMethod("GET"); conn.setConnectTimeout(TIMEOUT_MS); conn.setReadTimeout(TIMEOUT_MS); conn.setRequestProperty("Accept", "application/json"); if (urlText.contains("transiva.my.id/server/")) { String token = firstNonEmpty(session == null ? "" : session.getToken()); if (!token.isEmpty()) conn.setRequestProperty("Authorization", "Bearer " + token); conn.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(this)); conn.setRequestProperty("X-App-Scope", "driver"); } int code = conn.getResponseCode(); InputStream is = code >= 200 && code < 300 ? conn.getInputStream() : conn.getErrorStream(); String body = readStream(is).trim(); return body.length() == 0 ? new JSONObject() : new JSONObject(body); } finally { if (conn != null) conn.disconnect(); } }
     private void writeField(OutputStream out, String boundary, String name, String value) throws Exception { String part = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + name + "\"\r\n\r\n" + firstNonEmpty(value, "") + "\r\n"; out.write(part.getBytes(StandardCharsets.UTF_8)); }
     private void writeFile(OutputStream out, String boundary, String fieldName, String fileName, Uri uri) throws Exception { String mime = firstNonEmpty(getContentResolver().getType(uri), "image/jpeg"); if (!mime.startsWith("image/")) mime = "image/jpeg"; String header = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + fieldName + "\"; filename=\"" + sanitizeFileName(fileName) + "\"\r\nContent-Type: " + mime + "\r\n\r\n"; out.write(header.getBytes(StandardCharsets.UTF_8)); InputStream in = getContentResolver().openInputStream(uri); if (in == null) throw new Exception("File tidak bisa dibaca"); byte[] buffer = new byte[8192]; int len; long total = 0; while ((len = in.read(buffer)) != -1) { total += len; if (total > 5L * 1024L * 1024L) { in.close(); throw new Exception("Ukuran maksimal 5MB"); } out.write(buffer, 0, len); } in.close(); out.write("\r\n".getBytes(StandardCharsets.UTF_8)); }
     private String readStream(InputStream stream) throws Exception { if (stream == null) return ""; BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8)); StringBuilder sb = new StringBuilder(); String line; while ((line = reader.readLine()) != null) sb.append(line); reader.close(); return sb.toString(); }

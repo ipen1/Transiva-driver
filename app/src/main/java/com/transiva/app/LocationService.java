@@ -38,7 +38,8 @@ public class LocationService extends Service {
     private static final String TAG = "DriverLocationService";
     private static final String CHANNEL_ID = "driver_location_native";
     private static final int NOTIFICATION_ID = 2206;
-    private static final long MIN_INTERVAL = 2500L;
+    private static final long ACTIVE_INTERVAL = 5000L;
+    private static final long IDLE_INTERVAL = 12000L;
     private static final float MIN_DISTANCE = 1f;
     private static final long MAX_AGE = 60000L;
     private static final float MAX_ACCURACY = 150f;
@@ -49,7 +50,7 @@ public class LocationService extends Service {
     private final ExecutorService sender = Executors.newSingleThreadExecutor();
     private long lastSentAt;
     private Location lastSent;
-    private final SmoothLocationEngine smoothLocation = new SmoothLocationEngine(2500L);
+    private final SmoothLocationEngine smoothLocation = new SmoothLocationEngine(5000L);
 
     private final LocationListener listener = new LocationListener() {
         @Override public void onLocationChanged(Location location) {
@@ -103,6 +104,15 @@ public class LocationService extends Service {
         return START_STICKY;
     }
 
+    private long desiredInterval() {
+        try {
+            String orderId = session == null ? "" : session.get("current_order_id");
+            return orderId == null || orderId.trim().isEmpty() ? IDLE_INTERVAL : ACTIVE_INTERVAL;
+        } catch (Exception ignored) {
+            return IDLE_INTERVAL;
+        }
+    }
+
     private boolean canTrack() {
         return session.isLoggedIn()
                 && "driver".equals(session.normalizeRole(session.getRole()))
@@ -132,7 +142,7 @@ public class LocationService extends Service {
             if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                 locationManager.requestLocationUpdates(
                         LocationManager.GPS_PROVIDER,
-                        MIN_INTERVAL,
+                        desiredInterval(),
                         MIN_DISTANCE,
                         listener
                 );
@@ -145,7 +155,7 @@ public class LocationService extends Service {
             if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
                 locationManager.requestLocationUpdates(
                         LocationManager.NETWORK_PROVIDER,
-                        MIN_INTERVAL,
+                        desiredInterval(),
                         MIN_DISTANCE,
                         listener
                 );
@@ -168,6 +178,7 @@ public class LocationService extends Service {
 
         Location accepted = fix.location;
         long now = System.currentTimeMillis();
+        if (lastSentAt > 0L && now - lastSentAt < desiredInterval()) return;
         lastSentAt = now;
         lastSent = new Location(accepted);
         session.saveLastLocation(
