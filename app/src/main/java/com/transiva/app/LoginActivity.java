@@ -633,6 +633,22 @@ public class LoginActivity extends Activity {
                 connection = (HttpURLConnection)
                         new URL(SAVE_FCM_URL).openConnection();
 
+                String authToken = new SessionManager(this).getToken();
+                if (authToken != null && !authToken.trim().isEmpty()) {
+                    connection.setRequestProperty(
+                            "Authorization",
+                            "Bearer " + authToken.trim()
+                    );
+                    connection.setRequestProperty(
+                            "X-Device-UUID",
+                            DeviceIdentityManager.getInstallationUuid(this)
+                    );
+                    connection.setRequestProperty(
+                            "X-App-Scope",
+                            "driver"
+                    );
+                }
+
                 connection.setRequestMethod("POST");
                 connection.setConnectTimeout(TIMEOUT_MS);
                 connection.setReadTimeout(TIMEOUT_MS);
