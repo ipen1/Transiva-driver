@@ -18,10 +18,13 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLException;
 
 public final class DriverApiClient {
     public static final class Result {
@@ -130,7 +133,20 @@ public final class DriverApiClient {
         } catch (Exception e) {
             Log.e(TAG, method + " " + endpoint + " gagal", e);
             TransivaDriverCrashReporter.nonFatal("driver_api_" + endpoint, e);
-            throw new ApiException(0, "NETWORK_ERROR", "Tidak dapat terhubung ke server.", e);
+
+            String code = "NETWORK_ERROR";
+            String message = "Tidak dapat terhubung ke server.";
+            if (e instanceof UnknownHostException) {
+                code = "DNS_ERROR";
+                message = "Alamat server tidak dapat ditemukan. Periksa internet atau DNS.";
+            } else if (e instanceof SocketTimeoutException) {
+                code = "NETWORK_TIMEOUT";
+                message = "Server terlalu lama merespons. Silakan coba lagi.";
+            } else if (e instanceof SSLException) {
+                code = "TLS_ERROR";
+                message = "Koneksi HTTPS ke server gagal.";
+            }
+            throw new ApiException(0, code, message, e);
         } finally {
             if (connection != null) connection.disconnect();
         }
