@@ -492,6 +492,11 @@ public class DriverTripActivity extends Activity {
         Button nav = outline("➤ Navigasi"); nav.setOnClickListener(v -> openNativeNavigation(!isDeliveryPhase(status())));
         LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(0, dp(50), 1); np.setMargins(dp(8),0,0,0); quick.addView(nav, np);
         LinearLayout.LayoutParams qp = new LinearLayout.LayoutParams(-1,-2); qp.setMargins(0,dp(10),0,0); c.addView(quick, qp);
+        if (isFoodOrder()) {
+            Button merchantChat = outline("🏪 Chat Merchant");
+            merchantChat.setOnClickListener(v -> openMerchantChat());
+            c.addView(merchantChat, btnLp(8));
+        }
         add(c,0,0,0,dp(12));
     }
     private void startLocationWatch(){
@@ -903,6 +908,22 @@ public class DriverTripActivity extends Activity {
             mainHandler.post(()->{setLoading(false); if(ok){ try{ if(!r.optBoolean("approval_required",false)) order.put("price",value); }catch(Exception ignored){} info("Total Pembayaran",m); renderOrder(); refreshButtons(); } else info("Gagal",m);});
         }catch(Exception e){mainHandler.post(()->{setLoading(false);info("Gagal","Koneksi server bermasalah.");});}});
     }
+
+    private boolean isFoodOrder(){
+        if(order == null) return false;
+        String type = first(order.optString("order_type"), order.optString("service_name"), "").toLowerCase(Locale.US);
+        return type.contains("food") || type.contains("transfood");
+    }
+
+    private void openMerchantChat(){
+        if(order == null || !isFoodOrder()) return;
+        Intent i = new Intent(this, DriverMerchantChatActivity.class);
+        i.putExtra("order_id", orderId());
+        i.putExtra("order_db_id", internalId());
+        i.putExtra("merchant_name", first(order.optString("restaurant_name"), pickupAddress(), "Merchant"));
+        startActivity(i);
+    }
+
     private void openChat(){
         try{
             // Gunakan room_id asli dari server agar identik dengan room yang dibuka
