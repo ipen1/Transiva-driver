@@ -39,7 +39,7 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
     private static final String CH_WALLET =
             "transiva_wallet_channel";
     private static final String CH_CHAT =
-            "transiva_chat_channel";
+            "transiva_chat_channel_v2";
     private static final String CH_CALL =
             "transiva_call_channel_v3";
     private static final String CH_PROMO =
@@ -318,6 +318,8 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                 && data != null
                 && "incoming_call".equalsIgnoreCase(first(data.get("event"), ""));
 
+        boolean merchantDriverChatNotification = isMerchantDriverChat(type, data);
+
         if (incomingCallNotification) {
             // Full-screen is reserved strictly for a new incoming call. Accepted,
             // SDP and ICE events must never relaunch the active call Activity.
@@ -335,6 +337,11 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                             | NotificationCompat.DEFAULT_VIBRATE
                             | NotificationCompat.DEFAULT_LIGHTS
             );
+            if (merchantDriverChatNotification) {
+                builder.setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                        .setPriority(NotificationCompat.PRIORITY_MAX)
+                        .setFullScreenIntent(pendingIntent, true);
+            }
         }
 
         // For operationally urgent pushes, briefly wake the display so the
@@ -441,6 +448,16 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
             }
             intent.putExtra("order_id", orderId);
             intent.putExtra("from_fcm", true);
+            return intent;
+        }
+
+        if (isMerchantDriverChat(type, data)) {
+            Intent intent = new Intent(this, DriverMerchantChatActivity.class);
+            intent.putExtra("order_id", orderId);
+            intent.putExtra("order_db_id", data != null ? first(data.get("order_db_id"), "") : "");
+            intent.putExtra("merchant_name", data != null ? first(data.get("restaurant_name"), data.get("merchant_name"), "Merchant") : "Merchant");
+            intent.putExtra("from_fcm", true);
+            if (data != null) for (Map.Entry<String,String> entry : data.entrySet()) intent.putExtra(entry.getKey(), entry.getValue());
             return intent;
         }
 
@@ -657,6 +674,13 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
         }
 
         return NotificationCompat.CATEGORY_MESSAGE;
+    }
+
+    private boolean isMerchantDriverChat(String type, Map<String, String> data) {
+        String signal = first(type, "").toLowerCase();
+        if (data != null) signal += " " + first(data.get("event"), "").toLowerCase() + " " + first(data.get("screen"), "").toLowerCase();
+        return signal.contains("merchant_driver_chat") || signal.contains("driver_merchant_chat")
+                || (signal.contains("chat") && signal.contains("merchant") && signal.contains("driver"));
     }
 
     private boolean isChat(String type) {
