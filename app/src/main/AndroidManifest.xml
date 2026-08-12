@@ -133,6 +133,7 @@
         <activity android:name=".LoginActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".PinActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
         <activity android:name=".ChangePinActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".DriverAccountSecurityActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".UpdateDownloadActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
 
         <activity android:name=".DriverEmergencyActivity" android:exported="false" android:screenOrientation="portrait" />
