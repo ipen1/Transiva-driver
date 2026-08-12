@@ -48,6 +48,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.maplibre.android.style.layers.PropertyFactory.lineCap;
 import static org.maplibre.android.style.layers.PropertyFactory.lineColor;
@@ -139,10 +142,25 @@ public class DriverNavigationActivity extends Activity {
     private long lastUploadAt;
     private long lastRouteRequestAt;
 
+    // Keep network work bounded. Location uploads are latest-value wins so a slow
+    // mobile connection can never create dozens of pending upload threads.
+    private final ExecutorService routeExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "transiva-route-worker");
+        t.setDaemon(true);
+        return t;
+    });
+    private final ExecutorService locationUploadExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "transiva-location-worker");
+        t.setDaemon(true);
+        return t;
+    });
+    private final AtomicBoolean locationUploadWorkerRunning = new AtomicBoolean(false);
+    private volatile Location pendingUploadLocation;
+
     private boolean styleReady;
     private boolean inPictureInPicture = false;
     private boolean mapViewResumed = false;
-    private boolean routeInFlight;
+    private volatile boolean routeInFlight;
     private boolean userAdjustedZoom = false;
 
     // Final navigation smoothing: frequent small interpolation steps instead of GPS-sized jumps.
@@ -235,6 +253,10 @@ public class DriverNavigationActivity extends Activity {
     private long lastInstructionUiAt = 0L;
     private int lastRenderedRouteIndex = -1;
     private long lastRouteLineUpdateAt = 0L;
+    private long lastMapRenderAt = 0L;
+    private long lastSpeedUiAt = 0L;
+    private long lastGpsAcceptedAt = 0L;
+    private float lastGpsAcceptedAccuracy = Float.MAX_VALUE;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -537,9 +559,14 @@ public class DriverNavigationActivity extends Activity {
 
             locationListener = new LocationListener() {
                 @Override public void onLocationChanged(Location raw) {
+                    if (!shouldAcceptProviderFix(raw)) return;
                     SmoothLocationEngine.Fix fix = smoothLocation.offer(raw);
                     if (fix == null) return;
                     Location l = fix.location;
+                    if (LocationManager.GPS_PROVIDER.equals(raw.getProvider())) {
+                        lastGpsAcceptedAt = SystemClock.elapsedRealtime();
+                        lastGpsAcceptedAccuracy = raw.hasAccuracy() ? raw.getAccuracy() : 50f;
+                    }
                     lastLocation = new Location(l);
                     driverLat = l.getLatitude();
                     driverLng = l.getLongitude();
@@ -568,6 +595,31 @@ public class DriverNavigationActivity extends Activity {
                         1300L, 0f, locationListener, Looper.getMainLooper());
             } catch (Exception ignored) {}
         } catch (Exception ignored) {}
+    }
+
+    /**
+     * Android may deliver GPS and NETWORK fixes almost back-to-back. When a fresh,
+     * reasonably accurate GPS fix exists, accepting the coarser network fix causes
+     * the classic left-right map jump. Prefer GPS for a short confidence window,
+     * but immediately allow network fallback when GPS becomes stale or weak.
+     */
+    private boolean shouldAcceptProviderFix(Location raw) {
+        if (raw == null) return false;
+        String provider = raw.getProvider();
+        if (LocationManager.GPS_PROVIDER.equals(provider)) return true;
+
+        if (LocationManager.NETWORK_PROVIDER.equals(provider)) {
+            long age = SystemClock.elapsedRealtime() - lastGpsAcceptedAt;
+            float networkAcc = raw.hasAccuracy() ? Math.max(1f, raw.getAccuracy()) : 100f;
+            if (lastGpsAcceptedAt > 0L && age < 5500L && lastGpsAcceptedAccuracy <= 45f) {
+                return false;
+            }
+            if (lastLocation != null && lastLocation.hasAccuracy() && age < 9000L &&
+                    networkAcc > Math.max(55f, lastLocation.getAccuracy() * 1.8f)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void stopLocationWatch() {
@@ -632,7 +684,19 @@ public class DriverNavigationActivity extends Activity {
             if (distance > 25f) alpha = Math.max(alpha, 0.20f);
             displayLat = easePosition(displayLat, target.lat, alpha);
             displayLng = easePosition(displayLng, target.lng, alpha);
-            updateNativePosition(false);
+
+            // MapLibre camera updates are expensive. Rendering every 16 ms can
+            // overload mid-range phones and actually look less smooth. Keep the
+            // physics loop at 60 Hz, but render the map at a stable ~30 FPS
+            // (PiP ~15 FPS), always using the newest interpolated position.
+            long now = SystemClock.elapsedRealtime();
+            boolean pip = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                    (inPictureInPicture || isInPictureInPictureMode());
+            long renderInterval = pip ? 66L : 33L;
+            if (now - lastMapRenderAt >= renderInterval) {
+                lastMapRenderAt = now;
+                updateNativePosition(false);
+            }
         }
 
         maybeUpdateRemainingRouteLine();
@@ -719,8 +783,12 @@ public class DriverNavigationActivity extends Activity {
         // already smoothed above, so direct native camera updates are continuous.
         map.moveCamera(CameraUpdateFactory.newCameraPosition(cp));
 
-        speedBadge.setText(String.format(Locale.US, "%.0f km/j\nRata-rata %.0f km/j",
-                currentSpeedKmh, averageSpeedKmh));
+        long uiNow = SystemClock.elapsedRealtime();
+        if (speedBadge != null && uiNow - lastSpeedUiAt >= 400L) {
+            lastSpeedUiAt = uiNow;
+            speedBadge.setText(String.format(Locale.US, "%.0f km/j\nRata-rata %.0f km/j",
+                    currentSpeedKmh, averageSpeedKmh));
+        }
     }
 
     private void updateSpeed(Location l) {
@@ -779,7 +847,7 @@ public class DriverNavigationActivity extends Activity {
 
         final double fromLat = driverLat, fromLng = driverLng;
 
-        new Thread(() -> {
+        routeExecutor.execute(() -> {
             try {
                 StableRouteEngine.Result r = StableRouteEngine.fetch(fromLat, fromLng, toLat, toLng);
                 main.post(() -> {
@@ -842,7 +910,7 @@ public class DriverNavigationActivity extends Activity {
                 routeInFlight = false;
                 main.post(() -> main.removeCallbacks(routeLoadingTick));
             }
-        }, "transiva-native-route").start();
+        });
     }
 
     private void showRouteLoading(int percent) {
@@ -1420,51 +1488,94 @@ public class DriverNavigationActivity extends Activity {
 
     private void uploadLocation(Location l) {
         long now = System.currentTimeMillis();
-        if (now - lastUploadAt < LOCATION_UPLOAD_MS) return;
+        if (now - lastUploadAt < LOCATION_UPLOAD_MS || l == null) return;
         lastUploadAt = now;
 
-        final double lat = l.getLatitude(), lng = l.getLongitude();
-        new Thread(() -> {
-            HttpURLConnection c = null;
-            try {
-                JSONObject body = new JSONObject();
-                body.put("username", username);
-                body.put("driver", username);
-                body.put("latitude", lat);
-                body.put("longitude", lng);
-                body.put("driver_type", vehicleType);
-                body.put("accuracy", l.hasAccuracy() ? l.getAccuracy() : JSONObject.NULL);
-                body.put("speed", currentSpeedKmh);
-                body.put("speed_kmh", currentSpeedKmh);
-                body.put("average_speed_kmh", averageSpeedKmh);
-                body.put("bearing", currentBearing);
-                body.put("location_time", l.getTime());
-                body.put("order_id", first(order.optString("order_id"), order.optString("id"), ""));
+        // Latest-value-wins queue: while one request is in flight, newer fixes
+        // replace the pending one instead of spawning extra threads.
+        pendingUploadLocation = new Location(l);
+        if (!locationUploadWorkerRunning.compareAndSet(false, true)) return;
 
-                c = (HttpURLConnection) new URL(LOCATION_API).openConnection();
-                c.setRequestMethod("POST");
-                c.setConnectTimeout(5000);
-                c.setReadTimeout(6000);
-                c.setRequestProperty("Content-Type", "application/json");
-                c.setRequestProperty("Accept", "application/json");
-                try {
-                    String token = session == null ? "" : session.getToken();
-                    if (token != null && !token.trim().isEmpty()) {
-                        c.setRequestProperty("Authorization", "Bearer " + token.trim());
-                        c.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(this));
-                        c.setRequestProperty("X-App-Scope", "driver");
-                    }
-                } catch (Exception ignored) {}
-                c.setDoOutput(true);
-                try (OutputStream os = c.getOutputStream()) {
-                    os.write(body.toString().getBytes(StandardCharsets.UTF_8));
+        locationUploadExecutor.execute(() -> {
+            try {
+                while (!Thread.currentThread().isInterrupted()) {
+                    Location next = pendingUploadLocation;
+                    pendingUploadLocation = null;
+                    if (next == null) break;
+                    performLocationUpload(next);
+                    if (pendingUploadLocation == null) break;
                 }
-                c.getResponseCode();
-            } catch (Exception ignored) {
             } finally {
-                if (c != null) c.disconnect();
+                locationUploadWorkerRunning.set(false);
+                // Close the small race where a new fix arrives between the final
+                // null check and resetting the worker flag.
+                if (pendingUploadLocation != null &&
+                        locationUploadWorkerRunning.compareAndSet(false, true)) {
+                    locationUploadExecutor.execute(this::drainPendingLocationUpload);
+                }
             }
-        }, "transiva-location-upload").start();
+        });
+    }
+
+    private void drainPendingLocationUpload() {
+        try {
+            while (!Thread.currentThread().isInterrupted()) {
+                Location next = pendingUploadLocation;
+                pendingUploadLocation = null;
+                if (next == null) break;
+                performLocationUpload(next);
+                if (pendingUploadLocation == null) break;
+            }
+        } finally {
+            locationUploadWorkerRunning.set(false);
+            if (pendingUploadLocation != null &&
+                    locationUploadWorkerRunning.compareAndSet(false, true)) {
+                locationUploadExecutor.execute(this::drainPendingLocationUpload);
+            }
+        }
+    }
+
+    private void performLocationUpload(Location l) {
+        final double lat = l.getLatitude(), lng = l.getLongitude();
+        HttpURLConnection c = null;
+        try {
+            JSONObject body = new JSONObject();
+            body.put("username", username);
+            body.put("driver", username);
+            body.put("latitude", lat);
+            body.put("longitude", lng);
+            body.put("driver_type", vehicleType);
+            body.put("accuracy", l.hasAccuracy() ? l.getAccuracy() : JSONObject.NULL);
+            body.put("speed", currentSpeedKmh);
+            body.put("speed_kmh", currentSpeedKmh);
+            body.put("average_speed_kmh", averageSpeedKmh);
+            body.put("bearing", currentBearing);
+            body.put("location_time", l.getTime());
+            body.put("order_id", first(order.optString("order_id"), order.optString("id"), ""));
+
+            c = (HttpURLConnection) new URL(LOCATION_API).openConnection();
+            c.setRequestMethod("POST");
+            c.setConnectTimeout(3500);
+            c.setReadTimeout(4500);
+            c.setRequestProperty("Content-Type", "application/json");
+            c.setRequestProperty("Accept", "application/json");
+            try {
+                String token = session == null ? "" : session.getToken();
+                if (token != null && !token.trim().isEmpty()) {
+                    c.setRequestProperty("Authorization", "Bearer " + token.trim());
+                    c.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(this));
+                    c.setRequestProperty("X-App-Scope", "driver");
+                }
+            } catch (Exception ignored) {}
+            c.setDoOutput(true);
+            try (OutputStream os = c.getOutputStream()) {
+                os.write(body.toString().getBytes(StandardCharsets.UTF_8));
+            }
+            c.getResponseCode();
+        } catch (Exception ignored) {
+        } finally {
+            if (c != null) c.disconnect();
+        }
     }
 
     private double targetLat() {
@@ -1672,6 +1783,9 @@ public class DriverNavigationActivity extends Activity {
         main.removeCallbacks(animationTick);
         main.removeCallbacks(routeRetryTick);
         main.removeCallbacksAndMessages(null);
+        routeExecutor.shutdownNow();
+        locationUploadExecutor.shutdownNow();
+        pendingUploadLocation = null;
         if (mapView != null) mapView.onDestroy();
         super.onDestroy();
     }
