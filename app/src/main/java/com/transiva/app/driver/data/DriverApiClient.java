@@ -5,6 +5,7 @@ import android.util.Log;
 
 import com.transiva.app.DeviceIdentityManager;
 import com.transiva.app.DriverNetworkExecutor;
+import com.transiva.app.DriverCircuitBreaker;
 import com.transiva.app.DriverRetryPolicy;
 import com.transiva.app.DriverTlsPinning;
 import com.transiva.app.SessionManager;
@@ -43,7 +44,7 @@ public final class DriverApiClient {
 
     private static final String TAG = "DriverApiClient";
     private static final String BASE_URL = "https://transiva.my.id/server/";
-    private static final int MAX_ATTEMPTS = 3;
+    private static final int MAX_ATTEMPTS = 4;
     private final SessionManager session;
     private final Context appContext;
 
@@ -57,20 +58,33 @@ public final class DriverApiClient {
     public Result post(String endpoint, JSONObject payload) throws ApiException { return requestWithRetry("POST", endpoint, payload); }
 
     private Result requestWithRetry(String method, String endpoint, JSONObject payload) throws ApiException {
+        if (!DriverCircuitBreaker.allowRequest()) {
+            throw new ApiException(503, "CIRCUIT_OPEN",
+                    "Server sedang dalam masa pemulihan. Coba lagi beberapa detik.", null);
+        }
+
         ApiException last = null;
         for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
             try {
-                return requestOnce(method, endpoint, payload);
+                Result result = requestOnce(method, endpoint, payload);
+                DriverCircuitBreaker.onSuccess();
+                return result;
             } catch (ApiException error) {
                 last = error;
+                DriverCircuitBreaker.onFailure(error.status);
+
                 int retryAfter = error.status == 429 ? parseRetryAfter(error.getMessage()) : 0;
                 long delay = DriverRetryPolicy.delayFor(error.status, retryAfter, attempt);
                 boolean retryable = error.status == 429
                         || ("GET".equals(method) && (error.status >= 500 || error.status == 0));
-                // POST tidak diulang pada timeout/5xx untuk mencegah transaksi ganda.
+
+                // POST lokasi/status tidak diulang otomatis agar transaksi tidak terduplikasi.
+                // Siklus lokasi berikutnya akan mencoba lagi setelah backoff/circuit pulih.
                 if (!retryable || attempt + 1 >= MAX_ATTEMPTS) throw error;
-                try { Thread.sleep(delay > 0 ? delay : Math.min(8000L, 1000L << attempt)); }
-                catch (InterruptedException interrupted) {
+
+                try {
+                    Thread.sleep(delay);
+                } catch (InterruptedException interrupted) {
                     Thread.currentThread().interrupt();
                     throw error;
                 }
