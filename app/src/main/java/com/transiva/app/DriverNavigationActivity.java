@@ -39,6 +39,7 @@ import org.maplibre.android.maps.MapView;
 import org.maplibre.android.maps.Style;
 import org.maplibre.android.style.layers.LineLayer;
 import org.maplibre.android.style.layers.Property;
+import org.maplibre.android.style.layers.SymbolLayer;
 import org.maplibre.android.style.sources.GeoJsonSource;
 
 import java.io.OutputStream;
@@ -57,6 +58,12 @@ import static org.maplibre.android.style.layers.PropertyFactory.lineColor;
 import static org.maplibre.android.style.layers.PropertyFactory.lineJoin;
 import static org.maplibre.android.style.layers.PropertyFactory.lineOpacity;
 import static org.maplibre.android.style.layers.PropertyFactory.lineWidth;
+import static org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap;
+import static org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement;
+import static org.maplibre.android.style.layers.PropertyFactory.iconImage;
+import static org.maplibre.android.style.layers.PropertyFactory.iconPitchAlignment;
+import static org.maplibre.android.style.layers.PropertyFactory.iconRotationAlignment;
+import static org.maplibre.android.style.layers.PropertyFactory.iconSize;
 import static org.maplibre.android.style.layers.Property.LINE_CAP_ROUND;
 import static org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND;
 
@@ -80,6 +87,10 @@ public class DriverNavigationActivity extends Activity {
     private static final String ROUTE_GLOW_LAYER = "transiva-route-glow";
     private static final String ROUTE_CASE_LAYER = "transiva-route-case";
     private static final String ROUTE_LAYER = "transiva-route-line";
+    private static final String VEHICLE_SOURCE = "transiva-vehicle-source";
+    private static final String VEHICLE_LAYER = "transiva-vehicle-layer";
+    private static final String VEHICLE_MOTOR_IMAGE = "transiva-vehicle-motor";
+    private static final String VEHICLE_CAR_IMAGE = "transiva-vehicle-car";
 
     private static final long LOCATION_UPLOAD_MS = 2500L;
     private static final long ROUTE_REFRESH_MS = 15000L;
@@ -108,7 +119,6 @@ public class DriverNavigationActivity extends Activity {
     private MapView mapView;
     private MapLibreMap map;
     private Style style;
-    private Marker driverMarker;
     private Marker pickupMarker;
     private Marker deliveryMarker;
 
@@ -242,7 +252,10 @@ public class DriverNavigationActivity extends Activity {
     private final Runnable animationTick = new Runnable() {
         @Override public void run() {
             animateTowardLatestFix();
-            main.postDelayed(this, VISUAL_FRAME_MS);
+            // Align the visual loop to Android VSYNC when the map view is available.
+            // This prevents Handler drift and uneven 16/32 ms frame pacing.
+            if (mapView != null) mapView.postOnAnimation(this);
+            else main.postDelayed(this, VISUAL_FRAME_MS);
         }
     };
 
@@ -254,6 +267,7 @@ public class DriverNavigationActivity extends Activity {
     private int lastRenderedRouteIndex = -1;
     private long lastRouteLineUpdateAt = 0L;
     private long lastMapRenderAt = 0L;
+    private long lastVisualFrameAt = 0L;
     private long lastSpeedUiAt = 0L;
     private long lastGpsAcceptedAt = 0L;
     private float lastGpsAcceptedAccuracy = Float.MAX_VALUE;
@@ -365,6 +379,7 @@ public class DriverNavigationActivity extends Activity {
                 style = s;
                 styleReady = true;
                 installRouteLayers();
+                installVehicleLayer();
                 installMarkers();
                 drawPendingRoute();
                 updateNativePosition(true);
@@ -489,6 +504,79 @@ public class DriverNavigationActivity extends Activity {
         } catch (Exception ignored) {}
     }
 
+    private void installVehicleLayer() {
+        if (style == null) return;
+        try {
+            if (style.getSource(VEHICLE_SOURCE) == null) {
+                style.addSource(new GeoJsonSource(VEHICLE_SOURCE, emptyFeatureCollection()));
+            }
+
+            addVehicleStyleImage(VEHICLE_MOTOR_IMAGE, "map_motor_top",
+                    android.R.drawable.ic_menu_directions);
+            addVehicleStyleImage(VEHICLE_CAR_IMAGE, "map_car_top",
+                    android.R.drawable.ic_menu_directions);
+
+            if (style.getLayer(VEHICLE_LAYER) == null) {
+                String imageName = vehicleType.equals("car") ? VEHICLE_CAR_IMAGE : VEHICLE_MOTOR_IMAGE;
+                SymbolLayer layer = new SymbolLayer(VEHICLE_LAYER, VEHICLE_SOURCE).withProperties(
+                        iconImage(imageName),
+                        iconSize(1.0f),
+                        iconAllowOverlap(true),
+                        iconIgnorePlacement(true),
+                        // The navigation camera is heading-up, so keeping the vehicle
+                        // viewport-aligned makes the nose remain naturally forward.
+                        iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT),
+                        iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT)
+                );
+                // addLayer() appends to the top of the style stack. That is deliberate:
+                // route glow/casing/line and basemap paint beneath the vehicle.
+                style.addLayer(layer);
+            }
+            updateVehicleSource();
+        } catch (Exception ignored) {}
+    }
+
+    private void addVehicleStyleImage(String imageName, String drawableName, int fallback) {
+        if (style == null) return;
+        try {
+            int id = getResources().getIdentifier(drawableName, "drawable", getPackageName());
+            if (id <= 0) id = fallback;
+            Bitmap raw = BitmapFactory.decodeResource(getResources(), id);
+            if (raw == null) return;
+            Bitmap scaled = Bitmap.createScaledBitmap(raw, dp(48), dp(48), true);
+            style.addImage(imageName, scaled);
+        } catch (Exception ignored) {}
+    }
+
+    private void updateVehicleSource() {
+        if (!styleReady || style == null) return;
+        double lat = displayInitialized ? displayLat : driverLat;
+        double lng = displayInitialized ? displayLng : driverLng;
+        if (!valid(lat, lng)) return;
+        try {
+            JSONObject geometry = new JSONObject();
+            geometry.put("type", "Point");
+            JSONArray coordinate = new JSONArray();
+            coordinate.put(lng);
+            coordinate.put(lat);
+            geometry.put("coordinates", coordinate);
+
+            JSONObject feature = new JSONObject();
+            feature.put("type", "Feature");
+            feature.put("properties", new JSONObject());
+            feature.put("geometry", geometry);
+
+            JSONObject collection = new JSONObject();
+            collection.put("type", "FeatureCollection");
+            JSONArray features = new JSONArray();
+            features.put(feature);
+            collection.put("features", features);
+
+            GeoJsonSource source = style.getSourceAs(VEHICLE_SOURCE);
+            if (source != null) source.setGeoJson(collection.toString());
+        } catch (Exception ignored) {}
+    }
+
     private void installMarkers() {
         if (map == null) return;
         IconFactory f = IconFactory.getInstance(this);
@@ -512,19 +600,10 @@ public class DriverNavigationActivity extends Activity {
             }
         } catch (Exception ignored) {}
 
-        // FIX ZOOM: marker driver adalah objek peta (LatLng), bukan overlay layar.
-        if (driverMarker == null) {
-            double lat = displayInitialized ? displayLat : driverLat;
-            double lng = displayInitialized ? displayLng : driverLng;
-            if (valid(lat, lng)) {
-                String drawable = vehicleType.equals("car") ? "map_car_top" : "map_motor_top";
-                Icon icon = iconFromDrawableScaled(f, drawable,
-                        android.R.drawable.ic_menu_directions, dp(48), dp(48));
-                driverMarker = map.addMarker(new MarkerOptions()
-                        .position(new LatLng(lat, lng))
-                        .icon(icon));
-            }
-        }
+        // Driver vehicle is rendered by a dedicated SymbolLayer, not a legacy Marker.
+        // Style layers have deterministic Z-order, so the vehicle always stays above
+        // the blue route instead of the route being painted over the motorcycle/car.
+        updateVehicleSource();
     }
 
     private Icon iconFromDrawable(IconFactory factory, String name, int fallback) {
@@ -680,8 +759,15 @@ public class DriverNavigationActivity extends Activity {
             // Adaptive smoothing: slow driving advances gently; fast driving catches
             // the visual target more quickly. Frame loop is ~60 FPS.
             double speedFactor = Math.max(0d, Math.min(1d, currentSpeedKmh / 55d));
-            float alpha = (float) (0.045d + 0.105d * speedFactor);
-            if (distance > 25f) alpha = Math.max(alpha, 0.20f);
+            long frameNow = SystemClock.elapsedRealtime();
+            double frameMs = lastVisualFrameAt <= 0L ? 16.67d
+                    : Math.max(8d, Math.min(50d, frameNow - lastVisualFrameAt));
+            lastVisualFrameAt = frameNow;
+            // Time-based exponential easing produces the same motion on 60/90/120 Hz
+            // screens and survives an occasional slow frame without visible snapping.
+            double tauMs = 350d - 155d * speedFactor;
+            float alpha = (float) (1d - Math.exp(-frameMs / tauMs));
+            if (distance > 25f) alpha = Math.max(alpha, 0.18f);
             displayLat = easePosition(displayLat, target.lat, alpha);
             displayLng = easePosition(displayLng, target.lng, alpha);
 
@@ -692,7 +778,7 @@ public class DriverNavigationActivity extends Activity {
             long now = SystemClock.elapsedRealtime();
             boolean pip = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
                     (inPictureInPicture || isInPictureInPictureMode());
-            long renderInterval = pip ? 66L : 33L;
+            long renderInterval = pip ? 66L : (currentSpeedKmh >= 20d ? 25L : 33L);
             if (now - lastMapRenderAt >= renderInterval) {
                 lastMapRenderAt = now;
                 updateNativePosition(false);
@@ -723,11 +809,9 @@ public class DriverNavigationActivity extends Activity {
         double lng = displayInitialized ? displayLng : driverLng;
         if (!valid(lat, lng)) return;
 
-        // FIX ZOOM: koordinat kendaraan selalu diperbarui sebagai LatLng marker.
-        // Jadi pinch zoom hanya mengubah proyeksi kamera; marker tetap menempel ke rute.
-        if (driverMarker != null) {
-            driverMarker.setPosition(new LatLng(lat, lng));
-        }
+        // Vehicle source belongs to a top-most SymbolLayer. Updating only one
+        // GeoJSON point is cheap and guarantees the icon remains above the route.
+        updateVehicleSource();
 
         double desiredBearing = routePoints.size() >= 2 && Double.isFinite(snappedBearing)
                 ? snappedBearing
@@ -1781,6 +1865,7 @@ public class DriverNavigationActivity extends Activity {
     @Override protected void onDestroy() {
         stopLocationWatch();
         main.removeCallbacks(animationTick);
+        if (mapView != null) mapView.removeCallbacks(animationTick);
         main.removeCallbacks(routeRetryTick);
         main.removeCallbacksAndMessages(null);
         routeExecutor.shutdownNow();
