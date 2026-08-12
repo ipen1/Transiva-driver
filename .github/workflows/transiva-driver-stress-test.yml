@@ -27,37 +27,51 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Validate secrets
+
+      - name: Validate load-test account
         env:
           USERS: ${{ inputs.load_level }}
           CONFIRM: ${{ inputs.high_load_confirmation }}
-          TOKEN: ${{ secrets.TRANSIVA_DRIVER_TOKEN }}
-          DEVICE: ${{ secrets.TRANSIVA_DRIVER_DEVICE_UUID }}
+          USERNAME: ${{ secrets.TRANSIVA_DRIVER_TEST_USERNAME }}
+          PASSWORD: ${{ secrets.TRANSIVA_DRIVER_TEST_PASSWORD }}
+          DEVICE: ${{ secrets.TRANSIVA_DRIVER_TEST_DEVICE_UUID }}
         run: |
           set -euo pipefail
-          [ -n "$TOKEN" ] || { echo "::error::Buat secret TRANSIVA_DRIVER_TOKEN"; exit 1; }
-          [ -n "$DEVICE" ] || { echo "::error::Buat secret TRANSIVA_DRIVER_DEVICE_UUID"; exit 1; }
+          [ -n "$USERNAME" ] || { echo "::error::Buat secret TRANSIVA_DRIVER_TEST_USERNAME"; exit 1; }
+          [ -n "$PASSWORD" ] || { echo "::error::Buat secret TRANSIVA_DRIVER_TEST_PASSWORD"; exit 1; }
+          [ -n "$DEVICE" ] || { echo "::error::Buat secret TRANSIVA_DRIVER_TEST_DEVICE_UUID"; exit 1; }
           if { [ "$USERS" = "100" ] || [ "$USERS" = "200" ]; } && [ "$CONFIRM" != "SAYA PAHAM" ]; then
             echo "::error::Ketik SAYA PAHAM untuk 100/200"; exit 1
           fi
+
       - id: config
         env: { USERS: "${{ inputs.load_level }}" }
         run: |
           case "$USERS" in 10) N=100;; 25|50|100|200) N=200;; *) exit 1;; esac
           echo "requests=$N" >> "$GITHUB_OUTPUT"
+
       - id: test
         continue-on-error: true
         env:
-          TOKEN: ${{ secrets.TRANSIVA_DRIVER_TOKEN }}
-          DEVICE: ${{ secrets.TRANSIVA_DRIVER_DEVICE_UUID }}
+          USERNAME: ${{ secrets.TRANSIVA_DRIVER_TEST_USERNAME }}
+          PASSWORD: ${{ secrets.TRANSIVA_DRIVER_TEST_PASSWORD }}
+          DEVICE: ${{ secrets.TRANSIVA_DRIVER_TEST_DEVICE_UUID }}
           USERS: ${{ inputs.load_level }}
           REQUESTS: ${{ steps.config.outputs.requests }}
         run: |
           set +e
-          python3 tools/driver_load_test_ci.py --base "https://transiva.my.id/server/" --token "$TOKEN" --device "$DEVICE" --users "$USERS" --requests "$REQUESTS"
+          python3 tools/driver_load_test_ci.py \
+            --base "https://transiva.my.id/server/" \
+            --username "$USERNAME" \
+            --password "$PASSWORD" \
+            --device "$DEVICE" \
+            --users "$USERS" \
+            --requests "$REQUESTS"
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
       - if: always()
         run: cat driver-stress-summary.md >> "$GITHUB_STEP_SUMMARY"
+
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -66,6 +80,7 @@ jobs:
             driver-stress-result.json
             driver-stress-summary.md
           retention-days: 14
+
       - if: always()
         env: { EXIT: "${{ steps.test.outputs.exit_code }}" }
         run: '[ "${EXIT:-1}" = "0" ] || exit 1'
