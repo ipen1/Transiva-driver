@@ -68,7 +68,7 @@ public class DriverChatRoomActivity extends Activity {
 
     private static final String IMAGE_PREFIX = "[[IMAGE]]";
     private static final String IMAGE_V2_PREFIX = "[[IMAGE2]]";
-    private static final long REFRESH_MS = 2500L;
+    private static final long REFRESH_MS = 15000L;
 
     private static final int REQUEST_GALLERY = 5101;
     private static final int REQUEST_INTERNAL_CAMERA = 5102;
@@ -127,7 +127,7 @@ public class DriverChatRoomActivity extends Activity {
         public void run() {
             if (!destroyed && !readOnly && chatVisible && hasWindowFocus()) {
                 loadMessages(false);
-                main.postDelayed(this, REFRESH_MS);
+                main.postDelayed(this, WaveLoadGuard.jitter(REFRESH_MS));
             }
         }
     };

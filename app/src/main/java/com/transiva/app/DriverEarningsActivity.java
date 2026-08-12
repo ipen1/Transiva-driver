@@ -26,7 +26,7 @@ import java.util.Locale;
 
 public class DriverEarningsActivity extends Activity {
 
-    private static final long REFRESH_INTERVAL_MS = 3000L;
+    private static final long REFRESH_INTERVAL_MS = 30000L;
 
     private SessionManager session;
     private TextView balanceText;
@@ -43,7 +43,7 @@ public class DriverEarningsActivity extends Activity {
         public void run() {
             if (!screenVisible) return;
             loadRealtimeWallet();
-            realtimeHandler.postDelayed(this, REFRESH_INTERVAL_MS);
+            realtimeHandler.postDelayed(this, WaveLoadGuard.jitter(REFRESH_INTERVAL_MS));
         }
     };
 

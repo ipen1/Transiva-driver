@@ -146,6 +146,31 @@ public class DriverSettingsActivity extends Activity {
         deviceCard.addView(resetDeviceButton, new LinearLayout.LayoutParams(-1, -2));
         root.addView(deviceCard);
 
+        TextView accountSection = text("Keamanan Akun", 13, "#0B3A78", true);
+        LinearLayout.LayoutParams accountSectionLp = new LinearLayout.LayoutParams(-1, -2);
+        accountSectionLp.setMargins(0, dp(18), 0, dp(8));
+        root.addView(accountSection, accountSectionLp);
+
+        LinearLayout accountCard = new LinearLayout(this);
+        accountCard.setOrientation(LinearLayout.VERTICAL);
+        accountCard.setPadding(dp(16), dp(8), dp(16), dp(8));
+        accountCard.setBackground(round("#FFFFFF", 20));
+        accountCard.setElevation(dp(2));
+
+        accountCard.addView(actionRow("Ubah Username", "Ganti username akun Driver", () -> {
+            Intent i = new Intent(this, DriverAccountSecurityActivity.class);
+            i.putExtra(DriverAccountSecurityActivity.EXTRA_MODE, DriverAccountSecurityActivity.MODE_USERNAME);
+            startActivity(i);
+        }));
+        accountCard.addView(actionRow("Ubah Password", "Ganti password login dan cabut sesi lain", () -> {
+            Intent i = new Intent(this, DriverAccountSecurityActivity.class);
+            i.putExtra(DriverAccountSecurityActivity.EXTRA_MODE, DriverAccountSecurityActivity.MODE_PASSWORD);
+            startActivity(i);
+        }));
+        accountCard.addView(actionRow("Ubah PIN", "Ganti PIN keamanan 6 digit", () ->
+                startActivity(new Intent(this, ChangePinActivity.class))));
+        root.addView(accountCard);
+
         TextView updateSection = text("Pembaruan", 13, "#0B3A78", true);
         LinearLayout.LayoutParams updateSectionLp = new LinearLayout.LayoutParams(-1, -2);
         updateSectionLp.setMargins(0, dp(18), 0, dp(8));
@@ -361,6 +386,20 @@ public class DriverSettingsActivity extends Activity {
         String clean = uuid.trim();
         if (clean.length() <= 8) return clean;
         return clean.substring(0, 4).toUpperCase() + "…" + clean.substring(clean.length() - 4).toUpperCase();
+    }
+
+    private LinearLayout actionRow(String title, String subtitle, Runnable action) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(10), 0, dp(10));
+        LinearLayout labels = new LinearLayout(this);
+        labels.setOrientation(LinearLayout.VERTICAL);
+        labels.addView(text(title, 15, "#0B3A78", true));
+        labels.addView(text(subtitle, 11, "#64748B", false));
+        row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1));
+        row.addView(text("›", 28, "#0B7CFF", true));
+        row.setOnClickListener(v -> { if (action != null) action.run(); });
+        return row;
     }
 
     private LinearLayout toggleRow(String title, String subtitle, boolean checked,

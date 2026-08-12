@@ -10,9 +10,13 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import javax.net.ssl.HttpsURLConnection;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class SessionValidationClient {
     private static final String URL_VALIDATE = "https://transiva.my.id/server/native_validate_session.php";
+    private static final long MIN_VALIDATION_INTERVAL_MS = 90_000L;
+    private static final AtomicBoolean IN_FLIGHT = new AtomicBoolean(false);
+    private static volatile long lastSuccessAtMs = 0L;
     private SessionValidationClient() {}
 
     public static void validate(Context context) {
@@ -21,8 +25,11 @@ public final class SessionValidationClient {
         SessionManager session = new SessionManager(app);
         String token = session.getToken() == null ? "" : session.getToken().trim();
         if (!session.isLoggedIn() || token.isEmpty()) return;
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (lastSuccessAtMs > 0L && now - lastSuccessAtMs < MIN_VALIDATION_INTERVAL_MS) return;
+        if (!IN_FLIGHT.compareAndSet(false, true)) return;
 
-        DriverNetworkExecutor.execute(() -> {
+        boolean accepted = DriverNetworkExecutor.execute(() -> {
             HttpURLConnection conn = null;
             try {
                 conn = (HttpURLConnection) new URL(URL_VALIDATE).openConnection();
@@ -46,14 +53,17 @@ public final class SessionValidationClient {
                     ForceLogoutManager.execute(app, code);
                 } else if (status >= 200 && status < 300) {
                     session.touchSession();
+                    lastSuccessAtMs = android.os.SystemClock.elapsedRealtime();
                 }
             } catch (Exception ignored) {
                 TransivaDriverCrashReporter.nonFatal("session_validate", ignored);
                 // Gangguan internet tidak boleh memaksa logout.
             } finally {
                 if (conn != null) conn.disconnect();
+                IN_FLIGHT.set(false);
             }
         });
+        if (!accepted) IN_FLIGHT.set(false);
     }
 
     private static String read(InputStream stream) throws Exception {

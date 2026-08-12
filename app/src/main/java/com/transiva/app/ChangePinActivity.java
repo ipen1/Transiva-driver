@@ -170,7 +170,7 @@ public class ChangePinActivity extends Activity {
         }
 
         setLoading(true);
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             ApiResult result = changePin(oldPin, newPin);
             mainHandler.post(() -> {
                 setLoading(false);
@@ -182,7 +182,7 @@ public class ChangePinActivity extends Activity {
                     mainHandler.postDelayed(this::finish, 900);
                 }
             });
-        }).start();
+        });
     }
 
     private ApiResult changePin(String oldPin, String newPin) {

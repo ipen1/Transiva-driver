@@ -25,7 +25,7 @@ import java.nio.charset.StandardCharsets;
 
 public class DriverMerchantChatActivity extends Activity {
     private static final String BASE="https://transiva.my.id/server/";
-    private static final long REFRESH_MS=2500L;
+    private static final long REFRESH_MS=15000L;
     private final Handler main=new Handler(Looper.getMainLooper());
     private LinearLayout messages;
     private ScrollView scroll;
@@ -37,7 +37,7 @@ public class DriverMerchantChatActivity extends Activity {
     private boolean loading=false,sending=false,stopped=false;
     private SessionManager session;
 
-    private final Runnable refresh=new Runnable(){@Override public void run(){if(!stopped){load(false);main.postDelayed(this,REFRESH_MS);}}};
+    private final Runnable refresh=new Runnable(){@Override public void run(){if(!stopped){load(false);main.postDelayed(this,WaveLoadGuard.jitter(REFRESH_MS));}}};
 
     @Override protected void onCreate(Bundle b){
         super.onCreate(b);
@@ -50,7 +50,7 @@ public class DriverMerchantChatActivity extends Activity {
         if(orderId.isEmpty()&&orderDbId.isEmpty()){toast("ID order tidak ditemukan.");send.setEnabled(false);return;}
         load(true);
     }
-    @Override protected void onResume(){super.onResume();stopped=false;main.removeCallbacks(refresh);main.postDelayed(refresh,REFRESH_MS);}
+    @Override protected void onResume(){super.onResume();stopped=false;main.removeCallbacks(refresh);main.postDelayed(refresh,WaveLoadGuard.jitter(REFRESH_MS));}
     @Override protected void onPause(){super.onPause();stopped=true;main.removeCallbacks(refresh);}
 
     private void build(){

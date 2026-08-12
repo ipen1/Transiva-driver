@@ -75,9 +75,9 @@ public class BackgroundSyncService extends Service {
     private static final String UPDATE_DRIVER_LOCATION_ENDPOINT =
             "server/driver_update_location_native.php";
 
-    private static final long IDLE_SYNC_INTERVAL = 25000L;
-    private static final long ACTIVE_SYNC_INTERVAL = 8000L;
-    private static final long FAST_RETRY_INTERVAL = 10000L;
+    private static final long IDLE_SYNC_INTERVAL = 45000L;
+    private static final long ACTIVE_SYNC_INTERVAL = 15000L;
+    private static final long FAST_RETRY_INTERVAL = 15000L;
 
     private static final int CONNECT_TIMEOUT = 15000;
     private static final int READ_TIMEOUT = 20000;
@@ -111,7 +111,7 @@ public class BackgroundSyncService extends Service {
 
             try {
                 if (handler != null && isRunning) {
-                    handler.postDelayed(this, nextDelay);
+                    handler.postDelayed(this, WaveLoadGuard.jitter(nextDelay));
                 }
             } catch (Exception ignored) {}
         }

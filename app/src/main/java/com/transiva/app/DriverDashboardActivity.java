@@ -54,9 +54,9 @@ public class DriverDashboardActivity extends Activity
         implements DriverDashboardContract.View {
 
     private static final int REQ_LOCATION = 8702;
-    private static final long IDLE_REFRESH_MS = 10000L;
-    private static final long ACTIVE_REFRESH_MS = 8000L;
-    private static final long OFFER_REFRESH_MS = 5000L;
+    private static final long IDLE_REFRESH_MS = 30000L;
+    private static final long ACTIVE_REFRESH_MS = 15000L;
+    private static final long OFFER_REFRESH_MS = 8000L;
     private static final long COUNTDOWN_TICK_MS = 1000L;
     private static final long SERVER_DRIFT_TOLERANCE_MS = 2500L;
 
@@ -111,7 +111,7 @@ public class DriverDashboardActivity extends Activity
     private final Runnable refreshRunnable = new Runnable() {
         @Override public void run() {
             if (presenter != null) presenter.load(false);
-            handler.postDelayed(this, adaptiveRefreshMs());
+            handler.postDelayed(this, WaveLoadGuard.jitter(adaptiveRefreshMs()));
         }
     };
 
@@ -156,7 +156,7 @@ public class DriverDashboardActivity extends Activity
         if (!validSession()) return;
         handler.removeCallbacks(refreshRunnable);
         handler.removeCallbacks(countdownRunnable);
-        handler.postDelayed(refreshRunnable, adaptiveRefreshMs());
+        handler.postDelayed(refreshRunnable, WaveLoadGuard.jitter(adaptiveRefreshMs()));
         handler.post(countdownRunnable);
         if (presenter != null) presenter.load(false);
 
