@@ -36,11 +36,9 @@ public final class DriverServiceController {
         } catch (Throwable e) {
             TransivaDriverCrashReporter.nonFatal("location_service_start", e);
         }
-        try {
-            BackgroundSyncService.start(app);
-        } catch (Throwable e) {
-            TransivaDriverCrashReporter.nonFatal("background_sync_start", e);
-        }
+        // LocationService adalah satu-satunya foreground/background loop utama.
+        // BackgroundSyncService tidak dijalankan terus-menerus agar tidak ada
+        // duplicate GPS upload + notifikasi foreground kedua.
     }
 
     public static synchronized void stop(Context context) {

@@ -36,7 +36,7 @@ public class LocationService extends Service {
             "com.transiva.app.STOP_DRIVER_LOCATION";
 
     private static final String TAG = "DriverLocationService";
-    private static final String CHANNEL_ID = "driver_location_native";
+    private static final String CHANNEL_ID = "driver_location_native_v2";
     private static final int NOTIFICATION_ID = 2206;
     private static final long ACTIVE_INTERVAL = 5000L;
     private static final long IDLE_INTERVAL = 12000L;
@@ -58,7 +58,7 @@ public class LocationService extends Service {
         }
         @Override public void onProviderEnabled(String provider) {}
         @Override public void onProviderDisabled(String provider) {
-            updateNotification("GPS tidak aktif");
+            Log.w(TAG, "Provider lokasi nonaktif: " + provider);
         }
         @Override public void onStatusChanged(String provider, int status, Bundle extras) {}
     };
@@ -164,7 +164,8 @@ public class LocationService extends Service {
             Log.e(TAG, "Network listener gagal", e);
         }
 
-        updateNotification("Online • lokasi aktif");
+        // Notification foreground dibuat sekali saat service start.
+        // Jangan notify ulang setiap update GPS agar panel notifikasi tetap tenang.
     }
 
     private void handle(Location location) {
@@ -196,8 +197,8 @@ public class LocationService extends Service {
             body.put("longitude", location.getLongitude());
             body.put("accuracy",
                     location.hasAccuracy() ? location.getAccuracy() : JSONObject.NULL);
-            body.put("speed",
-                    location.hasSpeed() ? location.getSpeed() : JSONObject.NULL);
+            body.put("speed_kmh",
+                    location.hasSpeed() ? location.getSpeed() * 3.6d : JSONObject.NULL);
             body.put("bearing",
                     location.hasBearing() ? location.getBearing() : JSONObject.NULL);
             body.put("location_time", location.getTime());
@@ -212,7 +213,7 @@ public class LocationService extends Service {
             } else {
                 session.put("last_location_sync_at",
                         String.valueOf(System.currentTimeMillis()));
-                updateNotification("Online • lokasi terkirim");
+                // Sukses tidak perlu memperbarui notifikasi setiap 5-12 detik.
             }
         } catch (DriverApiClient.ApiException e) {
             Log.e(TAG, e.code + ": " + e.getMessage(), e);
@@ -228,7 +229,7 @@ public class LocationService extends Service {
                 session.put("driver_is_online", "0");
                 stopTracking();
             } else {
-                updateNotification("Online • lokasi belum tersinkron");
+                Log.w(TAG, "Lokasi belum tersinkron: " + e.code);
             }
         } catch (Exception e) {
             Log.e(TAG, "Payload lokasi gagal", e);
@@ -270,10 +271,14 @@ public class LocationService extends Service {
     private void stopTracking() {
         try {
             if (locationManager != null) locationManager.removeUpdates(listener);
-        } catch (Exception ignored) {}
+        } catch (Exception error) {
+            Log.w(TAG, "Gagal melepas listener lokasi", error);
+        }
         try {
             stopForeground(true);
-        } catch (Exception ignored) {}
+        } catch (Exception error) {
+            Log.w(TAG, "Gagal menghentikan foreground lokasi", error);
+        }
         stopSelf();
     }
 
@@ -291,10 +296,14 @@ public class LocationService extends Service {
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle("Transiva Driver")
-                .setContentText(text)
+                .setContentText("Online • lokasi aktif")
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setSilent(true)
+                .setShowWhen(false)
+                .setPriority(NotificationCompat.PRIORITY_MIN)
+                .setCategory(NotificationCompat.CATEGORY_SERVICE)
+                .setVisibility(NotificationCompat.VISIBILITY_SECRET)
                 .setContentIntent(pending)
                 .build();
     }
@@ -314,17 +323,23 @@ public class LocationService extends Service {
         NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
                 "Lokasi Driver",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_MIN
         );
-        channel.setDescription("Tracking lokasi saat driver online");
+        channel.setDescription("Tracking lokasi driver saat online");
         channel.enableVibration(false);
+        channel.enableLights(false);
+        channel.setShowBadge(false);
+        channel.setSound(null, null);
+        channel.setLockscreenVisibility(Notification.VISIBILITY_SECRET);
         manager.createNotificationChannel(channel);
     }
 
     @Override public void onDestroy() {
         try {
             if (locationManager != null) locationManager.removeUpdates(listener);
-        } catch (Exception ignored) {}
+        } catch (Exception error) {
+            Log.w(TAG, "Gagal melepas listener saat destroy", error);
+        }
         sender.shutdownNow();
         api.shutdown();
         super.onDestroy();

@@ -31,6 +31,9 @@ import java.util.Map;
 
 public class TransivaFirebaseService extends FirebaseMessagingService {
 
+    public static final String ACTION_DRIVER_DATA_CHANGED =
+            "com.transiva.app.ACTION_DRIVER_DATA_CHANGED";
+
     public static final String BASE_URL =
             "https://transiva.my.id/server/";
 
@@ -191,6 +194,20 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                 data.get("link"),
                 ""
         );
+
+        // FCM adalah jalur utama real-time. Saat dashboard sedang terbuka,
+        // kirim sinyal lokal agar data langsung refresh tanpa menunggu polling berikutnya.
+        if (isDriverRealtimeType(type)) {
+            try {
+                Intent changed = new Intent(ACTION_DRIVER_DATA_CHANGED);
+                changed.setPackage(getPackageName());
+                changed.putExtra("type", type);
+                changed.putExtra("order_id", orderId);
+                sendBroadcast(changed);
+            } catch (Throwable ignored) {
+                // Push tetap diproses walau refresh lokal gagal.
+            }
+        }
 
         showNotification(
                 type,
@@ -600,6 +617,17 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
         }
 
         manager.createNotificationChannel(channel);
+    }
+
+    private boolean isDriverRealtimeType(String type) {
+        String t = type == null ? "" : type.toLowerCase();
+        return t.contains("order")
+                || t.contains("offer")
+                || t.contains("trip")
+                || t.contains("wallet")
+                || t.contains("deposit")
+                || t.contains("withdraw")
+                || t.contains("dispatch");
     }
 
     private String channelForType(String type) {

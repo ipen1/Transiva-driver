@@ -4,6 +4,9 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -54,7 +57,7 @@ public class DriverDashboardActivity extends Activity
         implements DriverDashboardContract.View {
 
     private static final int REQ_LOCATION = 8702;
-    private static final long IDLE_REFRESH_MS = 30000L;
+    private static final long IDLE_REFRESH_MS = 45000L;
     private static final long ACTIVE_REFRESH_MS = 15000L;
     private static final long OFFER_REFRESH_MS = 8000L;
     private static final long COUNTDOWN_TICK_MS = 1000L;
@@ -108,6 +111,16 @@ public class DriverDashboardActivity extends Activity
     private final Set<String> expiredRefreshRequested = new HashSet<>();
     private Vibrator vibrator;
 
+    private boolean realtimeReceiverRegistered = false;
+    private final BroadcastReceiver realtimeReceiver = new BroadcastReceiver() {
+        @Override public void onReceive(Context context, Intent intent) {
+            if (presenter == null) return;
+            handler.removeCallbacks(refreshRunnable);
+            presenter.load(false);
+            handler.postDelayed(refreshRunnable, WaveLoadGuard.jitter(adaptiveRefreshMs()));
+        }
+    };
+
     private final Runnable refreshRunnable = new Runnable() {
         @Override public void run() {
             if (presenter != null) presenter.load(false);
@@ -148,6 +161,32 @@ public class DriverDashboardActivity extends Activity
         setContentView(buildScreen());
         DriverAppSettings.apply(this);
         presenter.load(true);
+    }
+
+    @Override protected void onStart() {
+        super.onStart();
+        if (!realtimeReceiverRegistered) {
+            try {
+                IntentFilter filter = new IntentFilter(TransivaFirebaseService.ACTION_DRIVER_DATA_CHANGED);
+                if (android.os.Build.VERSION.SDK_INT >= 33) {
+                    registerReceiver(realtimeReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+                } else {
+                    registerReceiver(realtimeReceiver, filter);
+                }
+                realtimeReceiverRegistered = true;
+            } catch (Throwable error) {
+                TransivaDriverCrashReporter.nonFatal("dashboard_realtime_receiver", error);
+            }
+        }
+    }
+
+    @Override protected void onStop() {
+        if (realtimeReceiverRegistered) {
+            try { unregisterReceiver(realtimeReceiver); }
+            catch (Throwable error) { TransivaDriverCrashReporter.nonFatal("dashboard_receiver_stop", error); }
+            realtimeReceiverRegistered = false;
+        }
+        super.onStop();
     }
 
     @Override protected void onResume() {
