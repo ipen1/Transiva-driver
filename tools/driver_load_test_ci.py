@@ -41,7 +41,7 @@ def http_json(url, method="GET", headers=None, payload=None, timeout=15):
 
 
 def obtain_token(base, username, password, device):
-    url=base.rstrip("/")+"/login_native.php"
+    url=base.rstrip("/")+"/login.php"
     status,body=http_json(url,"POST",{
         "Accept":"application/json",
         "X-App-Scope":"driver",
