@@ -58,13 +58,28 @@ def obtain_token(base, username, password, device):
         raise RuntimeError(f"LOGIN_FAILED HTTP {status} {code or ''} {msg or body[:180]}")
     try:
         obj=json.loads(body)
-        data=obj.get("data",{}) if isinstance(obj,dict) else {}
-        user=data.get("user",{}) if isinstance(data,dict) else {}
-        token=str(user.get("token","")).strip()
+        token=""
+        if isinstance(obj,dict):
+            # login.php Transiva mengembalikan token di top-level.
+            token=str(obj.get("token","") or "").strip()
+            # Kompatibilitas: sebagian endpoint lama menyimpan token di user.
+            if not token:
+                user=obj.get("user",{})
+                if isinstance(user,dict):
+                    token=str(user.get("token","") or "").strip()
+            # Kompatibilitas format lama: data.user.token / data.token.
+            if not token:
+                data=obj.get("data",{})
+                if isinstance(data,dict):
+                    token=str(data.get("token","") or "").strip()
+                    if not token:
+                        user=data.get("user",{})
+                        if isinstance(user,dict):
+                            token=str(user.get("token","") or "").strip()
     except Exception:
         token=""
     if not token:
-        raise RuntimeError("LOGIN_FAILED: server tidak mengembalikan Bearer token")
+        raise RuntimeError("LOGIN_FAILED: HTTP 200 tetapi Bearer token tidak ditemukan pada response login")
     return token
 
 
