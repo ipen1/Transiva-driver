@@ -1,10 +1,10 @@
-def transivaEnableR8 = project.hasProperty("transivaEnableR8") && project.property("transivaEnableR8").toString().toBoolean()
-
 plugins {
     id 'com.android.application'
     id 'com.google.gms.google-services'
     id 'com.google.firebase.crashlytics'
 }
+
+def transivaEnableR8 = project.hasProperty("transivaEnableR8") && project.property("transivaEnableR8").toString().toBoolean()
 
 android {
     namespace 'com.transiva.app'
