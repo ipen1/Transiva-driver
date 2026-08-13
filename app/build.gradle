@@ -34,8 +34,14 @@ android {
         release {
             signingConfig signingConfigs.release
             debuggable false
+
+            // Deliberately kept OFF for the launch candidate. Enabling R8 immediately
+            // before production can introduce reflection/library regressions. The
+            // ProGuard files are declared now so hardening can be enabled after the
+            // regression suite passes without changing the release contract.
             minifyEnabled false
             shrinkResources false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 }
