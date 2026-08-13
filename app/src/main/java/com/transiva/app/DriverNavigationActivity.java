@@ -80,9 +80,6 @@ import static org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND;
  */
 public class DriverNavigationActivity extends Activity {
     private static final String MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
-    private static final String LOCATION_API =
-            "https://transiva.my.id/server/driver_update_location_native.php";
-
     private static final String ROUTE_SOURCE = "transiva-route-source";
     private static final String ROUTE_GLOW_LAYER = "transiva-route-glow";
     private static final String ROUTE_CASE_LAYER = "transiva-route-case";
@@ -159,13 +156,6 @@ public class DriverNavigationActivity extends Activity {
         t.setDaemon(true);
         return t;
     });
-    private final ExecutorService locationUploadExecutor = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "transiva-location-worker");
-        t.setDaemon(true);
-        return t;
-    });
-    private final AtomicBoolean locationUploadWorkerRunning = new AtomicBoolean(false);
-    private volatile Location pendingUploadLocation;
 
     private boolean styleReady;
     private boolean inPictureInPicture = false;
@@ -656,7 +646,6 @@ public class DriverNavigationActivity extends Activity {
                     if (l.hasBearing() && l.getSpeed() > 1.2f) currentBearing = l.getBearing();
                     else if (displayInitialized) currentBearing = bearing(displayLat, displayLng, driverLat, driverLng);
 
-                    if (fix.upload) uploadLocation(l);
                     if (fix.render) updateNativePosition(false);
                     maybeRefreshRoute(l);
                 }
@@ -1570,97 +1559,8 @@ public class DriverNavigationActivity extends Activity {
         return "{\"type\":\"FeatureCollection\",\"features\":[]}";
     }
 
-    private void uploadLocation(Location l) {
-        long now = System.currentTimeMillis();
-        if (now - lastUploadAt < LOCATION_UPLOAD_MS || l == null) return;
-        lastUploadAt = now;
-
-        // Latest-value-wins queue: while one request is in flight, newer fixes
-        // replace the pending one instead of spawning extra threads.
-        pendingUploadLocation = new Location(l);
-        if (!locationUploadWorkerRunning.compareAndSet(false, true)) return;
-
-        locationUploadExecutor.execute(() -> {
-            try {
-                while (!Thread.currentThread().isInterrupted()) {
-                    Location next = pendingUploadLocation;
-                    pendingUploadLocation = null;
-                    if (next == null) break;
-                    performLocationUpload(next);
-                    if (pendingUploadLocation == null) break;
-                }
-            } finally {
-                locationUploadWorkerRunning.set(false);
-                // Close the small race where a new fix arrives between the final
-                // null check and resetting the worker flag.
-                if (pendingUploadLocation != null &&
-                        locationUploadWorkerRunning.compareAndSet(false, true)) {
-                    locationUploadExecutor.execute(this::drainPendingLocationUpload);
-                }
-            }
-        });
-    }
-
-    private void drainPendingLocationUpload() {
-        try {
-            while (!Thread.currentThread().isInterrupted()) {
-                Location next = pendingUploadLocation;
-                pendingUploadLocation = null;
-                if (next == null) break;
-                performLocationUpload(next);
-                if (pendingUploadLocation == null) break;
-            }
-        } finally {
-            locationUploadWorkerRunning.set(false);
-            if (pendingUploadLocation != null &&
-                    locationUploadWorkerRunning.compareAndSet(false, true)) {
-                locationUploadExecutor.execute(this::drainPendingLocationUpload);
-            }
-        }
-    }
-
-    private void performLocationUpload(Location l) {
-        final double lat = l.getLatitude(), lng = l.getLongitude();
-        HttpURLConnection c = null;
-        try {
-            JSONObject body = new JSONObject();
-            body.put("username", username);
-            body.put("driver", username);
-            body.put("latitude", lat);
-            body.put("longitude", lng);
-            body.put("driver_type", vehicleType);
-            body.put("accuracy", l.hasAccuracy() ? l.getAccuracy() : JSONObject.NULL);
-            body.put("speed", currentSpeedKmh);
-            body.put("speed_kmh", currentSpeedKmh);
-            body.put("average_speed_kmh", averageSpeedKmh);
-            body.put("bearing", currentBearing);
-            body.put("location_time", l.getTime());
-            body.put("order_id", first(order.optString("order_id"), order.optString("id"), ""));
-
-            c = (HttpURLConnection) new URL(LOCATION_API).openConnection();
-            c.setRequestMethod("POST");
-            c.setConnectTimeout(3500);
-            c.setReadTimeout(4500);
-            c.setRequestProperty("Content-Type", "application/json");
-            c.setRequestProperty("Accept", "application/json");
-            try {
-                String token = session == null ? "" : session.getToken();
-                if (token != null && !token.trim().isEmpty()) {
-                    c.setRequestProperty("Authorization", "Bearer " + token.trim());
-                    c.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(this));
-                    c.setRequestProperty("X-App-Scope", "driver");
-                }
-            } catch (Exception ignored) {}
-            c.setDoOutput(true);
-            try (OutputStream os = c.getOutputStream()) {
-                os.write(body.toString().getBytes(StandardCharsets.UTF_8));
-            }
-            c.getResponseCode();
-        } catch (Exception ignored) {
-        } finally {
-            if (c != null) c.disconnect();
-        }
-    }
+    // Upload lokasi server ditangani eksklusif oleh LocationService.
+    // NavigationActivity hanya memproses lokasi untuk UI/rute/kamera.
 
     private double targetLat() {
         return targetMode.equals("delivery") ?
@@ -1869,8 +1769,6 @@ public class DriverNavigationActivity extends Activity {
         main.removeCallbacks(routeRetryTick);
         main.removeCallbacksAndMessages(null);
         routeExecutor.shutdownNow();
-        locationUploadExecutor.shutdownNow();
-        pendingUploadLocation = null;
         if (mapView != null) mapView.onDestroy();
         super.onDestroy();
     }

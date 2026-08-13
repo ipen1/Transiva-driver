@@ -25,7 +25,7 @@ import java.nio.charset.StandardCharsets;
 
 public class DriverMerchantChatActivity extends Activity {
     private static final String BASE="https://transiva.my.id/server/";
-    private static final long REFRESH_MS=15000L;
+    private static final long REFRESH_MS=20000L;
     private final Handler main=new Handler(Looper.getMainLooper());
     private LinearLayout messages;
     private ScrollView scroll;

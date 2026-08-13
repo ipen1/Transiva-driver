@@ -25,8 +25,7 @@ import com.transiva.app.driver.data.DriverApiClient;
 
 import org.json.JSONObject;
 
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class LocationService extends Service {
 
@@ -47,7 +46,7 @@ public class LocationService extends Service {
     private SessionManager session;
     private DriverApiClient api;
     private LocationManager locationManager;
-    private final ExecutorService sender = Executors.newSingleThreadExecutor();
+    private final AtomicBoolean sendInFlight = new AtomicBoolean(false);
     private long lastSentAt;
     private Location lastSent;
     private final SmoothLocationEngine smoothLocation = new SmoothLocationEngine(5000L);
@@ -142,7 +141,7 @@ public class LocationService extends Service {
             if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                 locationManager.requestLocationUpdates(
                         LocationManager.GPS_PROVIDER,
-                        desiredInterval(),
+                        ACTIVE_INTERVAL,
                         MIN_DISTANCE,
                         listener
                 );
@@ -155,7 +154,7 @@ public class LocationService extends Service {
             if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
                 locationManager.requestLocationUpdates(
                         LocationManager.NETWORK_PROVIDER,
-                        desiredInterval(),
+                        ACTIVE_INTERVAL,
                         MIN_DISTANCE,
                         listener
                 );
@@ -187,7 +186,13 @@ public class LocationService extends Service {
                 String.valueOf(accepted.getLongitude())
         );
 
-        sender.execute(() -> send(accepted));
+        if (sendInFlight.compareAndSet(false, true)) {
+            boolean acceptedTask = DriverNetworkExecutor.execute(() -> {
+                try { send(accepted); }
+                finally { sendInFlight.set(false); }
+            });
+            if (!acceptedTask) sendInFlight.set(false);
+        }
     }
 
     private void send(Location location) {
@@ -340,7 +345,6 @@ public class LocationService extends Service {
         } catch (Exception error) {
             Log.w(TAG, "Gagal melepas listener saat destroy", error);
         }
-        sender.shutdownNow();
         api.shutdown();
         super.onDestroy();
     }

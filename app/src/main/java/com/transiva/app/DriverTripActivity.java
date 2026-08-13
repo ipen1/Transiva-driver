@@ -32,6 +32,8 @@ import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import com.transiva.app.driver.data.DriverApiClient;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -55,7 +57,6 @@ public class DriverTripActivity extends Activity {
     private static final String PREF_NAME = "transiva";
     private static final int TIMEOUT_MS = 20000;
     private static final float ARRIVE_RADIUS_METER = 100f;
-    private static final long LOCATION_POST_INTERVAL_MS = 5000L;
     private static final float MAP_ANIMATION_MIN_DISTANCE_METER = 5.0f;
     private static final long GPS_PRIORITY_MS = 8000L;
     private static final long MAX_LOCATION_AGE_MS = 30000L;
@@ -79,12 +80,11 @@ public class DriverTripActivity extends Activity {
     private boolean updatingStatus = false;
     private boolean mapReady = false;
     private boolean locationWatchRunning = false;
-    private long lastLocationPostAt = 0L;
-    private double lastPostedLat = 0, lastPostedLng = 0;
     private Location lastAcceptedLocation = null;
     private long lastAcceptedAt = 0L;
     private long lastGpsFixAt = 0L;
     private SessionManager session;
+    private DriverApiClient api;
     private final SmoothLocationEngine smoothLocation = new SmoothLocationEngine(2500L);
     private volatile boolean routeRequestInFlight = false;
     private long lastRouteRequestAt = 0L;
@@ -110,14 +110,6 @@ public class DriverTripActivity extends Activity {
     private long speedSampleCount = 0L;
     private Location lastSpeedLocation = null;
 
-    private final Runnable locationPostRunnable = new Runnable(){
-        @Override public void run(){
-            if(order != null && locationWatchRunning && valid(lastDriverLat, lastDriverLng)){
-                postDriverLocation(lastDriverLat, lastDriverLng, false);
-            }
-            if(locationWatchRunning) mainHandler.postDelayed(this, LOCATION_POST_INTERVAL_MS);
-        }
-    };
 
     @Override protected void onCreate(Bundle b){
         super.onCreate(b);
@@ -130,6 +122,7 @@ public class DriverTripActivity extends Activity {
             if(Build.VERSION.SDK_INT >= 23) getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         }catch(Exception ignored){}
         session = new SessionManager(this);
+        api = new DriverApiClient(session);
         loadSession();
         loadOrder();
         buildBase();
@@ -512,11 +505,9 @@ public class DriverTripActivity extends Activity {
             try{ locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 900, 0, locationListener, Looper.getMainLooper()); }catch(Exception ignored){}
             try{ locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1400, 0, locationListener, Looper.getMainLooper()); }catch(Exception ignored){}
             locationWatchRunning = true;
-            mainHandler.removeCallbacks(locationPostRunnable);
-            mainHandler.post(locationPostRunnable);
         }catch(Exception ignored){}
     }
-    private void stopLocationWatch(){ try{ if(locationManager != null && locationListener != null) locationManager.removeUpdates(locationListener); }catch(Exception ignored){} locationWatchRunning = false; mainHandler.removeCallbacks(locationPostRunnable); locationListener = null; }
+    private void stopLocationWatch(){ try{ if(locationManager != null && locationListener != null) locationManager.removeUpdates(locationListener); }catch(Exception ignored){} locationWatchRunning = false; locationListener = null; }
     private Location getBestLastKnownLocation(){
         Location gps = null, net = null;
         try{ if(locationManager != null) gps = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER); }catch(Exception ignored){}
@@ -592,7 +583,6 @@ public class DriverTripActivity extends Activity {
             renderedDriverLat = newLat;
             renderedDriverLng = newLng;
         }
-        if(fix.upload) postDriverLocation(newLat, newLng, false);
         refreshButtons();
     }
 
@@ -850,40 +840,9 @@ public class DriverTripActivity extends Activity {
         }catch(Exception ignored){}
     }
 
-    private void postDriverLocation(double lat, double lng, boolean force){
-        if(!valid(lat, lng) || driverUsername.length() == 0) return;
+    // Upload lokasi hanya dilakukan oleh LocationService. Activity ini hanya
+    // memakai fix GPS untuk UI, jarak, tombol kedatangan dan navigasi.
 
-        long now = System.currentTimeMillis();
-        if(!force && now - lastLocationPostAt < LOCATION_POST_INTERVAL_MS) return;
-
-        if(!force && valid(lastPostedLat, lastPostedLng)){
-            float moved = distanceBetween(lastPostedLat, lastPostedLng, lat, lng);
-            if(moved < 1.0f && now - lastLocationPostAt < LOCATION_POST_INTERVAL_MS * 2) return;
-        }
-
-        lastLocationPostAt = now;
-        lastPostedLat = lat;
-        lastPostedLng = lng;
-
-        DriverNetworkExecutor.execute(() -> {
-            try{
-                JSONObject p = new JSONObject();
-                p.put("username", driverUsername);
-                p.put("latitude", lat);
-                p.put("longitude", lng);
-                driverType = resolveDriverTypeFromOrder();
-                p.put("driver_type", driverType);
-                if(order != null) p.put("order_id", orderId());
-                if(lastAcceptedLocation != null){
-                    p.put("accuracy", lastAcceptedLocation.hasAccuracy()?lastAcceptedLocation.getAccuracy():JSONObject.NULL);
-                    p.put("speed", lastAcceptedLocation.hasSpeed()?lastAcceptedLocation.getSpeed():JSONObject.NULL);
-                    p.put("bearing", lastAcceptedLocation.hasBearing()?lastAcceptedLocation.getBearing():JSONObject.NULL);
-                    p.put("location_time", lastAcceptedLocation.getTime());
-                }
-                postJson(BASE_URL + "driver_update_location_native.php", p);
-            }catch(Exception ignored){}
-        });
-    }
     private boolean isNonCash(){
         String p = first(order == null ? "" : order.optString("payment_method"), "cash").toLowerCase(Locale.US);
         return p.equals("balance") || p.contains("transpay") || p.contains("transiva_pay") || p.equals("wallet") || p.equals("saldo");
@@ -1025,58 +984,12 @@ public class DriverTripActivity extends Activity {
         }
     }
     private JSONObject postJson(String urlText, JSONObject payload) throws Exception {
-        HttpURLConnection connection = null;
-        try {
-            connection = (HttpURLConnection) new URL(urlText).openConnection();
-            connection.setConnectTimeout(TIMEOUT_MS);
-            connection.setReadTimeout(TIMEOUT_MS);
-            connection.setRequestMethod("POST");
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-            connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty("X-App-Scope", "driver");
-            connection.setRequestProperty(
-                    "X-Device-UUID",
-                    DeviceIdentityManager.getInstallationUuid(this)
-            );
-
-            try {
-                String token = session == null ? "" : session.getToken();
-                if (token != null && !token.trim().isEmpty()) {
-                    connection.setRequestProperty("Authorization", "Bearer " + token.trim());
-                }
-            } catch (Exception ignored) {
-            }
-
-            try (OutputStream output = connection.getOutputStream()) {
-                output.write(payload.toString().getBytes(StandardCharsets.UTF_8));
-                output.flush();
-            }
-
-            int statusCode = connection.getResponseCode();
-            InputStream input = statusCode >= 400
-                    ? connection.getErrorStream()
-                    : connection.getInputStream();
-            if (input == null) {
-                throw new IllegalStateException("Respons server kosong (HTTP " + statusCode + ")");
-            }
-
-            StringBuilder response = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(input, StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    response.append(line);
-                }
-            }
-
-            String body = response.toString().trim();
-            return body.isEmpty() ? new JSONObject() : new JSONObject(body);
-        } finally {
-            if (connection != null) {
-                connection.disconnect();
-            }
-        }
+        if (api == null) api = new DriverApiClient(session);
+        String endpoint = urlText == null ? "" : urlText.trim();
+        if (endpoint.startsWith(BASE_URL)) endpoint = endpoint.substring(BASE_URL.length());
+        if (endpoint.startsWith("/")) endpoint = endpoint.substring(1);
+        DriverApiClient.Result result = api.post(endpoint, payload == null ? new JSONObject() : payload);
+        return result.body;
     }
 
     private void saveActiveOrder(){ if(order==null)return; getSharedPreferences(PREF_NAME,MODE_PRIVATE).edit().putString("driver_active_order_json", order.toString()).putString("driver_active_order_id", orderId()).putString("driver_active_order_kind", orderKind).putString("driver_active_order_status", status()).putString("driver_active_pickup_address", pickupAddress()).putString("driver_active_delivery_address", deliveryAddress()).putString("driver_active_pickup_lat", String.valueOf(coord("pickup_lat","user_lat"))).putString("driver_active_pickup_lng", String.valueOf(coord("pickup_lng","user_lng"))).putString("driver_active_delivery_lat", String.valueOf(coord("delivery_lat","destination_lat"))).putString("driver_active_delivery_lng", String.valueOf(coord("delivery_lng","destination_lng"))).putString("driver_active_price", String.valueOf(optDouble("price","fare","total"))).putString("driver_type", resolveDriverTypeFromOrder()).putString("active_driver_type", resolveDriverTypeFromOrder()).apply(); }

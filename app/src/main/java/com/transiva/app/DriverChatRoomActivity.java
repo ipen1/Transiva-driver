@@ -68,7 +68,7 @@ public class DriverChatRoomActivity extends Activity {
 
     private static final String IMAGE_PREFIX = "[[IMAGE]]";
     private static final String IMAGE_V2_PREFIX = "[[IMAGE2]]";
-    private static final long REFRESH_MS = 15000L;
+    private static final long REFRESH_MS = 20000L;
 
     private static final int REQUEST_GALLERY = 5101;
     private static final int REQUEST_INTERNAL_CAMERA = 5102;
@@ -158,7 +158,7 @@ public class DriverChatRoomActivity extends Activity {
         loadMessages(true);
 
         if (!readOnly) {
-            main.postDelayed(refreshRunnable, REFRESH_MS);
+            main.postDelayed(refreshRunnable, WaveLoadGuard.jitter(REFRESH_MS));
         }
     }
 
@@ -1384,7 +1384,7 @@ public class DriverChatRoomActivity extends Activity {
             if (lastId > 0) {
                 scheduleMessagesReadThrough(lastId);
             }
-            main.postDelayed(refreshRunnable, REFRESH_MS);
+            main.postDelayed(refreshRunnable, WaveLoadGuard.jitter(REFRESH_MS));
         }
     }
 
