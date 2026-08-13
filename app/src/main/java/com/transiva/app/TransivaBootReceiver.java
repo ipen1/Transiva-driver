@@ -3,7 +3,6 @@ package com.transiva.app;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Build;
 import android.util.Log;
 
 /**
@@ -14,8 +13,8 @@ import android.util.Log;
  * - Tidak hanya mengandalkan flag driver_online / merchant_online lama.
  * - Aman saat HP boot, aplikasi di-update, quick boot, dan locked boot.
  * - Mencegah status sinkronisasi muncul sebelum session valid.
- * - Start BackgroundSyncService hanya untuk driver login.
- * - Start TransivaDriverForegroundService hanya jika user driver/merchant sedang online.
+ * - Driver online didelegasikan ke DriverServiceController.
+ * - LocationService menjadi satu-satunya long-running foreground/location loop.
  */
 public class TransivaBootReceiver extends BroadcastReceiver {
 
@@ -53,17 +52,12 @@ public class TransivaBootReceiver extends BroadcastReceiver {
                     .getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
                     .getBoolean(KEY_DRIVER_ONLINE, false);
 
-            boolean merchantOnline = context
-                    .getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-                    .getBoolean(KEY_MERCHANT_ONLINE, false);
-
             boolean isDriver = role.contains("driver");
             boolean isMerchant = role.contains("merchant");
 
             if (isDriver) {
                 if (driverOnline) {
                     startDriverForegroundServiceSafe(context);
-                    startBackgroundSyncServiceSafe(context);
                     Log.d(TAG, "Driver login dan online. Service dijalankan.");
                 } else {
                     stopAllServices(context);
@@ -73,13 +67,8 @@ public class TransivaBootReceiver extends BroadcastReceiver {
             }
 
             if (isMerchant) {
-                if (merchantOnline) {
-                    startDriverForegroundServiceSafe(context);
-                    Log.d(TAG, "Merchant login dan online. Foreground service dijalankan.");
-                } else {
-                    stopAllServices(context);
-                    Log.d(TAG, "Merchant login tapi offline. Service tidak dijalankan.");
-                }
+                stopAllServices(context);
+                Log.d(TAG, "Role merchant tidak menjalankan service driver dari APK driver.");
                 return;
             }
 
@@ -118,9 +107,6 @@ public class TransivaBootReceiver extends BroadcastReceiver {
         DriverServiceController.startAfterSystemEvent(context);
     }
 
-    private void startBackgroundSyncServiceSafe(Context context) {
-        // DriverServiceController already starts background sync.
-    }
 
     private void stopAllServices(Context context) {
         DriverServiceController.stopAll(context);

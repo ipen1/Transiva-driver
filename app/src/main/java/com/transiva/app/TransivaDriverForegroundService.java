@@ -21,8 +21,8 @@ public class TransivaDriverForegroundService extends Service {
     public static final String ACTION_START = "TRANSIVA_DRIVER_SERVICE_START";
     public static final String ACTION_STOP = "TRANSIVA_DRIVER_SERVICE_STOP";
 
-    public static final String CHANNEL_ID = "transiva_order_channel";
-    public static final String CHANNEL_NAME = "Order Transiva";
+    public static final String CHANNEL_ID = "transiva_driver_service_legacy_v2";
+    public static final String CHANNEL_NAME = "Layanan Driver Transiva";
 
     private static final int NOTIFICATION_ID = 2001;
 
@@ -96,9 +96,9 @@ public class TransivaDriverForegroundService extends Service {
                         new NotificationCompat.BigTextStyle()
                                 .bigText("Transiva berjalan di latar belakang untuk menjaga notifikasi order, status online, dan lokasi tetap stabil.")
                 )
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)
-                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                 .setOngoing(true)
                 .setAutoCancel(false)
                 .setOnlyAlertOnce(true)
@@ -128,12 +128,12 @@ public class TransivaDriverForegroundService extends Service {
         NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
                 CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_HIGH
+                NotificationManager.IMPORTANCE_LOW
         );
 
-        channel.setDescription("Notifikasi order dan layanan latar belakang Transiva");
-        channel.enableVibration(true);
-        channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+        channel.setDescription("Status layanan driver Transiva. Notifikasi order memakai channel terpisah.");
+        channel.enableVibration(false);
+        channel.setLockscreenVisibility(Notification.VISIBILITY_PRIVATE);
 
         manager.createNotificationChannel(channel);
     }

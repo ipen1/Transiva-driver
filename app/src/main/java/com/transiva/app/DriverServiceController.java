@@ -51,7 +51,9 @@ public final class DriverServiceController {
         DriverRestartGuard.reset(app);
         try { app.stopService(new Intent(app, LocationService.class)); }
         catch (Throwable e) { TransivaDriverCrashReporter.nonFatal("location_service_stop", e); }
-        try { BackgroundSyncService.stop(app); }
+        // Legacy service dinonaktifkan di Manifest. stopService() tetap aman untuk
+        // membersihkan instance lama setelah upgrade aplikasi tanpa memicunya kembali.
+        try { app.stopService(new Intent(app, BackgroundSyncService.class)); }
         catch (Throwable e) { TransivaDriverCrashReporter.nonFatal("background_sync_stop", e); }
         try { app.stopService(new Intent(app, TransivaDriverForegroundService.class)); }
         catch (Throwable ignored) { }
