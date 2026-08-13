@@ -1,3 +1,5 @@
+def transivaEnableR8 = project.hasProperty("transivaEnableR8") && project.property("transivaEnableR8").toString().toBoolean()
+
 plugins {
     id 'com.android.application'
     id 'com.google.gms.google-services'
@@ -39,8 +41,10 @@ android {
             // before production can introduce reflection/library regressions. The
             // ProGuard files are declared now so hardening can be enabled after the
             // regression suite passes without changing the release contract.
-            minifyEnabled false
-            shrinkResources false
+            // Default OFF untuk launching. Aktifkan hanya setelah regression test:
+            // ./gradlew assembleRelease -PtransivaEnableR8=true
+            minifyEnabled transivaEnableR8
+            shrinkResources transivaEnableR8
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
