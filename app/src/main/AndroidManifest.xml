@@ -65,9 +65,10 @@
             android:enabled="true"
             android:exported="false" />
 
+        <!-- Legacy compatibility only. LocationService is the single long-running owner. -->
         <service
             android:name=".TransivaDriverForegroundService"
-            android:enabled="true"
+            android:enabled="false"
             android:exported="false"
             android:stopWithTask="false"
             android:foregroundServiceType="location|dataSync" />
@@ -79,9 +80,10 @@
             android:stopWithTask="false"
             android:foregroundServiceType="location" />
 
+        <!-- Disabled to prevent a second polling/GPS/foreground loop. -->
         <service
             android:name=".BackgroundSyncService"
-            android:enabled="true"
+            android:enabled="false"
             android:exported="false"
             android:stopWithTask="false"
             android:foregroundServiceType="dataSync" />
