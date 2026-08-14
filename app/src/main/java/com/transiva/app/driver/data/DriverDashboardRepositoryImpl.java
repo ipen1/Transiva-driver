@@ -22,7 +22,7 @@ public final class DriverDashboardRepositoryImpl implements DriverDashboardRepos
         api.executor().execute(() -> {
             try {
                 DriverApiClient.Result result = api.get(
-                        "driver_dashboard_native.php?v=" + System.currentTimeMillis()
+                        "driver_dashboard_native.php"
                 );
                 JSONObject driver = result.body.optJSONObject("driver");
                 if (driver != null) session.updateDriverRuntime(driver);
