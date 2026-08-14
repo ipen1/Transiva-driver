@@ -150,12 +150,15 @@ def main():
         t=time.perf_counter();code,body=http_json(url,"GET",headers,None,15);err=""
         if code == -1: err="NetworkError"
         ms=(time.perf_counter()-t)*1000
-        cache=plan=""
+        cache=plan="";php_ms=0.0
         try:
             o=json.loads(body);d=o.get("_transiva_diag") if isinstance(o,dict) else None
-            if isinstance(d,dict):cache=str(d.get("cache",""));plan=str(d.get("plan",""))
+            if isinstance(d,dict):
+                cache=str(d.get("cache",""));plan=str(d.get("plan",""))
+                try: php_ms=float(d.get("php_ms",0) or 0)
+                except Exception: php_ms=0.0
         except Exception:pass
-        return code,ms,cache or "none",plan or "none",err,body[:500]
+        return code,ms,cache or "none",plan or "none",err,body[:500],php_ms
 
     started=time.perf_counter()
     with concurrent.futures.ThreadPoolExecutor(max_workers=a.users) as ex:
@@ -163,17 +166,31 @@ def main():
     sec=max(time.perf_counter()-started,.001)
     codes=Counter(str(x[0]) for x in res);times=[x[1] for x in res]
     caches=Counter(x[2] for x in res);plans=Counter(x[3] for x in res)
+    php_times=[x[6] for x in res if x[6] > 0]
     ok=codes.get("200",0);rate=ok/a.requests*100
     avg=statistics.mean(times);p95=pct(times,.95);p99=pct(times,.99)
+    php_avg=statistics.mean(php_times) if php_times else 0.0
+    php_p95=pct(php_times,.95) if php_times else 0.0
+    outside_avg=max(0.0,avg-php_avg) if php_times else 0.0
     server_errors=sum(v for k,v in codes.items() if k in {"500","502","503","504","-1"})
     if server_errors or rate<95 or avg>3000 or p95>5000 or p99>10000:status="GAGAL"
     elif rate<99 or avg>1500 or p95>2500 or p99>5000:status="PERLU PERBAIKAN"
     else:status="AMAN"
 
+    diagnosis="APP_OR_DB"
+    if php_times and php_p95 <= 150 and p95 > 2500:
+        diagnosis="HOSTING_QUEUE_TLS_OR_NETWORK"
+    elif php_times and php_p95 <= 500 and p95 > php_p95 * 4:
+        diagnosis="MOSTLY_OUTSIDE_PHP"
+    elif php_times and php_p95 > 1000:
+        diagnosis="PHP_OR_DATABASE"
+
     payload={"status":status,"auth_mode":"fresh_login","concurrency":a.users,"requests":a.requests,
              "success_rate_pct":round(rate,2),"http_codes":dict(codes),
              "rps":round(a.requests/sec,2),"avg_ms":round(avg,1),
              "p95_ms":round(p95,1),"p99_ms":round(p99,1),
+             "php_avg_ms":round(php_avg,1),"php_p95_ms":round(php_p95,1),
+             "outside_php_avg_ms":round(outside_avg,1),"diagnosis":diagnosis,
              "cache_modes":dict(caches),"plans":dict(plans),"seconds":round(sec,2)}
     Path(a.json_out).write_text(json.dumps(payload,indent=2,ensure_ascii=False)+"\n")
 
@@ -190,6 +207,10 @@ def main():
 | Average | **{payload['avg_ms']} ms** |
 | P95 | **{payload['p95_ms']} ms** |
 | P99 | **{payload['p99_ms']} ms** |
+| PHP Average (server internal) | **{payload['php_avg_ms']} ms** |
+| PHP P95 (server internal) | **{payload['php_p95_ms']} ms** |
+| Est. outside PHP avg | **{payload['outside_php_avg_ms']} ms** |
+| Diagnosis | **{payload['diagnosis']}** |
 | HTTP codes | `{json.dumps(payload['http_codes'])}` |
 | Cache modes | `{json.dumps(payload['cache_modes'])}` |
 | Server plan | `{json.dumps(payload['plans'])}` |
