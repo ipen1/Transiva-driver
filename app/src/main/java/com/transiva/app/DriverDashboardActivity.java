@@ -38,6 +38,7 @@ import android.widget.Toast;
 import com.transiva.app.driver.data.DriverDashboardRepositoryImpl;
 import com.transiva.app.driver.data.DriverApiClient;
 import com.transiva.app.driver.domain.DriverDashboardState;
+import com.transiva.app.driver.domain.DriverClusterStatus;
 import com.transiva.app.driver.domain.DriverOrder;
 import com.transiva.app.driver.presentation.DriverDashboardContract;
 import com.transiva.app.driver.presentation.DriverDashboardPresenter;
@@ -93,6 +94,8 @@ public class DriverDashboardActivity extends Activity
     private TextView assistantTitleText;
     private TextView assistantMessageText;
     private TextView hotspotText;
+    private TextView clusterCurrentText;
+    private TextView clusterListText;
     private Button sosButton;
     private final Set<String> seenOfferKeys = new HashSet<>();
     private boolean firstOfferSnapshot = true;
@@ -447,6 +450,11 @@ public class DriverDashboardActivity extends Activity
 
         hotspotText = text("Area sekitar Anda • NORMAL", 14, "#D97706", true);
         add(card, hotspotText, 0, dp(12), 0, 0);
+
+        clusterCurrentText = text("📍 Cluster: mendeteksi lokasi...", 14, "#0B3A78", true);
+        add(card, clusterCurrentText, 0, dp(10), 0, 0);
+        clusterListText = text("Sumbersari 0 • Dolago/Ribamba 0 • Parigi 0 • Pangi 0 • Toboli 0", 11, "#475569", false);
+        add(card, clusterListText, 0, dp(5), 0, 0);
         assistantTitleText = text("Asisten Transiva", 14, "#0B3A78", true);
         add(card, assistantTitleText, 0, dp(12), 0, 0);
         assistantMessageText = text("Memuat rekomendasi…", 12, "#475569", false);
@@ -525,6 +533,19 @@ public class DriverDashboardActivity extends Activity
                 : first(state.hotspotLevel, "NORMAL");
         hotspotText.setText(first(state.hotspotName, "Area sekitar Anda") + " • "
                 + localHotspotLevel + " (" + localHotspotScore + "% )");
+        if (clusterCurrentText != null) {
+            clusterCurrentText.setText(state.currentClusterId > 0
+                    ? "📍 Anda di Cluster " + state.currentClusterId + " • " + state.currentClusterName
+                    : "📍 Cluster belum terdeteksi • aktifkan GPS");
+        }
+        if (clusterListText != null) {
+            StringBuilder clusters = new StringBuilder();
+            for (DriverClusterStatus c : state.clusters) {
+                if (clusters.length() > 0) clusters.append("   •   ");
+                clusters.append(c.id).append(" ").append(c.name).append(": ").append(c.activeDrivers).append(" driver");
+            }
+            clusterListText.setText(clusters.length() == 0 ? "Data 5 cluster belum tersedia" : clusters.toString());
+        }
 
         onlineLabel.setText(state.online ? "ONLINE" : "OFFLINE");
         onlineLabel.setTextColor(Color.parseColor(
