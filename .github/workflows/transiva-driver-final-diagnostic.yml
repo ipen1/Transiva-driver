@@ -1,0 +1,92 @@
+name: Transiva Driver Final Diagnostic
+
+on:
+  workflow_dispatch:
+    inputs:
+      load_level:
+        description: "Concurrent users per layer"
+        required: true
+        default: "100"
+        type: choice
+        options: ["10", "25", "50", "100", "200"]
+      high_load_confirmation:
+        description: "Untuk 100/200 ketik: SAYA PAHAM"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: transiva-driver-final-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    name: "Final diagnostic ${{ inputs.load_level }} concurrent"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate secrets and load
+        env:
+          USERS: ${{ inputs.load_level }}
+          CONFIRM: ${{ inputs.high_load_confirmation }}
+          DIAG_KEY: ${{ secrets.TRANSIVA_DIAG_KEY }}
+          USERNAME: ${{ secrets.TRANSIVA_DRIVER_TEST_USERNAME }}
+          PASSWORD: ${{ secrets.TRANSIVA_DRIVER_TEST_PASSWORD }}
+          DEVICE: ${{ secrets.TRANSIVA_DRIVER_TEST_DEVICE_UUID }}
+        run: |
+          set -euo pipefail
+          [ ${#DIAG_KEY} -ge 24 ] || { echo "::error::Buat secret TRANSIVA_DIAG_KEY minimal 24 karakter"; exit 1; }
+          [ -n "$USERNAME" ] || { echo "::error::Secret username test belum ada"; exit 1; }
+          [ -n "$PASSWORD" ] || { echo "::error::Secret password test belum ada"; exit 1; }
+          [ -n "$DEVICE" ] || { echo "::error::Secret device UUID test belum ada"; exit 1; }
+          if { [ "$USERS" = "100" ] || [ "$USERS" = "200" ]; } && [ "$CONFIRM" != "SAYA PAHAM" ]; then
+            echo "::error::Ketik SAYA PAHAM untuk 100/200"; exit 1
+          fi
+
+      - id: config
+        env:
+          USERS: ${{ inputs.load_level }}
+        run: |
+          case "$USERS" in
+            10) N=100 ;;
+            25|50|100|200) N=200 ;;
+            *) exit 1 ;;
+          esac
+          echo "requests=$N" >> "$GITHUB_OUTPUT"
+
+      - name: Run four-layer diagnostic
+        env:
+          DIAG_KEY: ${{ secrets.TRANSIVA_DIAG_KEY }}
+          USERNAME: ${{ secrets.TRANSIVA_DRIVER_TEST_USERNAME }}
+          PASSWORD: ${{ secrets.TRANSIVA_DRIVER_TEST_PASSWORD }}
+          DEVICE: ${{ secrets.TRANSIVA_DRIVER_TEST_DEVICE_UUID }}
+          USERS: ${{ inputs.load_level }}
+          REQUESTS: ${{ steps.config.outputs.requests }}
+        run: |
+          python3 tools/driver_final_diagnostic.py \
+            --base "https://transiva.my.id/server/" \
+            --diag-key "$DIAG_KEY" \
+            --username "$USERNAME" \
+            --password "$PASSWORD" \
+            --device "$DEVICE" \
+            --users "$USERS" \
+            --requests "$REQUESTS"
+
+      - if: always()
+        run: |
+          if [ -f driver-final-diagnostic.md ]; then
+            cat driver-final-diagnostic.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: driver-final-diagnostic-${{ inputs.load_level }}
+          path: |
+            driver-final-diagnostic.json
+            driver-final-diagnostic.md
+          retention-days: 14
