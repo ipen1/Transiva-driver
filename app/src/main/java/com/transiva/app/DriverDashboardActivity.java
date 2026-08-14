@@ -57,7 +57,7 @@ public class DriverDashboardActivity extends Activity
         implements DriverDashboardContract.View {
 
     private static final int REQ_LOCATION = 8702;
-    private static final long IDLE_REFRESH_MS = 45000L;
+    private static final long IDLE_REFRESH_MS = 60000L;
     private static final long ACTIVE_REFRESH_MS = 15000L;
     private static final long OFFER_REFRESH_MS = 8000L;
     private static final long COUNTDOWN_TICK_MS = 1000L;
