@@ -2,6 +2,7 @@ package com.transiva.app.driver.data;
 
 import com.transiva.app.driver.domain.DriverDashboardState;
 import com.transiva.app.driver.domain.DriverOrder;
+import com.transiva.app.driver.domain.DriverClusterStatus;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -21,6 +22,7 @@ public final class DriverDashboardMapper {
         JSONObject queue = root.optJSONObject("smart_queue");
         JSONObject assistant = root.optJSONObject("ai_assistant");
         JSONObject hotspot = root.optJSONObject("hotspot");
+        JSONObject clusterSystem = root.optJSONObject("cluster_system");
 
         if (driver == null) driver = new JSONObject();
         if (wallet == null) wallet = new JSONObject();
@@ -28,6 +30,19 @@ public final class DriverDashboardMapper {
         if (queue == null) queue = new JSONObject();
         if (assistant == null) assistant = new JSONObject();
         if (hotspot == null) hotspot = new JSONObject();
+        if (clusterSystem == null) clusterSystem = new JSONObject();
+
+        JSONObject currentCluster = clusterSystem.optJSONObject("current");
+        if (currentCluster == null) currentCluster = new JSONObject();
+        List<DriverClusterStatus> clusterRows = new ArrayList<>();
+        JSONArray clusterArray = clusterSystem.optJSONArray("clusters");
+        if (clusterArray != null) {
+            for (int i = 0; i < clusterArray.length(); i++) {
+                JSONObject c = clusterArray.optJSONObject(i);
+                if (c != null) clusterRows.add(new DriverClusterStatus(
+                        readInt(c, "id", 0), c.optString("name", "Cluster"), readInt(c, "active_drivers", 0)));
+            }
+        }
 
         DriverOrder active = mapOrder(root.optJSONObject("active_order"));
         List<DriverOrder> activeOrders = new ArrayList<>();
@@ -73,6 +88,9 @@ public final class DriverDashboardMapper {
                 hotspot.optString("name", "Area sekitar Anda"),
                 hotspot.optString("level", "NORMAL"),
                 readInt(hotspot, "score", 0),
+                readInt(currentCluster, "id", 0),
+                currentCluster.optString("name", "Lokasi belum tersedia"),
+                clusterRows,
                 active,
                 activeOrders,
                 offers,
