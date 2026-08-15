@@ -794,7 +794,37 @@ public class DriverTripActivity extends Activity {
             boolean ok = r.optBoolean("success", false);
             String m = first(r.optString("message"), ok ? "Status berhasil diperbarui." : "Gagal update status.");
             mainHandler.post(() -> { updatingStatus=false; setLoading(false); if(ok){ pendingFinishOtp = ""; try{ order.put("status", next); }catch(Exception ignored){} saveActiveOrder(); refreshButtons(); mainHandler.postDelayed(() -> updateMap(), 250); info("Berhasil", m); if(next.equals("finished") || next.equals("completed")){ clearActiveOrder(); finish(); } } else info("Gagal", m); });
-        }catch(Exception e){ mainHandler.post(() -> { updatingStatus=false; setLoading(false); info("Koneksi gagal", "Tidak bisa update status ke server."); }); }});
+        }catch(Exception e){
+            final String errorMessage = e.getMessage() == null ? "" : e.getMessage().trim();
+            mainHandler.post(() -> {
+                updatingStatus=false;
+                setLoading(false);
+
+                String lower = errorMessage.toLowerCase(Locale.US);
+                boolean waitingCustomer =
+                        lower.contains("tunggu customer") ||
+                        lower.contains("menunggu customer") ||
+                        lower.contains("customer menekan terima pesanan") ||
+                        lower.contains("customer_received") ||
+                        lower.contains("konfirmasi customer");
+
+                if(waitingCustomer){
+                    info(
+                        "Menunggu konfirmasi customer",
+                        "Customer belum mengonfirmasi bahwa pesanan sudah diterima. "
+                        + "Order tetap aktif dan tidak akan diselesaikan sampai customer melakukan konfirmasi."
+                    );
+                    return;
+                }
+
+                info(
+                    "Koneksi gagal",
+                    errorMessage.length() > 0
+                        ? errorMessage
+                        : "Tidak bisa update status ke server."
+                );
+            });
+        }});
     }
     private String endpoint(String n){
         // pickup_orders memakai endpoint unified karena endpoint lama hanya membaca tabel orders.
