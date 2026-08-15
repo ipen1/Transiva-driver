@@ -96,6 +96,8 @@ public class DriverDashboardActivity extends Activity
     private TextView hotspotText;
     private TextView clusterCurrentText;
     private TextView clusterListText;
+    private LinearLayout clusterGrid;
+    private TextView priorityOrderTitle;
     private Button sosButton;
     private final Set<String> seenOfferKeys = new HashSet<>();
     private boolean firstOfferSnapshot = true;
@@ -275,14 +277,17 @@ public class DriverDashboardActivity extends Activity
         content.addView(homeSections);
 
         buildStatusAndEmergency();
-        buildWalletAndPerformance();
-        buildSmartAssistant();
 
+        // Order menjadi prioritas visual. Panel hanya muncul bila ada
+        // order aktif/tawaran dan posisinya selalu tepat di bawah status.
         orderSections = new LinearLayout(this);
         orderSections.setOrientation(LinearLayout.VERTICAL);
-        content.addView(orderSections);
-
+        orderSections.setVisibility(View.GONE);
+        homeSections.addView(orderSections);
         buildOrderSections();
+
+        buildWalletAndPerformance();
+        buildSmartAssistant();
 
         shell.addView(
                 DriverBottomNavigation.build(
@@ -453,8 +458,16 @@ public class DriverDashboardActivity extends Activity
 
         clusterCurrentText = text("📍 Cluster: mendeteksi lokasi...", 14, "#0B3A78", true);
         add(card, clusterCurrentText, 0, dp(10), 0, 0);
-        clusterListText = text("Sumbersari 0 • Dolago/Ribamba 0 • Parigi 0 • Pangi 0 • Toboli 0", 11, "#475569", false);
-        add(card, clusterListText, 0, dp(5), 0, 0);
+
+        clusterGrid = new LinearLayout(this);
+        clusterGrid.setOrientation(LinearLayout.HORIZONTAL);
+        clusterGrid.setGravity(Gravity.CENTER);
+        add(card, clusterGrid, 0, dp(8), 0, 0);
+        renderClusterGrid(null);
+
+        clusterListText = text("", 1, "#FFFFFF", false);
+        clusterListText.setVisibility(View.GONE);
+
         assistantTitleText = text("Asisten Transiva", 14, "#0B3A78", true);
         add(card, assistantTitleText, 0, dp(12), 0, 0);
         assistantMessageText = text("Memuat rekomendasi…", 12, "#475569", false);
@@ -470,6 +483,65 @@ public class DriverDashboardActivity extends Activity
         queueBox.addView(queueDetailText);
         add(card, queueBox, 0, dp(12), 0, 0);
         add(homeSections, card, 0, dp(12), 0, 0);
+    }
+
+    private void renderClusterGrid(DriverDashboardState state) {
+        if (clusterGrid == null) return;
+        clusterGrid.removeAllViews();
+
+        String[] fallbackNames = {"Sumbersari", "Dolago /\nRibamba", "Parigi", "Pangi", "Toboli"};
+        for (int i = 0; i < 5; i++) {
+            int id = i + 1;
+            String name = fallbackNames[i];
+            int drivers = 0;
+            boolean current = state != null && state.currentClusterId == id;
+
+            if (state != null && state.clusters != null) {
+                for (DriverClusterStatus row : state.clusters) {
+                    if (row != null && row.id == id) {
+                        name = clean(row.name).isEmpty() ? fallbackNames[i] : row.name.replace("/", "/\n");
+                        drivers = row.activeDrivers;
+                        break;
+                    }
+                }
+            }
+
+            LinearLayout box = new LinearLayout(this);
+            box.setOrientation(LinearLayout.VERTICAL);
+            box.setGravity(Gravity.CENTER);
+            box.setPadding(dp(2), dp(6), dp(2), dp(6));
+
+            int accent = clusterAccent(drivers);
+            int fill = mixWithWhite(accent, current ? 0.87f : 0.94f);
+            box.setBackground(roundStrokeColor(fill, accent, dp(14), current ? 2 : 1));
+
+            TextView number = text(String.valueOf(id), 10, "#FFFFFF", true);
+            number.setGravity(Gravity.CENTER);
+            number.setBackground(roundStrokeColor(accent, accent, dp(999), 1));
+            box.addView(number, new LinearLayout.LayoutParams(dp(24), dp(24)));
+
+            TextView label = text(name, 8, "#0B3A78", true);
+            label.setGravity(Gravity.CENTER);
+            label.setMaxLines(2);
+            LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(-1, dp(31));
+            labelLp.topMargin = dp(3);
+            box.addView(label, labelLp);
+
+            TextView count = text(drivers + " driver", 8, "#475569", false);
+            count.setGravity(Gravity.CENTER);
+            box.addView(count);
+
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(84), 1);
+            if (i > 0) lp.setMargins(dp(3), 0, 0, 0);
+            clusterGrid.addView(box, lp);
+        }
+    }
+
+    private int clusterAccent(int drivers) {
+        if (drivers <= 2) return Color.parseColor("#16A34A");
+        if (drivers <= 6) return Color.parseColor("#0B7CFF");
+        if (drivers <= 15) return Color.parseColor("#F59E0B");
+        return Color.parseColor("#EF4444");
     }
 
     private void sendEmergency() {
@@ -489,12 +561,21 @@ public class DriverDashboardActivity extends Activity
     }
 
     private void buildOrderSections() {
-        orderSections.addView(section("Order Aktif"));
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        priorityOrderTitle = text("⚡ Order Prioritas", 16, "#0B3A78", true);
+        header.addView(priorityOrderTitle, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView live = text("LANGSUNG", 9, "#FFFFFF", true);
+        live.setGravity(Gravity.CENTER);
+        live.setPadding(dp(9), dp(4), dp(9), dp(4));
+        live.setBackground(round("#EF4444", dp(999)));
+        header.addView(live);
+        add(orderSections, header, 0, dp(11), 0, dp(3));
+
         activeBox = new LinearLayout(this);
         activeBox.setOrientation(LinearLayout.VERTICAL);
         orderSections.addView(activeBox);
 
-        orderSections.addView(section("Tawaran Order"));
         offerBox = new LinearLayout(this);
         offerBox.setOrientation(LinearLayout.VERTICAL);
         orderSections.addView(offerBox);
@@ -538,14 +619,7 @@ public class DriverDashboardActivity extends Activity
                     ? "📍 Anda di Cluster " + state.currentClusterId + " • " + state.currentClusterName
                     : "📍 Cluster belum terdeteksi • aktifkan GPS");
         }
-        if (clusterListText != null) {
-            StringBuilder clusters = new StringBuilder();
-            for (DriverClusterStatus c : state.clusters) {
-                if (clusters.length() > 0) clusters.append("   •   ");
-                clusters.append(c.id).append(" ").append(c.name).append(": ").append(c.activeDrivers).append(" driver");
-            }
-            clusterListText.setText(clusters.length() == 0 ? "Data 5 cluster belum tersedia" : clusters.toString());
-        }
+        renderClusterGrid(state);
 
         onlineLabel.setText(state.online ? "ONLINE" : "OFFLINE");
         onlineLabel.setTextColor(Color.parseColor(
@@ -578,7 +652,8 @@ public class DriverDashboardActivity extends Activity
         activeBox.removeAllViews();
         if (state.activeOrders == null || state.activeOrders.isEmpty()) {
             session.remove("current_order_id");
-            activeBox.addView(emptyCard("Belum ada order aktif."));
+            // Tidak tampilkan placeholder di panel prioritas. Bila ada tawaran,
+            // tawaran langsung menjadi kartu pertama yang terlihat.
         } else {
             session.put("current_order_id", state.activeOrders.get(0).id);
             int slot = 0;
@@ -599,10 +674,9 @@ public class DriverDashboardActivity extends Activity
         countdownViews.clear();
         offerButtons.clear();
         if (!state.online) {
-            offerBox.addView(emptyCard(
-                    "Driver OFFLINE.\nAktifkan ONLINE untuk menerima order."));
+            // Panel prioritas tetap ringkas; status offline sudah terlihat di atas.
         } else if (state.offers.isEmpty()) {
-            offerBox.addView(emptyCard("Belum ada tawaran order."));
+            // Tidak tampilkan placeholder agar order aktif tetap menjadi fokus.
         } else {
             Set<String> activeOfferKeys = new HashSet<>();
             boolean hasFreshOffer = false;
@@ -624,6 +698,22 @@ public class DriverDashboardActivity extends Activity
             seenOfferKeys.clear();
             seenOfferKeys.addAll(activeOfferKeys);
             firstOfferSnapshot = false;
+        }
+        boolean hasPriorityOrder = (state.activeOrders != null && !state.activeOrders.isEmpty())
+                || (state.offers != null && !state.offers.isEmpty());
+        if (orderSections != null) {
+            orderSections.setVisibility(hasPriorityOrder ? View.VISIBLE : View.GONE);
+        }
+        if (priorityOrderTitle != null) {
+            int activeCount = state.activeOrders == null ? 0 : state.activeOrders.size();
+            int offerCount = state.offers == null ? 0 : state.offers.size();
+            if (activeCount > 0) {
+                priorityOrderTitle.setText("🚗 Order Aktif" + (activeCount > 1 ? " • " + activeCount + " perjalanan" : ""));
+            } else if (offerCount > 0) {
+                priorityOrderTitle.setText("⚡ Tawaran Masuk" + (offerCount > 1 ? " • " + offerCount + " order" : ""));
+            } else {
+                priorityOrderTitle.setText("⚡ Order Prioritas");
+            }
         }
         if (state.offers == null || state.offers.isEmpty()) {
             seenOfferKeys.clear();
