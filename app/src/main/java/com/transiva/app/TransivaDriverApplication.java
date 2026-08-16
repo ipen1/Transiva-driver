@@ -27,6 +27,7 @@ public class TransivaDriverApplication extends Application implements Applicatio
             MockLocationGuard.enforce(activity);
             RootSecurityGuard.enforce(activity);
         }
+        AppUpdateRuntimeGate.onActivityResumed(activity);
     }
 
     public void onActivityCreated(Activity a, Bundle b) {}

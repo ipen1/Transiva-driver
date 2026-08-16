@@ -17,8 +17,8 @@ import java.nio.charset.StandardCharsets;
 /** Pemeriksa update APK khusus Transiva Driver yang dihosting sendiri. */
 public final class AppUpdateClient {
     public static final String UPDATE_ENDPOINT = "https://transiva.my.id/server/getVersion.php";
-    private static final String APP_ROLE = "driver";
-    private static final String DRIVER_PACKAGE = "com.transiva.driver";
+    public static final String APP_ROLE = "driver";
+    public static final String DRIVER_PACKAGE = "com.transiva.driver";
 
     public interface Callback {
         void onResult(AppUpdateInfo info, boolean updateAvailable);
@@ -28,27 +28,31 @@ public final class AppUpdateClient {
     private AppUpdateClient() {}
 
     public static void check(Context context, Callback callback) {
+        final Context app = context.getApplicationContext();
         new Thread(() -> {
             HttpURLConnection connection = null;
             try {
                 String requestUrl = UPDATE_ENDPOINT
                         + "?app=" + URLEncoder.encode(APP_ROLE, "UTF-8")
+                        + "&installed_version_code=" + installedVersionCode(app)
                         + "&_=" + System.currentTimeMillis();
 
                 connection = (HttpURLConnection) new URL(requestUrl).openConnection();
                 connection.setRequestMethod("GET");
-                connection.setConnectTimeout(20000);
-                connection.setReadTimeout(20000);
+                connection.setConnectTimeout(12000);
+                connection.setReadTimeout(12000);
                 connection.setUseCaches(false);
                 connection.setRequestProperty("Accept", "application/json");
                 connection.setRequestProperty("Cache-Control", "no-cache");
+                connection.setRequestProperty("X-Transiva-App", APP_ROLE);
+                connection.setRequestProperty("X-Transiva-Package", DRIVER_PACKAGE);
 
                 int code = connection.getResponseCode();
                 InputStream stream = code >= 200 && code < 300
                         ? connection.getInputStream() : connection.getErrorStream();
                 String response = read(stream);
                 if (code < 200 || code >= 300) {
-                    throw new IllegalStateException("Server merespons " + code);
+                    throw new IllegalStateException("Server update merespons " + code);
                 }
 
                 JSONObject root = new JSONObject(response);
@@ -62,34 +66,38 @@ public final class AppUpdateClient {
 
                 String serverApp = data.optString("app", "").trim();
                 String serverPackage = data.optString("package_name", "").trim();
-                String installedPackage = context.getPackageName();
+                String installedPackage = app.getPackageName();
 
                 if (!APP_ROLE.equalsIgnoreCase(serverApp)) {
-                    throw new SecurityException(
-                            "Server mengirim pembaruan bukan untuk aplikasi Driver.");
+                    throw new SecurityException("Server mengirim pembaruan bukan untuk aplikasi Driver.");
                 }
                 if (!DRIVER_PACKAGE.equals(installedPackage)) {
-                    throw new SecurityException(
-                            "Identitas paket aplikasi Driver tidak sesuai: " + installedPackage);
+                    throw new SecurityException("Identitas paket Driver tidak sesuai: " + installedPackage);
                 }
                 if (!DRIVER_PACKAGE.equals(serverPackage)) {
-                    throw new SecurityException(
-                            "Paket APK dari server bukan paket Transiva Driver.");
+                    throw new SecurityException("Paket update dari server bukan Transiva Driver.");
                 }
 
                 AppUpdateInfo info = AppUpdateInfo.fromJson(root);
                 if (info.versionCode <= 0 || info.apkUrl.trim().isEmpty()) {
                     throw new IllegalStateException("Konfigurasi update server belum lengkap.");
                 }
-
-                String apkUrlLower = info.apkUrl.toLowerCase();
-                if (apkUrlLower.contains("customer") || apkUrlLower.contains("custumer")
-                        || apkUrlLower.contains("merchant")) {
-                    throw new SecurityException(
-                            "URL pembaruan bukan APK Transiva Driver. Download dibatalkan.");
+                if (info.minimumVersionCode > info.versionCode) {
+                    throw new IllegalStateException("minimum_version_code melebihi version_code terbaru.");
                 }
 
-                callback.onResult(info, info.versionCode > installedVersionCode(context));
+                String apkUrlLower = info.apkUrl.toLowerCase();
+                if (!apkUrlLower.startsWith("https://")) {
+                    throw new SecurityException("URL APK wajib HTTPS.");
+                }
+                if (apkUrlLower.contains("customer") || apkUrlLower.contains("custumer")
+                        || apkUrlLower.contains("merchant")) {
+                    throw new SecurityException("URL pembaruan bukan APK Transiva Driver.");
+                }
+
+                int installed = installedVersionCode(app);
+                AppUpdateStore.saveServerInfo(app, info);
+                callback.onResult(info, info.isUpdateAvailable(installed));
             } catch (Exception e) {
                 callback.onError(e.getMessage() == null
                         ? "Gagal memeriksa pembaruan Driver." : e.getMessage());
@@ -102,7 +110,8 @@ public final class AppUpdateClient {
     public static int installedVersionCode(Context context) throws Exception {
         PackageInfo info = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            return (int) info.getLongVersionCode();
+            long value = info.getLongVersionCode();
+            return value > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) value;
         }
         return info.versionCode;
     }

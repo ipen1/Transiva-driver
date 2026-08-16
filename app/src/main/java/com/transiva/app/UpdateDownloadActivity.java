@@ -2,7 +2,11 @@ package com.transiva.app;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.DownloadManager;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.Signature;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -23,33 +27,102 @@ import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
 
-import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.security.MessageDigest;
+import java.util.Arrays;
 import java.util.Locale;
 
-/** Layar pemeriksaan, download progres, verifikasi, dan instalasi APK Transiva. */
+/** Layar update Driver: DownloadManager background + force gate + verifikasi APK. */
 public class UpdateDownloadActivity extends Activity {
     public static final String EXTRA_ROLE = "role";
-    private final Handler main = new Handler(Looper.getMainLooper());
+    public static final String EXTRA_FORCE = "force_update";
+    public static final String EXTRA_AUTO_START = "auto_start";
 
-    private TextView titleView, versionView, statusView, percentView, sizeView, notesView;
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final Runnable pollDownload = new Runnable() {
+        @Override public void run() {
+            if (isFinishing() || isDestroyed()) return;
+            AppUpdateDownloadManager.State state = AppUpdateDownloadManager.current(UpdateDownloadActivity.this);
+            if (state == null) {
+                downloading = false;
+                actionButton.setVisibility(View.VISIBLE);
+                actionButton.setText("Ulangi Download");
+                statusView.setText("Download tidak ditemukan. Silakan ulangi.");
+                return;
+            }
+            updateProgress(state.downloaded, state.total);
+            if (state.complete()) {
+                downloading = false;
+                downloadedApk = state.file;
+                verifyAndFinishDownload();
+                return;
+            }
+            if (state.failed()) {
+                downloading = false;
+                downloadFailed("Download gagal (kode " + state.reason + "). Silakan ulangi.");
+                AppUpdateStore.clearDownload(UpdateDownloadActivity.this);
+                return;
+            }
+            downloading = true;
+            main.postDelayed(this, 800L);
+        }
+    };
+
+    private TextView titleView, versionView, statusView, percentView, sizeView, notesView, backView;
     private ProgressBar progressBar, checkingBar;
+    private LinearLayout progressInfo;
     private Button actionButton;
     private AppUpdateInfo updateInfo;
     private File downloadedApk;
     private boolean downloading;
     private boolean dark;
+    private boolean forcedMode;
+    private boolean autoStart;
+    private boolean installerOpened;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        forcedMode = getIntent().getBooleanExtra(EXTRA_FORCE, false);
+        autoStart = getIntent().getBooleanExtra(EXTRA_AUTO_START, false);
         dark = DriverAppSettings.isDarkMode(this);
         setContentView(buildScreen());
+        AppUpdateRuntimeGate.clearLaunchingFlag();
         checkUpdate();
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        forcedMode = forcedMode || intent.getBooleanExtra(EXTRA_FORCE, false);
+        autoStart = autoStart || intent.getBooleanExtra(EXTRA_AUTO_START, false);
+        applyForceUi();
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        AppUpdateRuntimeGate.clearLaunchingFlag();
+        if (installerOpened) {
+            installerOpened = false;
+            // Jika install berhasil, Activity lama akan diganti proses Android.
+            // Jika user batal, force gate tetap ada dan tombol Pasang muncul kembali.
+            int current = currentVersion();
+            AppUpdateInfo cached = AppUpdateStore.cachedInfo(this);
+            if (cached != null && !cached.isUpdateAvailable(current)) {
+                AppUpdateStore.clearDownload(this);
+                goToSplash();
+                return;
+            }
+        }
+        AppUpdateDownloadManager.State state = AppUpdateDownloadManager.current(this);
+        if (state != null && (state.running() || state.complete())) {
+            startPollingExisting(state);
+        }
+    }
+
+    @Override protected void onDestroy() {
+        main.removeCallbacks(pollDownload);
+        super.onDestroy();
     }
 
     private View buildScreen() {
@@ -65,10 +138,14 @@ public class UpdateDownloadActivity extends Activity {
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(14), dp(12), dp(14), dp(8));
-        TextView back = text("‹", 34, "#0B7CFF", true);
-        back.setGravity(Gravity.CENTER);
-        back.setOnClickListener(v -> { if (!downloading) finish(); });
-        header.addView(back, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        backView = text("‹", 34, "#0B7CFF", true);
+        backView.setGravity(Gravity.CENTER);
+        backView.setOnClickListener(v -> {
+            if (forcedMode) {
+                Toast.makeText(this, "Pembaruan wajib dipasang untuk melanjutkan.", Toast.LENGTH_SHORT).show();
+            } else if (!downloading) finish();
+        });
+        header.addView(backView, new LinearLayout.LayoutParams(dp(44), dp(44)));
         header.addView(text("Pembaruan Aplikasi", 22, primaryText, true));
         shell.addView(header);
 
@@ -79,35 +156,35 @@ public class UpdateDownloadActivity extends Activity {
         scroll.addView(root);
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        LinearLayout updateCard = new LinearLayout(this);
-        updateCard.setOrientation(LinearLayout.VERTICAL);
-        updateCard.setPadding(dp(20), dp(22), dp(20), dp(22));
-        updateCard.setGravity(Gravity.CENTER_HORIZONTAL);
-        updateCard.setBackground(round(card, 24));
-        updateCard.setElevation(dp(3));
+        LinearLayout cardView = new LinearLayout(this);
+        cardView.setOrientation(LinearLayout.VERTICAL);
+        cardView.setPadding(dp(20), dp(22), dp(20), dp(22));
+        cardView.setGravity(Gravity.CENTER_HORIZONTAL);
+        cardView.setBackground(round(card, 24));
+        cardView.setElevation(dp(3));
 
         TextView icon = text("↻", 44, "#0B7CFF", true);
         icon.setGravity(Gravity.CENTER);
-        updateCard.addView(icon, new LinearLayout.LayoutParams(dp(72), dp(72)));
+        cardView.addView(icon, new LinearLayout.LayoutParams(dp(72), dp(72)));
 
         titleView = text("Memeriksa pembaruan...", 20, primaryText, true);
         titleView.setGravity(Gravity.CENTER);
-        updateCard.addView(titleView);
+        cardView.addView(titleView);
 
         versionView = text("Versi terpasang " + AppUpdateClient.installedVersionName(this), 12, secondary, false);
         versionView.setGravity(Gravity.CENTER);
         versionView.setPadding(0, dp(5), 0, dp(15));
-        updateCard.addView(versionView);
+        cardView.addView(versionView);
 
         checkingBar = new ProgressBar(this);
-        updateCard.addView(checkingBar, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        cardView.addView(checkingBar, new LinearLayout.LayoutParams(dp(44), dp(44)));
 
         progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         progressBar.setMax(100);
         progressBar.setVisibility(View.GONE);
-        updateCard.addView(progressBar, new LinearLayout.LayoutParams(-1, dp(12)));
+        cardView.addView(progressBar, new LinearLayout.LayoutParams(-1, dp(12)));
 
-        LinearLayout progressInfo = new LinearLayout(this);
+        progressInfo = new LinearLayout(this);
         progressInfo.setGravity(Gravity.CENTER_VERTICAL);
         percentView = text("0%", 24, "#0B7CFF", true);
         sizeView = text("Menunggu download", 11, secondary, false);
@@ -115,19 +192,18 @@ public class UpdateDownloadActivity extends Activity {
         progressInfo.addView(percentView);
         progressInfo.addView(sizeView, new LinearLayout.LayoutParams(0, -2, 1));
         progressInfo.setVisibility(View.GONE);
-        progressInfo.setTag("progress_info");
-        updateCard.addView(progressInfo, marginTop(10));
+        cardView.addView(progressInfo, marginTop(10));
 
         statusView = text("Menghubungi server Transiva", 13, secondary, false);
         statusView.setGravity(Gravity.CENTER);
         statusView.setPadding(0, dp(12), 0, dp(8));
-        updateCard.addView(statusView);
+        cardView.addView(statusView);
 
         notesView = text("", 13, secondary, false);
         notesView.setPadding(dp(12), dp(12), dp(12), dp(12));
         notesView.setBackground(round(dark ? "#0B1727" : "#F0F6FF", 16));
         notesView.setVisibility(View.GONE);
-        updateCard.addView(notesView, marginTop(10));
+        cardView.addView(notesView, marginTop(10));
 
         actionButton = new Button(this);
         actionButton.setText("Periksa Lagi");
@@ -138,22 +214,29 @@ public class UpdateDownloadActivity extends Activity {
         actionButton.setBackground(round("#0B7CFF", 16));
         actionButton.setVisibility(View.GONE);
         actionButton.setOnClickListener(v -> onAction());
-        updateCard.addView(actionButton, new LinearLayout.LayoutParams(-1, dp(52)));
+        cardView.addView(actionButton, new LinearLayout.LayoutParams(-1, dp(52)));
 
-        root.addView(updateCard);
-        TextView safety = text("APK diunduh langsung dari server resmi Transiva. Setelah selesai, Android akan meminta konfirmasi pemasangan.", 11, secondary, false);
+        root.addView(cardView);
+        TextView safety = text("Pembaruan diunduh oleh sistem Android dari server resmi Transiva. APK diverifikasi sebelum installer dibuka.", 11, secondary, false);
         safety.setPadding(dp(4), dp(14), dp(4), 0);
         root.addView(safety);
+        applyForceUi();
         return shell;
+    }
+
+    private void applyForceUi() {
+        if (backView != null) backView.setVisibility(forcedMode ? View.INVISIBLE : View.VISIBLE);
     }
 
     private void checkUpdate() {
         checkingBar.setVisibility(View.VISIBLE);
         progressBar.setVisibility(View.GONE);
+        progressInfo.setVisibility(View.GONE);
         actionButton.setVisibility(View.GONE);
         notesView.setVisibility(View.GONE);
-        titleView.setText("Memeriksa pembaruan...");
+        titleView.setText(forcedMode ? "Pembaruan wajib" : "Memeriksa pembaruan...");
         statusView.setText("Menghubungi server Transiva");
+
         AppUpdateClient.check(this, new AppUpdateClient.Callback() {
             @Override public void onResult(AppUpdateInfo info, boolean available) {
                 main.post(() -> showResult(info, available));
@@ -166,105 +249,99 @@ public class UpdateDownloadActivity extends Activity {
 
     private void showResult(AppUpdateInfo info, boolean available) {
         updateInfo = info;
+        forcedMode = forcedMode || info.isForceRequired(currentVersion());
+        applyForceUi();
         checkingBar.setVisibility(View.GONE);
-        actionButton.setVisibility(View.VISIBLE);
+
         if (!available) {
+            AppUpdateStore.clearDownload(this);
             titleView.setText("Aplikasi sudah terbaru");
             versionView.setText("Versi " + AppUpdateClient.installedVersionName(this));
             statusView.setText("Tidak ada pembaruan yang perlu diunduh.");
-            actionButton.setText("Periksa Lagi");
+            actionButton.setText(forcedMode ? "Lanjutkan" : "Periksa Lagi");
+            actionButton.setVisibility(View.VISIBLE);
+            if (forcedMode) {
+                forcedMode = false;
+                applyForceUi();
+                goToSplash();
+            }
             return;
         }
-        titleView.setText(info.title);
-        versionView.setText("Versi " + info.versionName + " tersedia");
-        statusView.setText("Pembaruan siap diunduh");
+
+        titleView.setText(forcedMode ? "Pembaruan wajib tersedia" : info.title);
+        versionView.setText("Versi " + info.versionName + " • terpasang " + AppUpdateClient.installedVersionName(this));
+        statusView.setText(forcedMode
+                ? "Versi lama tidak dapat digunakan. Pembaruan akan diunduh otomatis."
+                : "Pembaruan siap diunduh di background.");
         notesView.setText(info.message);
         notesView.setVisibility(View.VISIBLE);
         actionButton.setText("Download & Perbarui");
+        actionButton.setVisibility(View.VISIBLE);
+
+        AppUpdateDownloadManager.State existing = AppUpdateDownloadManager.current(this);
+        if (existing != null && (existing.running() || existing.complete())) {
+            startPollingExisting(existing);
+        } else if (forcedMode || autoStart) {
+            startDownload();
+        }
     }
 
     private void showError(String message) {
         checkingBar.setVisibility(View.GONE);
+        AppUpdateInfo cached = AppUpdateStore.cachedInfo(this);
+        if (forcedMode && cached != null && cached.isForceRequired(currentVersion())) {
+            updateInfo = cached;
+            titleView.setText("Pembaruan wajib");
+            statusView.setText("Server versi belum dapat dihubungi. Coba lagi untuk melanjutkan pembaruan.");
+            actionButton.setText("Coba Lagi");
+            actionButton.setVisibility(View.VISIBLE);
+            return;
+        }
         titleView.setText("Pemeriksaan gagal");
-        statusView.setText(message);
+        statusView.setText(message == null ? "Tidak dapat memeriksa versi aplikasi." : message);
         actionButton.setText("Coba Lagi");
         actionButton.setVisibility(View.VISIBLE);
     }
 
     private void onAction() {
-        if (downloading) return;
         if (downloadedApk != null && downloadedApk.exists()) {
             installApk(downloadedApk);
-        } else if (updateInfo != null && updateInfo.versionCode > currentVersion()) {
+        } else if (updateInfo != null && updateInfo.isUpdateAvailable(currentVersion())) {
             startDownload();
+        } else if (forcedMode && updateInfo != null && !updateInfo.isUpdateAvailable(currentVersion())) {
+            goToSplash();
         } else {
             checkUpdate();
         }
     }
 
-    private int currentVersion() {
-        try { return AppUpdateClient.installedVersionCode(this); }
-        catch (Exception ignored) { return 0; }
+    private void startDownload() {
+        if (updateInfo == null || !updateInfo.isUpdateAvailable(currentVersion())) return;
+        try {
+            AppUpdateDownloadManager.ensureDownload(this, updateInfo);
+            downloading = true;
+            checkingBar.setVisibility(View.GONE);
+            progressBar.setVisibility(View.VISIBLE);
+            progressInfo.setVisibility(View.VISIBLE);
+            actionButton.setVisibility(View.GONE);
+            titleView.setText(forcedMode ? "Mengunduh pembaruan wajib" : "Mengunduh di background");
+            statusView.setText("Download dikelola Android. Anda boleh mematikan layar.");
+            main.removeCallbacks(pollDownload);
+            main.post(pollDownload);
+        } catch (Exception e) {
+            downloadFailed(e.getMessage());
+        }
     }
 
-    private void startDownload() {
-        downloading = true;
+    private void startPollingExisting(AppUpdateDownloadManager.State state) {
         checkingBar.setVisibility(View.GONE);
         progressBar.setVisibility(View.VISIBLE);
-        View info = progressBar.getParent() instanceof LinearLayout
-                ? ((LinearLayout) progressBar.getParent()).findViewWithTag("progress_info") : null;
-        if (info != null) info.setVisibility(View.VISIBLE);
+        progressInfo.setVisibility(View.VISIBLE);
         actionButton.setVisibility(View.GONE);
-        titleView.setText("Mengunduh pembaruan");
-        statusView.setText("Jangan tutup aplikasi sampai download selesai.");
-
-        new Thread(() -> {
-            HttpURLConnection connection = null;
-            File output = new File(new File(getCacheDir(), "updates"), "transiva-update.apk");
-            try {
-                File parent = output.getParentFile();
-                if (parent != null && !parent.exists() && !parent.mkdirs()) throw new IllegalStateException("Folder update tidak dapat dibuat.");
-                connection = (HttpURLConnection) new URL(updateInfo.apkUrl).openConnection();
-                connection.setConnectTimeout(30000);
-                connection.setReadTimeout(60000);
-                connection.setInstanceFollowRedirects(true);
-                connection.setRequestProperty("Accept", "application/vnd.android.package-archive");
-                connection.connect();
-                int response = connection.getResponseCode();
-                if (response < 200 || response >= 300) throw new IllegalStateException("Download gagal, server merespons " + response);
-                long total = connection.getContentLengthLong();
-                if (total <= 0) total = updateInfo.fileSize;
-                long downloaded = 0;
-                byte[] buffer = new byte[32 * 1024];
-                try (BufferedInputStream input = new BufferedInputStream(connection.getInputStream());
-                     FileOutputStream file = new FileOutputStream(output, false)) {
-                    int count;
-                    while ((count = input.read(buffer)) != -1) {
-                        file.write(buffer, 0, count);
-                        downloaded += count;
-                        final long done = downloaded;
-                        final long expected = total;
-                        main.post(() -> updateProgress(done, expected));
-                    }
-                    file.flush();
-                }
-                if (!updateInfo.sha256.trim().isEmpty()) {
-                    main.post(() -> statusView.setText("Memverifikasi keamanan file..."));
-                    String actual = sha256(output);
-                    if (!actual.equalsIgnoreCase(updateInfo.sha256.trim())) {
-                        //noinspection ResultOfMethodCallIgnored
-                        output.delete();
-                        throw new SecurityException("Verifikasi APK gagal. File tidak akan dipasang.");
-                    }
-                }
-                downloadedApk = output;
-                main.post(this::downloadFinished);
-            } catch (Exception e) {
-                main.post(() -> downloadFailed(e.getMessage()));
-            } finally {
-                if (connection != null) connection.disconnect();
-            }
-        }, "transiva-apk-download").start();
+        titleView.setText(state.complete() ? "Download selesai" : "Mengunduh pembaruan");
+        downloading = state.running();
+        main.removeCallbacks(pollDownload);
+        main.post(pollDownload);
     }
 
     private void updateProgress(long done, long total) {
@@ -272,7 +349,29 @@ public class UpdateDownloadActivity extends Activity {
         progressBar.setIndeterminate(total <= 0);
         if (total > 0) progressBar.setProgress(percent);
         percentView.setText(total > 0 ? percent + "%" : "...");
-        sizeView.setText(formatBytes(done) + (total > 0 ? " dari " + formatBytes(total) : ""));
+        sizeView.setText(formatBytes(Math.max(0L, done)) + (total > 0 ? " dari " + formatBytes(total) : ""));
+    }
+
+    private void verifyAndFinishDownload() {
+        main.removeCallbacks(pollDownload);
+        if (downloadedApk == null || !downloadedApk.exists()) {
+            downloadFailed("File APK hasil download tidak ditemukan.");
+            return;
+        }
+        titleView.setText("Memverifikasi pembaruan");
+        statusView.setText("Memeriksa paket, versi, tanda tangan, dan SHA-256...");
+        actionButton.setVisibility(View.GONE);
+
+        new Thread(() -> {
+            try {
+                verifyApk(downloadedApk);
+                main.post(this::downloadFinished);
+            } catch (Exception e) {
+                try { downloadedApk.delete(); } catch (Exception ignored) {}
+                AppUpdateStore.clearDownload(UpdateDownloadActivity.this);
+                main.post(() -> downloadFailed(e.getMessage()));
+            }
+        }, "transiva-verify-update").start();
     }
 
     private void downloadFinished() {
@@ -280,19 +379,86 @@ public class UpdateDownloadActivity extends Activity {
         progressBar.setIndeterminate(false);
         progressBar.setProgress(100);
         percentView.setText("100%");
-        titleView.setText("Download selesai");
-        statusView.setText("APK siap dipasang di perangkat ini.");
+        titleView.setText("Pembaruan siap dipasang");
+        statusView.setText("Verifikasi berhasil. Lanjutkan instalasi Android.");
         actionButton.setText("Pasang Sekarang");
         actionButton.setVisibility(View.VISIBLE);
-        installApk(downloadedApk);
+        if (forcedMode || autoStart) installApk(downloadedApk);
     }
 
     private void downloadFailed(String message) {
         downloading = false;
+        main.removeCallbacks(pollDownload);
         titleView.setText("Download terhenti");
         statusView.setText(message == null ? "Koneksi terputus. Silakan coba lagi." : message);
         actionButton.setText("Ulangi Download");
         actionButton.setVisibility(View.VISIBLE);
+    }
+
+    private void verifyApk(File apk) throws Exception {
+        if (updateInfo == null) updateInfo = AppUpdateStore.cachedInfo(this);
+        if (updateInfo == null) throw new SecurityException("Informasi versi update tidak tersedia.");
+
+        PackageManager pm = getPackageManager();
+        int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                ? PackageManager.GET_SIGNING_CERTIFICATES : PackageManager.GET_SIGNATURES;
+        PackageInfo archive = pm.getPackageArchiveInfo(apk.getAbsolutePath(), flags);
+        if (archive == null) throw new SecurityException("File download bukan APK Android yang valid.");
+        if (!AppUpdateClient.DRIVER_PACKAGE.equals(archive.packageName)) {
+            throw new SecurityException("APK bukan paket Transiva Driver.");
+        }
+        long archiveVersion = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                ? archive.getLongVersionCode() : archive.versionCode;
+        if (archiveVersion != updateInfo.versionCode) {
+            throw new SecurityException("VersionCode APK tidak sesuai dengan server.");
+        }
+
+        PackageInfo installed = pm.getPackageInfo(getPackageName(), flags);
+        byte[][] a = certDigests(installed);
+        byte[][] b = certDigests(archive);
+        if (a.length == 0 || b.length == 0 || !sameCertSet(a, b)) {
+            throw new SecurityException("Tanda tangan APK berbeda. Update dibatalkan.");
+        }
+
+        if (updateInfo.sha256 != null && !updateInfo.sha256.trim().isEmpty()) {
+            String actual = sha256(apk);
+            if (!actual.equalsIgnoreCase(updateInfo.sha256.trim())) {
+                throw new SecurityException("SHA-256 APK tidak cocok. Update dibatalkan.");
+            }
+        }
+    }
+
+    private byte[][] certDigests(PackageInfo info) throws Exception {
+        Signature[] signatures;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            if (info.signingInfo == null) return new byte[0][];
+            signatures = info.signingInfo.hasMultipleSigners()
+                    ? info.signingInfo.getApkContentsSigners()
+                    : info.signingInfo.getSigningCertificateHistory();
+        } else {
+            signatures = info.signatures;
+        }
+        if (signatures == null) return new byte[0][];
+        byte[][] result = new byte[signatures.length][];
+        for (int i = 0; i < signatures.length; i++) {
+            result[i] = MessageDigest.getInstance("SHA-256").digest(signatures[i].toByteArray());
+        }
+        return result;
+    }
+
+    private boolean sameCertSet(byte[][] a, byte[][] b) {
+        if (a.length != b.length) return false;
+        boolean[] used = new boolean[b.length];
+        outer: for (byte[] x : a) {
+            for (int i = 0; i < b.length; i++) {
+                if (!used[i] && Arrays.equals(x, b[i])) {
+                    used[i] = true;
+                    continue outer;
+                }
+            }
+            return false;
+        }
+        return true;
     }
 
     private void installApk(File apk) {
@@ -300,8 +466,9 @@ public class UpdateDownloadActivity extends Activity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !getPackageManager().canRequestPackageInstalls()) {
             new AlertDialog.Builder(this)
                     .setTitle("Izinkan pemasangan aplikasi")
-                    .setMessage("Aktifkan izin 'Instal aplikasi tidak dikenal' untuk Transiva, lalu kembali ke halaman ini.")
-                    .setNegativeButton("Batal", null)
+                    .setMessage("Aktifkan izin 'Instal aplikasi tidak dikenal' untuk Transiva Driver, lalu kembali. Pembaruan wajib tidak dapat dilewati.")
+                    .setCancelable(!forcedMode)
+                    .setNegativeButton(forcedMode ? null : "Batal", null)
                     .setPositiveButton("Buka Pengaturan", (d, w) -> {
                         Intent intent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                                 Uri.parse("package:" + getPackageName()));
@@ -313,19 +480,33 @@ public class UpdateDownloadActivity extends Activity {
             Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", apk);
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setDataAndType(uri, "application/vnd.android.package-archive");
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            installerOpened = true;
             startActivity(intent);
         } catch (Exception e) {
             Toast.makeText(this, "Installer tidak dapat dibuka: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
 
+    private void goToSplash() {
+        Intent i = new Intent(this, SplashActivity.class);
+        i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(i);
+        finish();
+    }
+
     @Override public void onBackPressed() {
-        if (downloading) {
-            Toast.makeText(this, "Download pembaruan sedang berlangsung.", Toast.LENGTH_SHORT).show();
+        if (forcedMode) {
+            Toast.makeText(this, "Pembaruan wajib dipasang untuk menggunakan Transiva Driver.", Toast.LENGTH_SHORT).show();
             return;
         }
+        // DownloadManager tetap melanjutkan download walau halaman ditutup.
         super.onBackPressed();
+    }
+
+    private int currentVersion() {
+        try { return AppUpdateClient.installedVersionCode(this); }
+        catch (Exception ignored) { return 0; }
     }
 
     private String sha256(File file) throws Exception {
