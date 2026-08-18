@@ -97,8 +97,8 @@ public class DriverBpjsActivity extends Activity {
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
 
         content.addView(buildHeader());
-        content.addView(buildBpjsCard(), sectionLp());
-        content.addView(buildInfoCard(), sectionLp());
+        content.addView(buildBpjsCard(), bpjsCardLp());
+        content.addView(buildBenefitsCard(), sectionLp());
 
         loading = new ProgressBar(this);
         loading.setVisibility(View.GONE);
@@ -173,11 +173,6 @@ public class DriverBpjsActivity extends Activity {
         // Kunci rasio kartu agar FrameLayout wrap_content tidak mengikuti intrinsic
         // height PNG dan berubah menjadi kartu vertikal yang sangat panjang.
         // Background 1440 x 879 -> rasio tinggi/lebar = 879/1440.
-        int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        int cardWidth = Math.max(dp(280), screenWidth - dp(28));
-        int cardHeight = Math.round(cardWidth * (879f / 1440f));
-        card.setMinimumHeight(cardHeight);
-        card.setLayoutParams(new LinearLayout.LayoutParams(-1, cardHeight));
         return card;
     }
 
@@ -192,17 +187,100 @@ public class DriverBpjsActivity extends Activity {
         return valueView;
     }
 
-    private View buildInfoCard() {
+    private View buildBenefitsCard() {
         LinearLayout card = whiteCard();
-        card.addView(sectionTitle("Kartu BPJS Driver", "Data kartu dibaca dari profil driver dan dikelola oleh admin Transiva"));
+        card.setPadding(dp(16), dp(16), dp(16), dp(16));
 
-        TextView hint = text(
-                "Pastikan NIK KTP, nomor BPJS, nama peserta, dan tanggal aktif sesuai dengan data BPJS Ketenagakerjaan.",
-                10, "#718096", false
+        LinearLayout titleRow = new LinearLayout(this);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView shield = text("🛡", 26, "#0A9C52", false);
+        shield.setGravity(Gravity.CENTER);
+        shield.setBackground(round("#EAF8F0", 16));
+        titleRow.addView(shield, new LinearLayout.LayoutParams(dp(48), dp(48)));
+
+        LinearLayout titleBox = new LinearLayout(this);
+        titleBox.setOrientation(LinearLayout.VERTICAL);
+        titleBox.setPadding(dp(10), 0, 0, 0);
+        titleBox.addView(text("MANFAAT BPJS KETENAGAKERJAAN AKTIF", 15, "#12395F", true));
+        titleBox.addView(text("JAMINAN KECELAKAAN KERJA (JKK)", 12, "#169C51", true));
+        titleBox.addView(text(
+                "Memberikan perlindungan bagi Anda saat bekerja sebagai driver Transiva.",
+                10, "#53677D", false
+        ));
+        titleRow.addView(titleBox, new LinearLayout.LayoutParams(0, -2, 1));
+        card.addView(titleRow);
+
+        LinearLayout benefits = new LinearLayout(this);
+        benefits.setOrientation(LinearLayout.HORIZONTAL);
+        benefits.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams benefitsLp = new LinearLayout.LayoutParams(-1, -2);
+        benefitsLp.setMargins(0, dp(16), 0, 0);
+        card.addView(benefits, benefitsLp);
+
+        benefits.addView(benefitItem("✚", "Perawatan", "Sesuai manfaat JKK"), benefitLp());
+        benefits.addView(benefitItem("♿", "Tidak mampu bekerja", "Santunan sementara"), benefitLp());
+        benefits.addView(benefitItem("♟", "Risiko cacat", "Santunan sesuai ketentuan"), benefitLp());
+        benefits.addView(benefitItem("Rp", "Santunan kematian", "Untuk ahli waris"), benefitLp());
+
+        TextView note = text(
+                "Manfaat mengikuti status kepesertaan dan ketentuan resmi BPJS Ketenagakerjaan yang berlaku.",
+                9, "#6B7C8F", false
         );
-        hint.setPadding(0, dp(8), 0, 0);
-        card.addView(hint);
+        note.setPadding(0, dp(14), 0, 0);
+        card.addView(note);
+
+        TextView hashtag = text(
+                "#TransivaAman   •   #DriverTerlindungi   •   #TransivaPeduli",
+                11, "#0B3A78", true
+        );
+        hashtag.setGravity(Gravity.CENTER);
+        hashtag.setPadding(dp(10), dp(10), dp(10), dp(10));
+        hashtag.setBackground(gradient("#EFFAF3", "#F4F9FF", 16));
+        LinearLayout.LayoutParams tagLp = new LinearLayout.LayoutParams(-1, -2);
+        tagLp.setMargins(0, dp(14), 0, 0);
+        card.addView(hashtag, tagLp);
+
         return card;
+    }
+
+    private View benefitItem(String iconText, String title, String subtitle) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER_HORIZONTAL);
+        box.setPadding(dp(4), 0, dp(4), 0);
+
+        TextView icon = text(iconText, 18, "#139A50", true);
+        icon.setGravity(Gravity.CENTER);
+        icon.setBackground(round("#EFF9F3", 18));
+        box.addView(icon, new LinearLayout.LayoutParams(dp(38), dp(38)));
+
+        TextView titleView = text(title, 9, "#15415C", true);
+        titleView.setGravity(Gravity.CENTER);
+        titleView.setMaxLines(2);
+        titleView.setPadding(0, dp(6), 0, 0);
+        box.addView(titleView, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView subView = text(subtitle, 8, "#66788A", false);
+        subView.setGravity(Gravity.CENTER);
+        subView.setMaxLines(2);
+        subView.setPadding(0, dp(3), 0, 0);
+        box.addView(subView, new LinearLayout.LayoutParams(-1, -2));
+        return box;
+    }
+
+    private LinearLayout.LayoutParams benefitLp() {
+        return new LinearLayout.LayoutParams(0, -2, 1);
+    }
+
+    private LinearLayout.LayoutParams bpjsCardLp() {
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        int availableWidth = Math.max(dp(280), screenWidth - dp(28));
+        int cardHeight = Math.round(availableWidth * (879f / 1440f));
+
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, cardHeight);
+        lp.setMargins(0, dp(14), 0, 0);
+        return lp;
     }
 
     private void loadProfile() {
