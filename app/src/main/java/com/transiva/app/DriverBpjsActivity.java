@@ -152,18 +152,18 @@ public class DriverBpjsActivity extends Activity {
         LinearLayout data = new LinearLayout(this);
         data.setOrientation(LinearLayout.VERTICAL);
         // Sisakan area judul KARTU PESERTA di kiri atas background.
-        data.setPadding(dp(22), dp(54), dp(18), dp(16));
+        data.setPadding(dp(22), dp(38), dp(18), dp(10));
 
-        nikValue = addCardField(data, "NIK KTP", "Belum diisi", 16);
+        nikValue = addCardValueOnly(data, "Belum diisi", 15);
         numberValue = addCardField(data, "NO. BPJS", "Belum diisi", 17);
-        nameValue = addCardField(data, "NAMA LENGKAP", "Belum diisi", 16);
-        registeredValue = addCardField(data, "BPJS AKTIF SEJAK", "Belum diisi", 15);
+        nameValue = addCardValueOnly(data, "Belum diisi", 16);
+        registeredValue = addCardField(data, "BPJS AKTIF SEJAK", "Belum diisi", 14);
 
         statusBadge = text("TIDAK AKTIF", 10, "#C62828", true);
         statusBadge.setPadding(dp(10), dp(5), dp(10), dp(5));
         statusBadge.setBackground(round("#FDECEC", 14));
         LinearLayout.LayoutParams statusLp = new LinearLayout.LayoutParams(-2, -2);
-        statusLp.setMargins(0, dp(8), 0, 0);
+        statusLp.setMargins(0, dp(3), 0, 0);
         data.addView(statusBadge, statusLp);
 
         FrameLayout.LayoutParams dataLp = new FrameLayout.LayoutParams(-1, -2);
@@ -182,7 +182,15 @@ public class DriverBpjsActivity extends Activity {
 
         TextView valueView = text(value, valueSize, "#071C17", true);
         valueView.setMaxLines(1);
-        valueView.setPadding(0, dp(2), 0, dp(9));
+        valueView.setPadding(0, dp(1), 0, dp(6));
+        parent.addView(valueView, new LinearLayout.LayoutParams(-1, -2));
+        return valueView;
+    }
+
+    private TextView addCardValueOnly(LinearLayout parent, String value, int valueSize) {
+        TextView valueView = text(value, valueSize, "#071C17", true);
+        valueView.setMaxLines(1);
+        valueView.setPadding(0, 0, 0, dp(6));
         parent.addView(valueView, new LinearLayout.LayoutParams(-1, -2));
         return valueView;
     }
@@ -231,11 +239,14 @@ public class DriverBpjsActivity extends Activity {
         card.addView(note);
 
         TextView hashtag = text(
-                "#TransivaAman   •   #DriverTerlindungi   •   #TransivaPeduli",
-                11, "#0B3A78", true
+                "#TransivaAman  •  #DriverTerlindungi  •  #TransivaPeduli",
+                8, "#0B3A78", true
         );
         hashtag.setGravity(Gravity.CENTER);
-        hashtag.setPadding(dp(10), dp(10), dp(10), dp(10));
+        hashtag.setSingleLine(true);
+        hashtag.setMaxLines(1);
+        hashtag.setTextScaleX(0.92f);
+        hashtag.setPadding(dp(6), dp(9), dp(6), dp(9));
         hashtag.setBackground(gradient("#EFFAF3", "#F4F9FF", 16));
         LinearLayout.LayoutParams tagLp = new LinearLayout.LayoutParams(-1, -2);
         tagLp.setMargins(0, dp(14), 0, 0);
