@@ -135,7 +135,9 @@ public class DriverBpjsActivity extends Activity {
 
         ImageView background = new ImageView(this);
         background.setImageResource(R.drawable.bg_bpjs_card);
-        background.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        // Background sudah memiliki rasio kartu. FIT_XY aman karena tinggi kartu
+        // dihitung dengan rasio gambar yang sama, sehingga gambar tidak terpotong.
+        background.setScaleType(ImageView.ScaleType.FIT_XY);
         card.addView(background, new FrameLayout.LayoutParams(-1, -1));
 
         // Overlay tipis agar data tetap terbaca di area hijau kartu.
@@ -149,7 +151,8 @@ public class DriverBpjsActivity extends Activity {
 
         LinearLayout data = new LinearLayout(this);
         data.setOrientation(LinearLayout.VERTICAL);
-        data.setPadding(dp(22), dp(62), dp(18), dp(20));
+        // Sisakan area judul KARTU PESERTA di kiri atas background.
+        data.setPadding(dp(22), dp(54), dp(18), dp(16));
 
         nikValue = addCardField(data, "NIK KTP", "Belum diisi", 16);
         numberValue = addCardField(data, "NO. BPJS", "Belum diisi", 17);
@@ -167,8 +170,14 @@ public class DriverBpjsActivity extends Activity {
         dataLp.gravity = Gravity.TOP;
         card.addView(data, dataLp);
 
-        // Proporsi kartu mendekati kartu fisik, tetapi tetap responsif terhadap lebar layar.
-        card.setMinimumHeight(dp(235));
+        // Kunci rasio kartu agar FrameLayout wrap_content tidak mengikuti intrinsic
+        // height PNG dan berubah menjadi kartu vertikal yang sangat panjang.
+        // Background 1440 x 879 -> rasio tinggi/lebar = 879/1440.
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        int cardWidth = Math.max(dp(280), screenWidth - dp(28));
+        int cardHeight = Math.round(cardWidth * (879f / 1440f));
+        card.setMinimumHeight(cardHeight);
+        card.setLayoutParams(new LinearLayout.LayoutParams(-1, cardHeight));
         return card;
     }
 
