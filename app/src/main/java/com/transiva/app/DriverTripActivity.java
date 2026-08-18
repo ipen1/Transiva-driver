@@ -248,6 +248,7 @@ public class DriverTripActivity extends Activity {
         statusBadge = text(statusLabel(status()), 12, "#FFFFFF", true); statusBadge.setGravity(Gravity.CENTER); statusBadge.setPadding(dp(12), dp(7), dp(12), dp(7)); statusBadge.setBackground(gradient("#086BFF", "#2EA2FF", dp(18))); top.addView(statusBadge);
         LinearLayout stats = new LinearLayout(this); stats.setOrientation(LinearLayout.HORIZONTAL); stats.setGravity(Gravity.CENTER); LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1,-2); sp.setMargins(0, dp(14),0,0); h.addView(stats, sp);
         mini(stats, "💰", "Total Bayar", rupiah(optDouble("price", "fare", "total"))); mini(stats, vehicleEmoji(), "Jarak", one(optDouble("distance_km")) + " KM"); mini(stats, "⏱️", "Estimasi", zero(optDouble("duration_minutes")) + " menit");
+        double orderVoucher = optDouble("voucher_discount"); if(orderVoucher > 0){ TextView subsidy=text("🏷 Customer memakai voucher " + rupiah(orderVoucher) + " • biaya ditanggung Transiva • pendapatan Anda tetap dihitung dari ongkir normal.",12,"#047857",true); subsidy.setPadding(dp(12),dp(10),dp(12),dp(10)); c.addView(subsidy); }
         distanceInfo = text("📡 Mengukur jarak driver...", 13, "#64748B", false); distanceInfo.setPadding(0, dp(10),0,0); h.addView(distanceInfo);
         distanceHint = text("", 13, "#059669", true); distanceHint.setPadding(dp(12), dp(9), dp(12), dp(9)); distanceHint.setBackground(stroke("#ECFDF5", "#86EFAC", dp(14), 1)); LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-1,-2); hp.setMargins(0, dp(8),0,0); h.addView(distanceHint, hp);
         TextView pay = text(isNonCash() ? "💳 NON-TUNAI • TransPay" : "💵 TUNAI • Tagih customer", 13, isNonCash() ? "#1D4ED8" : "#B45309", true); pay.setGravity(Gravity.CENTER); pay.setPadding(dp(12),dp(9),dp(12),dp(9)); pay.setBackground(stroke(isNonCash()?"#EFF6FF":"#FFFBEB", isNonCash()?"#93C5FD":"#FCD34D", dp(14),1)); LinearLayout.LayoutParams payLp=new LinearLayout.LayoutParams(-1,-2); payLp.setMargins(0,dp(8),0,0); h.addView(pay,payLp);
@@ -347,6 +348,8 @@ public class DriverTripActivity extends Activity {
         rowText(c, "🏪 Resto", first(food.optString("restaurant_name"), pickupAddress(), "Resto"));
         rowText(c, "🧾 Total Makanan", rupiah(food.optDouble("food_total", 0)));
         rowText(c, vehicleEmoji() + " Ongkir", rupiah(food.optDouble("delivery_fee", optDouble("price"))));
+        double voucherDiscount = food.optDouble("voucher_discount", optDouble("voucher_discount"));
+        if(voucherDiscount > 0){ rowText(c, "🏷 Voucher Customer", "- " + rupiah(voucherDiscount)); rowText(c, "🛡 Ditanggung", "Transiva • pendapatan driver tidak berkurang"); }
         rowText(c, "💳 Pembayaran", first(food.optString("payment_label"), food.optString("payment_method"), "-"));
         rowText(c, "💰 Total Bayar", rupiah(food.optDouble("total", optDouble("price", "total"))));
         TextView menuTitle = text("📦 Menu Pesanan", 16, "#0B3A78", true); menuTitle.setPadding(0, dp(12),0,dp(6)); c.addView(menuTitle);
