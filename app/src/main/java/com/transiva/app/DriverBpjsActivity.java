@@ -9,6 +9,7 @@ import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
@@ -30,11 +31,10 @@ public class DriverBpjsActivity extends Activity {
     private boolean loadingData;
 
     private TextView statusBadge;
+    private TextView nikValue;
     private TextView numberValue;
     private TextView nameValue;
-    private TextView birthValue;
     private TextView registeredValue;
-    private TextView noteValue;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -128,43 +128,70 @@ public class DriverBpjsActivity extends Activity {
     }
 
     private View buildBpjsCard() {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(18), dp(18), dp(18), dp(18));
-        card.setBackground(gradient("#075EF4", "#22A4FF", 22));
-        card.setElevation(dp(3));
+        FrameLayout card = new FrameLayout(this);
+        card.setClipToOutline(true);
+        card.setElevation(dp(4));
+        card.setBackground(round("#FFFFFF", 22));
 
-        TextView label = text("BPJS KETENAGAKERJAAN", 10, "#DDEEFF", true);
-        card.addView(label);
+        ImageView background = new ImageView(this);
+        background.setImageResource(R.drawable.bg_bpjs_card);
+        background.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        card.addView(background, new FrameLayout.LayoutParams(-1, -1));
 
-        statusBadge = text("Tidak Aktif", 12, "#C62828", true);
-        statusBadge.setPadding(dp(10), dp(6), dp(10), dp(6));
-        statusBadge.setBackground(round("#FFECEC", 14));
-        LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(-2, -2);
-        badgeLp.setMargins(0, dp(12), 0, dp(18));
-        card.addView(statusBadge, badgeLp);
+        // Overlay tipis agar data tetap terbaca di area hijau kartu.
+        View shade = new View(this);
+        GradientDrawable shadeDrawable = new GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{0x26000000, 0x09000000, 0x00000000}
+        );
+        shade.setBackground(shadeDrawable);
+        card.addView(shade, new FrameLayout.LayoutParams(-1, -1));
 
-        numberValue = text("Belum diisi", 24, "#FFFFFF", true);
-        card.addView(numberValue);
-        TextView numberLabel = text("Nomor Kepesertaan", 10, "#EAF5FF", false);
-        card.addView(numberLabel);
+        LinearLayout data = new LinearLayout(this);
+        data.setOrientation(LinearLayout.VERTICAL);
+        data.setPadding(dp(22), dp(62), dp(18), dp(20));
 
+        nikValue = addCardField(data, "NIK KTP", "Belum diisi", 16);
+        numberValue = addCardField(data, "NO. BPJS", "Belum diisi", 17);
+        nameValue = addCardField(data, "NAMA LENGKAP", "Belum diisi", 16);
+        registeredValue = addCardField(data, "BPJS AKTIF SEJAK", "Belum diisi", 15);
+
+        statusBadge = text("TIDAK AKTIF", 10, "#C62828", true);
+        statusBadge.setPadding(dp(10), dp(5), dp(10), dp(5));
+        statusBadge.setBackground(round("#FDECEC", 14));
+        LinearLayout.LayoutParams statusLp = new LinearLayout.LayoutParams(-2, -2);
+        statusLp.setMargins(0, dp(8), 0, 0);
+        data.addView(statusBadge, statusLp);
+
+        FrameLayout.LayoutParams dataLp = new FrameLayout.LayoutParams(-1, -2);
+        dataLp.gravity = Gravity.TOP;
+        card.addView(data, dataLp);
+
+        // Proporsi kartu mendekati kartu fisik, tetapi tetap responsif terhadap lebar layar.
+        card.setMinimumHeight(dp(235));
         return card;
+    }
+
+    private TextView addCardField(LinearLayout parent, String label, String value, int valueSize) {
+        TextView labelView = text(label, 9, "#123C32", true);
+        parent.addView(labelView);
+
+        TextView valueView = text(value, valueSize, "#071C17", true);
+        valueView.setMaxLines(1);
+        valueView.setPadding(0, dp(2), 0, dp(9));
+        parent.addView(valueView, new LinearLayout.LayoutParams(-1, -2));
+        return valueView;
     }
 
     private View buildInfoCard() {
         LinearLayout card = whiteCard();
-        card.addView(sectionTitle("Detail Kepesertaan", "Data ini dikelola oleh admin Transiva"));
-        nameValue = addInfoRow(card, "Nama Peserta", "Belum diisi");
-        birthValue = addInfoRow(card, "Tempat, Tanggal Lahir", "Belum diisi");
-        registeredValue = addInfoRow(card, "Terdaftar Sejak", "Belum diisi");
-        noteValue = addInfoRow(card, "Catatan Dokumen", "-");
+        card.addView(sectionTitle("Kartu BPJS Driver", "Data kartu dibaca dari profil driver dan dikelola oleh admin Transiva"));
 
         TextView hint = text(
-                "Driver tidak dapat mengubah data BPJS dari halaman ini. Hubungi admin jika ada data yang perlu diperbarui.",
+                "Pastikan NIK KTP, nomor BPJS, nama peserta, dan tanggal aktif sesuai dengan data BPJS Ketenagakerjaan.",
                 10, "#718096", false
         );
-        hint.setPadding(0, dp(14), 0, 0);
+        hint.setPadding(0, dp(8), 0, 0);
         card.addView(hint);
         return card;
     }
@@ -194,17 +221,15 @@ public class DriverBpjsActivity extends Activity {
         statusBadge.setTextColor(Color.parseColor(active ? "#0A8F4C" : "#C62828"));
         statusBadge.setBackground(round(active ? "#E7FFF2" : "#FFECEC", 14));
 
+        nikValue.setText(first(
+                profile.optString("nik_ktp"),
+                profile.optString("nik"),
+                profile.optString("ktp_number"),
+                "Belum diisi"
+        ));
         numberValue.setText(first(profile.optString("bpjs_number"), profile.optString("bpjs_no"), "Belum diisi"));
         nameValue.setText(first(profile.optString("bpjs_name"), profile.optString("name"), "Belum diisi"));
-
-        String place = clean(profile.optString("bpjs_birth_place"));
-        String date = clean(profile.optString("bpjs_birth_date"));
-        birthValue.setText(place.isEmpty() && date.isEmpty()
-                ? "Belum diisi"
-                : first(place, "-") + (date.isEmpty() ? "" : ", " + date));
-
         registeredValue.setText(first(profile.optString("bpjs_registered_since"), "Belum diisi"));
-        noteValue.setText(first(profile.optString("bpjs_note"), "-"));
     }
 
     private void setLoading(boolean value) {
