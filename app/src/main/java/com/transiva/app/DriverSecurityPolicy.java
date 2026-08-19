@@ -133,6 +133,16 @@ public final class DriverSecurityPolicy {
         } catch (Throwable ignored) { }
     }
 
+    public static long checkedAt(Context context) {
+        try {
+            return context.getApplicationContext()
+                    .getSharedPreferences(PREF, Context.MODE_PRIVATE)
+                    .getLong("checked_at", 0L);
+        } catch (Throwable ignored) {
+            return 0L;
+        }
+    }
+
     private static String safe(String value) {
         return value == null ? "" : value.trim();
     }

@@ -17,12 +17,22 @@ public final class RootSecurityGuard {
     public interface Callback { void onSafe(); void onBlocked(String reason); }
     private static final Handler MAIN=new Handler(Looper.getMainLooper());
     private static final AtomicBoolean RUNNING=new AtomicBoolean();
+    private static volatile AlertDialog ACTIVE_DIALOG;
     private RootSecurityGuard(){}
     public static void checkAsync(Context c, Callback cb){
+        checkAsync(c, cb, false);
+    }
+
+    public static void checkAsync(Context c, Callback cb, boolean forcePolicyRefresh){
         if(c==null)return; Context app=c.getApplicationContext();
-        if(!RUNNING.compareAndSet(false,true)){ MAIN.postDelayed(()->checkAsync(app,cb),250); return; }
+        if(!RUNNING.compareAndSet(false,true)){
+            MAIN.postDelayed(()->checkAsync(app,cb,forcePolicyRefresh),250);
+            return;
+        }
         DriverNetworkExecutor.execute(() -> {
-            DriverSecurityPolicy.Policy policy = DriverSecurityPolicy.resolve(app);
+            DriverSecurityPolicy.Policy policy = forcePolicyRefresh
+                    ? DriverSecurityPolicy.resolveFresh(app)
+                    : DriverSecurityPolicy.resolve(app);
             final Result result = policy.rootEnabled ? safeDetect(app) : new Result(false, "");
             RUNNING.set(false);
             MAIN.post(() -> {
@@ -33,7 +43,22 @@ public final class RootSecurityGuard {
             });
         });
     }
-    public static void enforce(Activity a){ if(a==null||a.isFinishing()||a.isDestroyed())return; checkAsync(a,new Callback(){public void onSafe(){} public void onBlocked(String r){show(a,r);}}); }
+
+    public static void enforce(Activity a){
+        if(a==null||a.isFinishing()||a.isDestroyed())return;
+        checkAsync(a,new Callback(){
+            public void onSafe(){ dismiss(); }
+            public void onBlocked(String r){ show(a,r); }
+        });
+    }
+
+    public static void enforceFresh(Activity a){
+        if(a==null||a.isFinishing()||a.isDestroyed())return;
+        checkAsync(a,new Callback(){
+            public void onSafe(){ dismiss(); }
+            public void onBlocked(String r){ show(a,r); }
+        }, true);
+    }
     private static Result safeDetect(Context context) {
         try {
             return detect(context);
@@ -52,6 +77,33 @@ public final class RootSecurityGuard {
         try{BufferedReader br=new BufferedReader(new InputStreamReader(new java.io.FileInputStream("/proc/self/maps")));String line;while((line=br.readLine())!=null){String l=line.toLowerCase();if(l.contains("frida")||l.contains("xposed")||l.contains("zygisk")||l.contains("substrate")){score+=4;why.append("hook framework, ");break;}}br.close();}catch(Throwable ignored){}
         return score>=5?new Result(true,"Perangkat terindikasi dimodifikasi (skor "+score+"). "+why):new Result(false,"");
     }
-    private static void show(Activity a,String reason){ try{new AlertDialog.Builder(a).setTitle("Perangkat tidak aman").setMessage(reason+"\n\nDemi keamanan order dan saldo, aplikasi Driver tidak dapat dijalankan pada perangkat yang di-root atau memakai framework hooking.").setCancelable(false).setPositiveButton("Tutup aplikasi",(d,w)->a.finishAffinity()).show();}catch(Throwable e){a.finishAffinity();} }
+    private static void dismiss(){
+        MAIN.post(() -> {
+            try {
+                AlertDialog d = ACTIVE_DIALOG;
+                ACTIVE_DIALOG = null;
+                if(d != null && d.isShowing()) d.dismiss();
+            } catch(Throwable ignored){}
+        });
+    }
+
+    private static void show(Activity a,String reason){
+        try{
+            if(ACTIVE_DIALOG != null && ACTIVE_DIALOG.isShowing()) return;
+            AlertDialog d = new AlertDialog.Builder(a)
+                    .setTitle("Perangkat tidak aman")
+                    .setMessage(reason+"\n\nDemi keamanan order dan saldo, aplikasi Driver tidak dapat dijalankan pada perangkat yang di-root atau memakai framework hooking.")
+                    .setCancelable(false)
+                    .setPositiveButton("Tutup aplikasi",(dialog,w)->a.finishAffinity())
+                    .create();
+            d.setOnDismissListener(x -> {
+                if(ACTIVE_DIALOG == d) ACTIVE_DIALOG = null;
+            });
+            ACTIVE_DIALOG = d;
+            d.show();
+        }catch(Throwable e){
+            a.finishAffinity();
+        }
+    }
     private static final class Result{final boolean blocked;final String reason;Result(boolean b,String r){blocked=b;reason=r;}}
 }

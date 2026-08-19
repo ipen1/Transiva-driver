@@ -152,6 +152,14 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
         }
 
 
+        if ("security_policy_changed".equals(type)
+                || "driver_security_policy_changed".equals(type)) {
+            // FCM hanya trigger. Source of truth tetap database/server.
+            DriverSecurityPolicy.invalidate(this);
+            TransivaDriverApplication.onSecurityPolicyChanged();
+            return;
+        }
+
         if (type.equals("force_logout")
                 || type.equals("device_reset")
                 || type.equals("device_banned")

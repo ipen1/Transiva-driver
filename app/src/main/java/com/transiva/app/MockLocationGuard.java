@@ -35,6 +35,7 @@ public final class MockLocationGuard {
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final AtomicBoolean CHECK_RUNNING = new AtomicBoolean(false);
     private static final AtomicBoolean DIALOG_VISIBLE = new AtomicBoolean(false);
+    private static volatile AlertDialog ACTIVE_DIALOG;
     private static final long MAX_STALE_MOCK_MS = 15_000L;
     private static final String[] KNOWN_MOCK_PACKAGES = new String[]{
             "com.lexa.fakegps",
@@ -101,9 +102,36 @@ public final class MockLocationGuard {
     public static void enforce(Activity activity) {
         if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
         checkAsync(activity, new Callback() {
-            @Override public void onSafe() { }
+            @Override public void onSafe() { dismissBlockingDialog(); }
             @Override public void onBlocked(String reason) {
                 showBlockingDialog(activity, reason);
+            }
+        });
+    }
+
+    /** Dipanggil saat FCM memberi tahu bahwa admin baru mengubah policy. */
+    public static void enforceFresh(Activity activity) {
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
+        checkAsync(activity, new Callback() {
+            @Override public void onSafe() {
+                dismissBlockingDialog();
+            }
+
+            @Override public void onBlocked(String reason) {
+                showBlockingDialog(activity, reason);
+            }
+        }, true);
+    }
+
+    public static void dismissBlockingDialog() {
+        MAIN.post(() -> {
+            try {
+                AlertDialog dialog = ACTIVE_DIALOG;
+                ACTIVE_DIALOG = null;
+                DIALOG_VISIBLE.set(false);
+                if (dialog != null && dialog.isShowing()) dialog.dismiss();
+            } catch (Throwable ignored) {
+                DIALOG_VISIBLE.set(false);
             }
         });
     }
@@ -249,6 +277,7 @@ public final class MockLocationGuard {
                         // tanpa menunggu cache policy berakhir.
                         checkAsync(activity, new Callback() {
                             @Override public void onSafe() {
+                                ACTIVE_DIALOG = null;
                                 DIALOG_VISIBLE.set(false);
                                 dialog.dismiss();
                                 Toast.makeText(activity,
@@ -264,11 +293,16 @@ public final class MockLocationGuard {
                         }, true);
                     });
                     dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener(v -> {
+                        ACTIVE_DIALOG = null;
                         DIALOG_VISIBLE.set(false);
                         activity.finishAffinity();
                     });
                 });
-                dialog.setOnDismissListener(ignored -> DIALOG_VISIBLE.set(false));
+                dialog.setOnDismissListener(ignored -> {
+                    if (ACTIVE_DIALOG == dialog) ACTIVE_DIALOG = null;
+                    DIALOG_VISIBLE.set(false);
+                });
+                ACTIVE_DIALOG = dialog;
                 dialog.show();
             } catch (Throwable ignored) {
                 DIALOG_VISIBLE.set(false);
