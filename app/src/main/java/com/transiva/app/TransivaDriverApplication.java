@@ -24,8 +24,13 @@ public class TransivaDriverApplication extends Application implements Applicatio
     public void onActivityResumed(Activity activity) {
         TransivaDriverCrashReporter.screen(activity.getClass().getSimpleName());
         if (!(activity instanceof SplashActivity)) {
-            MockLocationGuard.enforce(activity);
-            RootSecurityGuard.enforce(activity);
+            try {
+                SessionManager session = new SessionManager(activity);
+                if (session.isLoggedIn() && "driver".equalsIgnoreCase(session.getRole())) {
+                    MockLocationGuard.enforce(activity);
+                    RootSecurityGuard.enforce(activity);
+                }
+            } catch (Throwable ignored) { }
         }
         AppUpdateRuntimeGate.onActivityResumed(activity);
     }

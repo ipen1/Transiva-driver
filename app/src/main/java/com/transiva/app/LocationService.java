@@ -172,6 +172,10 @@ public class LocationService extends Service {
             stopTracking();
             return;
         }
+        if (DriverSecurityPolicy.fakeGpsEnabledCached(this) && MockLocationGuard.isMock(location)) {
+            Log.w(TAG, "Lokasi mock ditolak oleh policy keamanan Driver.");
+            return;
+        }
         if (!usable(location)) return;
         SmoothLocationEngine.Fix fix = smoothLocation.offer(location);
         if (fix == null || !fix.upload) return;
@@ -261,7 +265,7 @@ public class LocationService extends Service {
         }
         if (age < 0 || age > MAX_AGE) return false;
 
-        return true; // mock-provider juga diterima agar simulasi/debug mengikuti jalur yang sama.
+        return true;
     }
 
     private boolean hasPermission() {

@@ -22,7 +22,8 @@ public final class RootSecurityGuard {
         if(c==null)return; Context app=c.getApplicationContext();
         if(!RUNNING.compareAndSet(false,true)){ MAIN.postDelayed(()->checkAsync(app,cb),250); return; }
         DriverNetworkExecutor.execute(() -> {
-            final Result result = safeDetect(app);
+            DriverSecurityPolicy.Policy policy = DriverSecurityPolicy.resolve(app);
+            final Result result = policy.rootEnabled ? safeDetect(app) : new Result(false, "");
             RUNNING.set(false);
             MAIN.post(() -> {
                 if (cb != null) {

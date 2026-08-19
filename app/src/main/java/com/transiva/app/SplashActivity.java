@@ -57,6 +57,15 @@ public class SplashActivity extends Activity {
     private void runSecurityCheck() {
         if (routed || checking || updateChecking || isFinishing() || isDestroyed()) return;
         checking = true;
+
+        SessionManager session = new SessionManager(this);
+        if (!session.isLoggedIn() || !"driver".equalsIgnoreCase(session.getRole())) {
+            // Belum login: izinkan masuk ke Login agar whitelist per akun dapat diterapkan.
+            checking = false;
+            checkAppUpdate();
+            return;
+        }
+
         statusText.setText("Memeriksa keamanan lokasi...");
         RootSecurityGuard.checkAsync(this, new RootSecurityGuard.Callback() {
             @Override public void onSafe() { checkMockLocation(); }

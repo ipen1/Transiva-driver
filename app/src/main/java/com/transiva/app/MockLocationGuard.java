@@ -53,9 +53,12 @@ public final class MockLocationGuard {
         EXECUTOR.execute(() -> {
             DetectionResult result;
             try {
-                result = detect(app);
+                DriverSecurityPolicy.Policy policy = DriverSecurityPolicy.resolve(app);
+                result = policy.fakeGpsEnabled ? detect(app) : DetectionResult.safe();
             } catch (Throwable ignored) {
-                result = DetectionResult.safe();
+                result = DriverSecurityPolicy.fakeGpsEnabledCached(app)
+                        ? detectSafely(app)
+                        : DetectionResult.safe();
             } finally {
                 CHECK_RUNNING.set(false);
             }
@@ -76,6 +79,11 @@ public final class MockLocationGuard {
                 showBlockingDialog(activity, reason);
             }
         });
+    }
+
+    private static DetectionResult detectSafely(Context context) {
+        try { return detect(context); }
+        catch (Throwable ignored) { return DetectionResult.safe(); }
     }
 
     private static DetectionResult detect(Context context) {
