@@ -37,11 +37,20 @@ public final class DriverSecurityPolicy {
 
     /** Blocking; panggil hanya dari worker/background thread. */
     public static Policy resolve(Context context) {
+        return resolve(context, false);
+    }
+
+    /** Paksa baca server, dipakai saat device sedang diblokir atau admin baru mengubah policy. */
+    public static Policy resolveFresh(Context context) {
+        return resolve(context, true);
+    }
+
+    private static Policy resolve(Context context, boolean forceRefresh) {
         Context app = context.getApplicationContext();
         SharedPreferences prefs = app.getSharedPreferences(PREF, Context.MODE_PRIVATE);
         long now = System.currentTimeMillis();
         long checkedAt = prefs.getLong("checked_at", 0L);
-        if (checkedAt > 0L && now - checkedAt < CACHE_MS) {
+        if (!forceRefresh && checkedAt > 0L && now - checkedAt < CACHE_MS) {
             return cached(app);
         }
 

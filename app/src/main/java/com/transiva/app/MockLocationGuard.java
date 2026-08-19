@@ -45,16 +45,42 @@ public final class MockLocationGuard {
     private MockLocationGuard() {}
 
     public static void checkAsync(Context context, Callback callback) {
+        checkAsync(context, callback, false);
+    }
+
+    /**
+     * forcePolicyRefresh=true memaksa aplikasi membaca setting terbaru dari server,
+     * sehingga perubahan ON/OFF di Web Admin tidak tertahan cache 5 menit.
+     */
+    public static void checkAsync(Context context, Callback callback, boolean forcePolicyRefresh) {
         final Context app = context.getApplicationContext();
         if (!CHECK_RUNNING.compareAndSet(false, true)) {
-            MAIN.postDelayed(() -> checkAsync(app, callback), 300L);
+            MAIN.postDelayed(() -> checkAsync(app, callback, forcePolicyRefresh), 300L);
             return;
         }
+
         EXECUTOR.execute(() -> {
             DetectionResult result;
             try {
-                DriverSecurityPolicy.Policy policy = DriverSecurityPolicy.resolve(app);
-                result = policy.fakeGpsEnabled ? detect(app) : DetectionResult.safe();
+                DriverSecurityPolicy.Policy policy = forcePolicyRefresh
+                        ? DriverSecurityPolicy.resolveFresh(app)
+                        : DriverSecurityPolicy.resolve(app);
+
+                if (!policy.fakeGpsEnabled) {
+                    result = DetectionResult.safe();
+                } else {
+                    result = detect(app);
+
+                    // Bila device akan diblokir, cek sekali lagi langsung ke server.
+                    // Ini menangani kasus admin baru saja mematikan Fake GPS sementara
+                    // aplikasi masih menyimpan policy ON di cache.
+                    if (result.blocked && !forcePolicyRefresh) {
+                        DriverSecurityPolicy.Policy fresh = DriverSecurityPolicy.resolveFresh(app);
+                        if (!fresh.fakeGpsEnabled) {
+                            result = DetectionResult.safe();
+                        }
+                    }
+                }
             } catch (Throwable ignored) {
                 result = DriverSecurityPolicy.fakeGpsEnabledCached(app)
                         ? detectSafely(app)
@@ -62,6 +88,7 @@ public final class MockLocationGuard {
             } finally {
                 CHECK_RUNNING.set(false);
             }
+
             DetectionResult finalResult = result;
             MAIN.post(() -> {
                 if (callback == null) return;
@@ -217,18 +244,24 @@ public final class MockLocationGuard {
                     });
                     dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
                         dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setEnabled(false);
+                        // Periksa Lagi juga membaca policy terbaru dari server.
+                        // Jadi bila admin baru mematikan Fake GPS, dialog langsung hilang
+                        // tanpa menunggu cache policy berakhir.
                         checkAsync(activity, new Callback() {
                             @Override public void onSafe() {
                                 DIALOG_VISIBLE.set(false);
                                 dialog.dismiss();
-                                Toast.makeText(activity, "Lokasi perangkat sudah aman.", Toast.LENGTH_SHORT).show();
+                                Toast.makeText(activity,
+                                        "Pemeriksaan keamanan diperbarui.",
+                                        Toast.LENGTH_SHORT).show();
                             }
                             @Override public void onBlocked(String latestReason) {
                                 dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setEnabled(true);
                                 dialog.setMessage(latestReason
-                                        + "\n\nNonaktifkan aplikasi lokasi palsu di Opsi Developer, lalu periksa kembali.");
+                                        + "\n\nDeteksi Fake GPS masih aktif untuk akun ini. "
+                                        + "Nonaktifkan aplikasi lokasi palsu atau ubah policy dari Web Admin, lalu tekan Periksa Lagi.");
                             }
-                        });
+                        }, true);
                     });
                     dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener(v -> {
                         DIALOG_VISIBLE.set(false);
