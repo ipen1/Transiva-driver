@@ -1248,6 +1248,7 @@ public class DriverChatRoomActivity extends Activity {
     private String serviceName(String type) {
         String value = clean(type).toLowerCase(Locale.US);
         if (value.contains("food")) return "TransFood";
+        if (value.contains("shop") || value.contains("mart")) return "TransShop";
         if (value.contains("car") || value.contains("mobil")) return "TransCar";
         if (value.contains("pickup")) return "TransPickup";
         return "TransRide";

@@ -912,6 +912,7 @@ public class DriverDashboardActivity extends Activity
                 order.raw == null ? "" : order.raw.optString("service_type"),
                 order.source).toLowerCase(Locale.US);
         if (raw.contains("pickup") || raw.contains("send")) return "TransSend";
+        if (raw.contains("shop") || raw.contains("mart")) return "TransShop";
         if (raw.contains("food")) return "TransFood";
         if (raw.contains("car") || raw.contains("mobil")) return "TransCar";
         if (raw.contains("ride") || raw.contains("bike") || raw.contains("motor")) return "TransRide";
