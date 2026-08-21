@@ -170,6 +170,7 @@
         <activity android:name=".DriverReceiptHistoryActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
         <activity android:name=".DriverReceiptDetailActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
         <activity android:name=".DriverTopUpActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
+        <activity android:name=".DriverMidtransPaymentActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
         <activity android:name=".DriverWithdrawActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
 
         <activity android:name=".ChatCameraActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
