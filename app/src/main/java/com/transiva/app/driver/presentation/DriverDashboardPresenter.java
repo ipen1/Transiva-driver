@@ -10,6 +10,7 @@ import com.transiva.app.driver.domain.DriverOrder;
 
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 public final class DriverDashboardPresenter {
 
@@ -18,6 +19,8 @@ public final class DriverDashboardPresenter {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final AtomicBoolean loading = new AtomicBoolean(false);
     private final AtomicBoolean actionRunning = new AtomicBoolean(false);
+    // Membatalkan hasil refresh dashboard lama yang selesai setelah aksi mutasi status dimulai.
+    private final AtomicLong stateEpoch = new AtomicLong(0L);
 
     public DriverDashboardPresenter(
             DriverDashboardRepository repository,
@@ -29,11 +32,15 @@ public final class DriverDashboardPresenter {
 
     public void load(boolean showLoading) {
         if (!loading.compareAndSet(false, true)) return;
+        final long requestEpoch = stateEpoch.get();
         if (showLoading && view != null) view.showLoading(true);
 
         repository.loadDashboard(new DriverDashboardRepository.DashboardCallback() {
             @Override public void onSuccess(DriverDashboardState state) {
                 main.post(() -> {
+                    // Refresh yang dimulai sebelum set ONLINE/OFFLINE tidak boleh
+                    // mengembalikan switch ke state lama ataupun mengubah loading request baru.
+                    if (requestEpoch != stateEpoch.get()) return;
                     loading.set(false);
                     if (view == null) return;
                     view.showLoading(false);
@@ -43,6 +50,7 @@ public final class DriverDashboardPresenter {
 
             @Override public void onError(int httpCode, String code, String message) {
                 main.post(() -> {
+                    if (requestEpoch != stateEpoch.get()) return;
                     loading.set(false);
                     if (view == null) return;
                     view.showLoading(false);
@@ -58,6 +66,11 @@ public final class DriverDashboardPresenter {
 
     public void setOnline(boolean online, String driverType) {
         if (!actionRunning.compareAndSet(false, true)) return;
+        // Invalidasi dashboard request yang mungkin sedang berjalan agar response lama
+        // tidak menimpa hasil toggle yang baru. Reset gate load karena callback lama
+        // akan diabaikan berdasarkan epoch dan tidak boleh menahan refresh terbaru.
+        stateEpoch.incrementAndGet();
+        loading.set(false);
         if (view != null) view.showActionLoading("status", true);
 
         repository.setOnline(online, driverType,
