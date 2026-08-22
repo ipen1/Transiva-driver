@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.media.AudioAttributes;
+import android.net.Uri;
 import android.os.Build;
 import android.os.PowerManager;
 import android.provider.Settings;
@@ -37,6 +38,8 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
     public static final String BASE_URL =
             "https://transiva.my.id/server/";
 
+    private static final String CH_NEW_ORDER =
+            "transiva_new_order_channel_v3";
     private static final String CH_ORDER =
             "transiva_order_channel";
     private static final String CH_WALLET =
@@ -268,7 +271,8 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                 url
         );
 
-        String channelId = channelForType(type);
+        boolean newIncomingOrder = isNewIncomingOrder(type, data);
+        String channelId = newIncomingOrder ? CH_NEW_ORDER : channelForType(type);
 
         Intent intent = buildOpenIntent(
                 type,
@@ -357,11 +361,23 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                     .setTimeoutAfter(50_000L)
                     .setFullScreenIntent(pendingIntent, true);
         } else {
-            builder.setDefaults(
-                    NotificationCompat.DEFAULT_SOUND
-                            | NotificationCompat.DEFAULT_VIBRATE
-                            | NotificationCompat.DEFAULT_LIGHTS
-            );
+            if (newIncomingOrder) {
+                // Android 8+ mengambil suara dari NotificationChannel.
+                // Android 7 dan lebih lama mengambil suara langsung dari Builder.
+                if (Build.VERSION.SDK_INT < 26) {
+                    builder.setSound(orderSoundUri())
+                            .setVibrate(new long[]{0L, 350L, 180L, 350L, 180L, 650L})
+                            .setLights(0xFF0B7CFF, 700, 700);
+                }
+                builder.setPriority(NotificationCompat.PRIORITY_MAX)
+                        .setCategory(NotificationCompat.CATEGORY_STATUS);
+            } else {
+                builder.setDefaults(
+                        NotificationCompat.DEFAULT_SOUND
+                                | NotificationCompat.DEFAULT_VIBRATE
+                                | NotificationCompat.DEFAULT_LIGHTS
+                );
+            }
             if (merchantDriverChatNotification) {
                 builder.setCategory(NotificationCompat.CATEGORY_MESSAGE)
                         .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -512,10 +528,12 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
             return;
         }
 
+        createNewOrderChannel();
+
         createChannel(
                 CH_ORDER,
-                "Order Transiva",
-                "Order baru dan pembaruan status",
+                "Update Order Transiva",
+                "Pembaruan status order yang sedang berjalan",
                 NotificationManager.IMPORTANCE_HIGH
         );
 
@@ -560,6 +578,58 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                 "Notifikasi umum",
                 NotificationManager.IMPORTANCE_DEFAULT
         );
+    }
+
+
+    private void createNewOrderChannel() {
+        if (Build.VERSION.SDK_INT < 26) return;
+
+        NotificationManager manager =
+                (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager == null) return;
+
+        NotificationChannel existing = manager.getNotificationChannel(CH_NEW_ORDER);
+        if (existing != null) return;
+
+        NotificationChannel channel = new NotificationChannel(
+                CH_NEW_ORDER,
+                "Order Baru Transiva",
+                NotificationManager.IMPORTANCE_HIGH
+        );
+        channel.setDescription("Suara khusus ketika driver menerima penawaran order baru");
+        channel.enableVibration(true);
+        channel.setVibrationPattern(new long[]{0L, 350L, 180L, 350L, 180L, 650L});
+        channel.enableLights(true);
+        channel.setLightColor(0xFF0B7CFF);
+        channel.setSound(
+                orderSoundUri(),
+                new AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+        );
+        manager.createNotificationChannel(channel);
+    }
+
+    private Uri orderSoundUri() {
+        return Uri.parse(
+                "android.resource://" + getPackageName() + "/" + R.raw.order_new
+        );
+    }
+
+    private boolean isNewIncomingOrder(String type, Map<String, String> data) {
+        String t = first(type, "").toLowerCase();
+        String event = data == null ? "" : first(data.get("event"), "").toLowerCase();
+        String screen = data == null ? "" : first(data.get("screen"), "").toLowerCase();
+
+        if ("new_order".equals(event) || "order_new".equals(event)) return true;
+        if (t.contains("new_order") || t.contains("order_new")) return true;
+
+        // Backend Transiva saat ini memakai type=transiva_order + screen=driver_order.
+        // Jadikan fallback hanya jika event kosong agar update status tidak ikut berbunyi.
+        return event.isEmpty()
+                && "transiva_order".equals(t)
+                && (screen.isEmpty() || "driver_order".equals(screen));
     }
 
     private void createChannel(
