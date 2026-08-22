@@ -9,6 +9,10 @@ import android.os.*;
 import android.text.InputType;
 import android.view.*;
 import android.widget.*;
+import androidx.biometric.BiometricManager;
+import androidx.biometric.BiometricPrompt;
+import androidx.core.content.ContextCompat;
+import androidx.fragment.app.FragmentActivity;
 import org.json.JSONObject;
 import java.io.*;
 import java.net.*;
@@ -16,7 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.text.NumberFormat;
 import java.util.*;
 
-public class DriverTransferActivity extends Activity {
+public class DriverTransferActivity extends FragmentActivity {
     private static final String BASE="https://transiva.my.id/server/";
     private SessionManager session;
     private EditText recipient, amount, note;
@@ -57,7 +61,91 @@ public class DriverTransferActivity extends Activity {
         loading(false); long fee=d.optLong("fee",0), total=d.optLong("total_debit",val+fee); int remain=d.optInt("free_remaining_after",0);
         quotaInfo.setText("Sisa transfer gratis setelah transaksi: "+remain+"x");
         String msg="Penerima: "+d.optString("receiver_username",to)+"\nNominal: "+money(val)+"\nBiaya admin: "+money(fee)+"\nTotal saldo keluar: "+money(total);
-        new AlertDialog.Builder(this).setTitle("Konfirmasi Transfer").setMessage(msg).setNegativeButton("Batal",null).setPositiveButton("Transfer",(x,w)->execute(d,to,val,requestId)).show();
+        new AlertDialog.Builder(this).setTitle("Konfirmasi Transfer").setMessage(msg).setNegativeButton("Batal",null).setPositiveButton("Transfer",(x,w)->authenticateTransfer(d,to,val,requestId)).show();
+    }
+
+    private void authenticateTransfer(JSONObject q,String to,long val,String requestId){
+        BiometricManager bm=BiometricManager.from(this);
+        boolean biometric=bm.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)==BiometricManager.BIOMETRIC_SUCCESS;
+        if(!biometric){ showPinDialog(q,to,val,requestId); return; }
+
+        String[] methods={"Sidik jari","PIN 6 digit"};
+        new AlertDialog.Builder(this)
+                .setTitle("Autentikasi Transfer")
+                .setMessage("Verifikasi keamanan sebelum saldo dikirim.")
+                .setItems(methods,(dialog,which)->{
+                    if(which==0) showBiometricTransfer(q,to,val,requestId);
+                    else showPinDialog(q,to,val,requestId);
+                })
+                .setNegativeButton("Batal",null)
+                .show();
+    }
+
+    private void showBiometricTransfer(JSONObject q,String to,long val,String requestId){
+        BiometricPrompt prompt=new BiometricPrompt(this,ContextCompat.getMainExecutor(this),new BiometricPrompt.AuthenticationCallback(){
+            @Override public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result){
+                super.onAuthenticationSucceeded(result);
+                execute(q,to,val,requestId);
+            }
+            @Override public void onAuthenticationFailed(){
+                super.onAuthenticationFailed();
+                info("Sidik jari tidak dikenali. Coba lagi atau gunakan PIN.");
+            }
+            @Override public void onAuthenticationError(int errorCode,CharSequence errString){
+                super.onAuthenticationError(errorCode,errString);
+                if(errorCode!=BiometricPrompt.ERROR_NEGATIVE_BUTTON && errorCode!=BiometricPrompt.ERROR_USER_CANCELED && errorCode!=BiometricPrompt.ERROR_CANCELED){
+                    info(errString==null?"Autentikasi biometrik gagal.":errString.toString());
+                }
+            }
+        });
+        BiometricPrompt.PromptInfo pi=new BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Kirim Saldo Transpay")
+                .setSubtitle("Verifikasi sidik jari untuk melanjutkan transfer")
+                .setNegativeButtonText("Gunakan PIN")
+                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+                .build();
+        prompt.authenticate(pi);
+    }
+
+    private void showPinDialog(JSONObject q,String to,long val,String requestId){
+        final EditText pin=new EditText(this);
+        pin.setHint("6 digit PIN");
+        pin.setSingleLine(true);
+        pin.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        pin.setPadding(dp(16),0,dp(16),0);
+        LinearLayout wrap=new LinearLayout(this);
+        wrap.setPadding(dp(20),dp(8),dp(20),0);
+        wrap.addView(pin,new LinearLayout.LayoutParams(-1,dp(52)));
+
+        AlertDialog dlg=new AlertDialog.Builder(this)
+                .setTitle("Masukkan PIN Transiva")
+                .setMessage("PIN diperlukan sebelum saldo dikirim.")
+                .setView(wrap)
+                .setNegativeButton("Batal",null)
+                .setPositiveButton("Verifikasi",null)
+                .create();
+        dlg.setOnShowListener(x->dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            String value=pin.getText().toString().trim();
+            if(!value.matches("\\d{6}")){ pin.setError("PIN harus 6 digit"); return; }
+            dlg.dismiss();
+            verifyPinAndExecute(value,q,to,val,requestId);
+        }));
+        dlg.show();
+    }
+
+    private void verifyPinAndExecute(String pin,JSONObject q,String to,long val,String requestId){
+        loading(true);
+        new Thread(()->{
+            try{
+                JSONObject req=new JSONObject();
+                req.put("pin",pin);
+                JSONObject r=post("pin_verify.php",req);
+                if(!r.optBoolean("success")) throw new Exception(r.optString("message","PIN tidak valid"));
+                main.post(()->execute(q,to,val,requestId));
+            }catch(Exception e){
+                main.post(()->{ loading(false); info(e.getMessage()); });
+            }
+        },"transiva-transfer-pin").start();
     }
 
     private void execute(JSONObject q,String to,long val,String requestId){
