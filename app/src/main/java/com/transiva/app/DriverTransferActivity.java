@@ -67,18 +67,16 @@ public class DriverTransferActivity extends FragmentActivity {
     private void authenticateTransfer(JSONObject q,String to,long val,String requestId){
         BiometricManager bm=BiometricManager.from(this);
         boolean biometric=bm.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)==BiometricManager.BIOMETRIC_SUCCESS;
-        if(!biometric){ showPinDialog(q,to,val,requestId); return; }
 
-        String[] methods={"Sidik jari","PIN 6 digit"};
-        new AlertDialog.Builder(this)
-                .setTitle("Autentikasi Transfer")
-                .setMessage("Verifikasi keamanan sebelum saldo dikirim.")
-                .setItems(methods,(dialog,which)->{
-                    if(which==0) showBiometricTransfer(q,to,val,requestId);
-                    else showPinDialog(q,to,val,requestId);
-                })
-                .setNegativeButton("Batal",null)
-                .show();
+        // Jangan tampilkan AlertDialog daftar metode: pada beberapa ROM Android
+        // setMessage + setItems dapat membuat daftar pilihan tidak dirender sehingga
+        // dialog terlihat kosong. Jika biometrik tersedia, tampilkan system biometric
+        // prompt secara langsung. Tombol "Gunakan PIN" menjadi fallback eksplisit.
+        if (biometric) {
+            showBiometricTransfer(q,to,val,requestId);
+        } else {
+            showPinDialog(q,to,val,requestId);
+        }
     }
 
     private void showBiometricTransfer(JSONObject q,String to,long val,String requestId){
@@ -93,7 +91,12 @@ public class DriverTransferActivity extends FragmentActivity {
             }
             @Override public void onAuthenticationError(int errorCode,CharSequence errString){
                 super.onAuthenticationError(errorCode,errString);
-                if(errorCode!=BiometricPrompt.ERROR_NEGATIVE_BUTTON && errorCode!=BiometricPrompt.ERROR_USER_CANCELED && errorCode!=BiometricPrompt.ERROR_CANCELED){
+                if (errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
+                    // Pengguna memilih fallback PIN dari prompt biometrik.
+                    showPinDialog(q,to,val,requestId);
+                    return;
+                }
+                if(errorCode!=BiometricPrompt.ERROR_USER_CANCELED && errorCode!=BiometricPrompt.ERROR_CANCELED){
                     info(errString==null?"Autentikasi biometrik gagal.":errString.toString());
                 }
             }
