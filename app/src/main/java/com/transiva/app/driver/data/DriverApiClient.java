@@ -54,10 +54,19 @@ public final class DriverApiClient {
     }
 
     public ExecutorService executor() { return DriverNetworkExecutor.executor(); }
-    public Result get(String endpoint) throws ApiException { return requestWithRetry("GET", endpoint, null); }
-    public Result post(String endpoint, JSONObject payload) throws ApiException { return requestWithRetry("POST", endpoint, payload); }
+    public Result get(String endpoint) throws ApiException { return requestWithRetry("GET", endpoint, null, true); }
+    public Result post(String endpoint, JSONObject payload) throws ApiException { return requestWithRetry("POST", endpoint, payload, false); }
 
-    private Result requestWithRetry(String method, String endpoint, JSONObject payload) throws ApiException {
+    /**
+     * POST yang aman diulang karena endpoint menyetel state final, bukan melakukan toggle.
+     * Dipakai khusus aksi idempotent seperti ONLINE/OFFLINE agar satu tap tetap andal
+     * ketika koneksi putus sesaat atau server membalas 5xx.
+     */
+    public Result postIdempotent(String endpoint, JSONObject payload) throws ApiException {
+        return requestWithRetry("POST", endpoint, payload, true);
+    }
+
+    private Result requestWithRetry(String method, String endpoint, JSONObject payload, boolean retrySafe) throws ApiException {
         if (!DriverCircuitBreaker.allowRequest()) {
             throw new ApiException(503, "CIRCUIT_OPEN",
                     "Server sedang dalam masa pemulihan. Coba lagi beberapa detik.", null);
@@ -76,10 +85,11 @@ public final class DriverApiClient {
                 int retryAfter = error.status == 429 ? parseRetryAfter(error.getMessage()) : 0;
                 long delay = DriverRetryPolicy.delayFor(error.status, retryAfter, attempt);
                 boolean retryable = error.status == 429
-                        || ("GET".equals(method) && (error.status >= 500 || error.status == 0));
+                        || (retrySafe && (error.status >= 500 || error.status == 0));
 
-                // POST lokasi/status tidak diulang otomatis agar transaksi tidak terduplikasi.
-                // Siklus lokasi berikutnya akan mencoba lagi setelah backoff/circuit pulih.
+                // POST transaksi biasa tidak pernah diulang otomatis. Hanya endpoint
+                // yang secara eksplisit ditandai retrySafe (mis. set status final)
+                // yang boleh dicoba ulang.
                 if (!retryable || attempt + 1 >= MAX_ATTEMPTS) throw error;
 
                 try {

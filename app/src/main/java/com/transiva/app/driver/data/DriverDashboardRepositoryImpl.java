@@ -45,7 +45,7 @@ public final class DriverDashboardRepositoryImpl implements DriverDashboardRepos
                 body.put("is_online", online ? 1 : 0);
 
                 DriverApiClient.Result result =
-                        api.post("driver_set_status_native.php", body);
+                        api.postIdempotent("driver_set_status_native.php", body);
 
                 // Jangan anggap sukses hanya karena HTTP 200. Status dan user_id
                 // yang dikembalikan server wajib sesuai akun login saat ini.
