@@ -3,6 +3,9 @@ package com.transiva.app;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.net.Uri;
+import android.provider.OpenableColumns;
+import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -39,16 +42,19 @@ public class DriverTopUpActivity extends Activity {
     private static final String BASE_URL = "https://transiva.my.id/";
     private static final int MIN_DEPOSIT = 10000;
     private static final int REQ_PAY = 7301;
+    private static final int REQ_PROOF = 7302;
     private static final int TIMEOUT = 25000;
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final List<Button> quickButtons = new ArrayList<>();
     private SessionManager session;
-    private LinearLayout root, activeCard, depositCard;
+    private LinearLayout root, activeCard, depositCard, manualCard;
     private ProgressBar progress;
     private EditText amountInput;
     private TextView balanceText, pendingText, statusText, activeAmount, activeOrder, activeHint, cooldownText;
-    private Button payButton, continueButton, cancelButton;
+    private Button payButton, continueButton, cancelButton, chooseProofButton, manualSubmitButton;
+    private TextView proofNameText;
+    private Uri proofUri;
     private String activeOrderId = "", activePaymentUrl = "";
     private int activeAmountValue = 0, cooldownSeconds = 0;
     private Runnable cooldownTicker;
@@ -96,7 +102,7 @@ public class DriverTopUpActivity extends Activity {
         balanceCard();
         activeTransactionCard();
         depositCard();
-        infoCard();
+        manualDepositCard();
     }
 
     private void top() {
@@ -106,7 +112,7 @@ public class DriverTopUpActivity extends Activity {
         r.addView(back,new LinearLayout.LayoutParams(dp(44),dp(44)));
         LinearLayout c = new LinearLayout(this); c.setOrientation(LinearLayout.VERTICAL); c.setPadding(dp(12),0,0,0); r.addView(c,new LinearLayout.LayoutParams(0,-2,1));
         c.addView(text("Deposit Driver",22,"#0B3A78",true));
-        c.addView(text("Pembayaran aman • transaksi tetap tersimpan",12,"#64748B",false));
+        c.addView(text("Tambah saldo Transpay",12,"#64748B",false));
     }
 
     private void balanceCard() {
@@ -130,15 +136,62 @@ public class DriverTopUpActivity extends Activity {
 
     private void depositCard() {
         depositCard = card(); depositCard.setPadding(dp(16),dp(16),dp(16),dp(16)); add(depositCard,0,0,0,14);
-        depositCard.addView(text("Pilih Nominal",17,"#0B3A78",true));
-        TextView sub = text("Minimal Rp10.000 • hanya 1 deposit dapat berjalan pada satu waktu",12,"#64748B",false); sub.setPadding(0,dp(5),0,dp(12)); depositCard.addView(sub);
+        depositCard.addView(text("Deposit Otomatis",17,"#0B3A78",true));
+        TextView sub = text("Bayar langsung melalui Midtrans",12,"#64748B",false); sub.setPadding(0,dp(5),0,dp(12)); depositCard.addView(sub);
         amountInput = new EditText(this); amountInput.setSingleLine(true); amountInput.setTextSize(18); amountInput.setTypeface(Typeface.DEFAULT_BOLD); amountInput.setTextColor(Color.parseColor("#0F172A")); amountInput.setHint("Contoh: 50000"); amountInput.setHintTextColor(Color.parseColor("#94A3B8")); amountInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER); amountInput.setImeOptions(EditorInfo.IME_ACTION_DONE); amountInput.setPadding(dp(16),0,dp(16),0); amountInput.setBackground(stroke("#FFFFFF","#D7E6F8",18,1));
         depositCard.addView(amountInput,new LinearLayout.LayoutParams(-1,dp(54)));
         LinearLayout q1 = new LinearLayout(this); q1.setOrientation(LinearLayout.HORIZONTAL); LinearLayout.LayoutParams qlp = new LinearLayout.LayoutParams(-1,-2); qlp.setMargins(0,dp(12),0,0); depositCard.addView(q1,qlp); quick(q1,20000); quick(q1,50000); quick(q1,100000);
         LinearLayout q2 = new LinearLayout(this); q2.setOrientation(LinearLayout.HORIZONTAL); LinearLayout.LayoutParams q2lp = new LinearLayout.LayoutParams(-1,-2); q2lp.setMargins(0,dp(8),0,0); depositCard.addView(q2,q2lp); quick(q2,200000); quick(q2,500000); quick(q2,1000000);
         payButton = button("Buat Deposit"); LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-1,dp(54)); blp.setMargins(0,dp(16),0,0); depositCard.addView(payButton,blp); payButton.setOnClickListener(v->createPayment());
         cooldownText = text("",12,"#B45309",true); cooldownText.setGravity(Gravity.CENTER); cooldownText.setPadding(0,dp(10),0,0); cooldownText.setVisibility(View.GONE); depositCard.addView(cooldownText);
-        statusText = text("QRIS, Virtual Account, e-wallet, dan metode lain mengikuti channel Midtrans aktif.",12,"#64748B",false); statusText.setGravity(Gravity.CENTER); statusText.setPadding(dp(12),dp(12),dp(12),dp(4)); depositCard.addView(statusText);
+        statusText = text("Pilih nominal lalu lanjutkan pembayaran.",12,"#64748B",false); statusText.setGravity(Gravity.CENTER); statusText.setPadding(dp(12),dp(12),dp(12),dp(4)); depositCard.addView(statusText);
+    }
+
+    private void manualDepositCard() {
+        manualCard = card(); manualCard.setPadding(dp(16),dp(16),dp(16),dp(16)); add(manualCard,0,0,0,0);
+        manualCard.addView(text("Deposit Manual",17,"#0B3A78",true));
+        TextView sub=text("Transfer lalu kirim bukti. Saldo masuk setelah diverifikasi admin.",12,"#64748B",false); sub.setPadding(0,dp(5),0,dp(12)); manualCard.addView(sub);
+        TextView bank=text("Rekening/QR tujuan mengikuti informasi pembayaran resmi Transiva.",12,"#334155",true); bank.setPadding(dp(12),dp(10),dp(12),dp(10)); bank.setBackground(round("#F2F7FF",14)); manualCard.addView(bank);
+        chooseProofButton=outline("Pilih Bukti Transfer"); LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,dp(50)); cp.setMargins(0,dp(12),0,0); manualCard.addView(chooseProofButton,cp); chooseProofButton.setOnClickListener(v->pickProof());
+        proofNameText=text("Belum ada bukti dipilih",11,"#64748B",false); proofNameText.setPadding(0,dp(7),0,0); manualCard.addView(proofNameText);
+        manualSubmitButton=button("Kirim Deposit Manual"); LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(-1,dp(54)); mp.setMargins(0,dp(12),0,0); manualCard.addView(manualSubmitButton,mp); manualSubmitButton.setOnClickListener(v->submitManualDeposit());
+    }
+
+    private void pickProof() {
+        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("image/*"); startActivityForResult(i,REQ_PROOF);
+    }
+
+    private String displayName(Uri uri) {
+        try(Cursor c=getContentResolver().query(uri,null,null,null,null)){ if(c!=null&&c.moveToFirst()){ int x=c.getColumnIndex(OpenableColumns.DISPLAY_NAME); if(x>=0)return c.getString(x); } }catch(Exception ignored){} return "Bukti transfer dipilih";
+    }
+
+    private void submitManualDeposit() {
+        int amount=parse(amountInput.getText().toString());
+        if(amount<MIN_DEPOSIT){info("Nominal Tidak Valid","Minimal deposit Rp10.000.");return;}
+        if(proofUri==null){info("Bukti Transfer","Pilih foto bukti transfer terlebih dahulu.");return;}
+        setBusy(true,"Mengirim deposit manual..."); manualSubmitButton.setEnabled(false);
+        final Uri uri=proofUri;
+        DriverNetworkExecutor.execute(() -> {
+            try {
+                JSONObject j=uploadManual(amount,uri); boolean ok=j.optBoolean("success",false); String msg=j.optString("message",ok?"Deposit dikirim":"Deposit gagal");
+                main.post(() -> { manualSubmitButton.setEnabled(true); setBusy(false,msg); if(ok){ proofUri=null; proofNameText.setText("Belum ada bukti dipilih"); amountInput.setText(""); loadState(false); info("Deposit Terkirim","Deposit manual menunggu verifikasi admin."); } else info("Deposit Manual",msg); });
+            } catch(Exception e){ main.post(() -> {manualSubmitButton.setEnabled(true);setBusy(false,"Koneksi bermasalah");info("Deposit Manual","Gagal mengirim deposit manual.");}); }
+        });
+    }
+
+    private JSONObject uploadManual(int amount,Uri uri)throws Exception {
+        String boundary="----Transiva"+System.currentTimeMillis(); HttpURLConnection c=null;
+        try {
+            c=(HttpURLConnection)new URL(BASE_URL+"server/uploadDeposit.php").openConnection(); c.setRequestMethod("POST"); c.setConnectTimeout(TIMEOUT); c.setReadTimeout(TIMEOUT); c.setDoOutput(true);
+            c.setRequestProperty("Accept","application/json"); c.setRequestProperty("Authorization","Bearer "+session.getToken().trim()); c.setRequestProperty("X-Device-UUID",DeviceIdentityManager.getInstallationUuid(this)); c.setRequestProperty("X-App-Scope","driver"); c.setRequestProperty("Content-Type","multipart/form-data; boundary="+boundary);
+            String crlf="\r\n"; OutputStream out=c.getOutputStream();
+            out.write(("--"+boundary+crlf+"Content-Disposition: form-data; name=\"amount\""+crlf+crlf+amount+crlf).getBytes(StandardCharsets.UTF_8));
+            String name=displayName(uri); String mime=getContentResolver().getType(uri); if(mime==null)mime="image/jpeg";
+            out.write(("--"+boundary+crlf+"Content-Disposition: form-data; name=\"proof\"; filename=\""+name.replace("\"","")+"\""+crlf+"Content-Type: "+mime+crlf+crlf).getBytes(StandardCharsets.UTF_8));
+            try(InputStream in=getContentResolver().openInputStream(uri)){ byte[] buf=new byte[8192]; int n; while(in!=null&&(n=in.read(buf))>0)out.write(buf,0,n); }
+            out.write((crlf+"--"+boundary+"--"+crlf).getBytes(StandardCharsets.UTF_8)); out.flush(); out.close();
+            int code=c.getResponseCode(); InputStream is=(code>=200&&code<300)?c.getInputStream():c.getErrorStream(); String raw=read(is); return raw.trim().isEmpty()?new JSONObject():new JSONObject(raw);
+        } finally {if(c!=null)c.disconnect();}
     }
 
     private void infoCard() {
@@ -233,6 +286,11 @@ public class DriverTopUpActivity extends Activity {
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
         super.onActivityResult(requestCode,resultCode,data);
         if(requestCode==REQ_PAY) checkActivePayment(0);
+        else if(requestCode==REQ_PROOF && resultCode==RESULT_OK && data!=null && data.getData()!=null){
+            proofUri=data.getData();
+            try{getContentResolver().takePersistableUriPermission(proofUri,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}
+            if(proofNameText!=null) proofNameText.setText(displayName(proofUri));
+        }
     }
 
     private void checkActivePayment(int attempt) {

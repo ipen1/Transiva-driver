@@ -17,6 +17,13 @@ import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import androidx.biometric.BiometricManager;
+import androidx.biometric.BiometricPrompt;
+import androidx.core.content.ContextCompat;
+import androidx.fragment.app.FragmentActivity;
+
+import java.util.concurrent.Executor;
+
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -29,7 +36,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
-public class PinActivity extends Activity {
+public class PinActivity extends FragmentActivity {
 
     private static final String TAG = "TRANSIVA_PIN";
     private static final String BASE_URL = "https://transiva.my.id/server/";
@@ -51,6 +58,8 @@ public class PinActivity extends Activity {
     private ProgressBar progressBar;
     private LinearLayout keypadContainer;
     private LinearLayout pinContentRoot;
+    private TextView biometricButton;
+    private boolean biometricPromptShown = false;
 
     private boolean loading;
     private boolean setupMode;
@@ -177,6 +186,16 @@ public class PinActivity extends Activity {
         LinearLayout.LayoutParams hintLp = new LinearLayout.LayoutParams(-1, -2);
         hintLp.setMargins(0, dp(1), 0, dp(13));
         card.addView(actionHintText, hintLp);
+
+        biometricButton = text("Gunakan sidik jari", 14, "#1677FF", true);
+        biometricButton.setGravity(Gravity.CENTER);
+        biometricButton.setPadding(dp(14), dp(12), dp(14), dp(12));
+        biometricButton.setBackground(round("#EAF4FF", dp(16)));
+        biometricButton.setVisibility(View.GONE);
+        biometricButton.setOnClickListener(v -> showBiometricPrompt());
+        LinearLayout.LayoutParams bioLp = new LinearLayout.LayoutParams(-1, -2);
+        bioLp.setMargins(0, 0, 0, dp(12));
+        card.addView(biometricButton, bioLp);
 
         keypadContainer = buildKeypad();
         card.addView(keypadContainer, new LinearLayout.LayoutParams(-1, -2));
@@ -343,11 +362,54 @@ public class PinActivity extends Activity {
                     stepText.setText("PIN akun");
                 }
 
-                actionHintText.setText("Gunakan tombol angka di bawah");
+                actionHintText.setText(setupMode ? "Gunakan tombol angka di bawah" : "Masukkan PIN atau gunakan sidik jari");
                 setKeypadEnabled(true);
                 renderDots();
+                updateBiometricAvailability();
+                if (!setupMode && biometricButton != null && biometricButton.getVisibility() == View.VISIBLE && !biometricPromptShown) {
+                    biometricPromptShown = true;
+                    mainHandler.postDelayed(this::showBiometricPrompt, 250);
+                }
             });
         }, "transiva-pin-status").start();
+    }
+
+    private void updateBiometricAvailability() {
+        if (biometricButton == null) return;
+        if (setupMode) { biometricButton.setVisibility(View.GONE); return; }
+        BiometricManager bm = BiometricManager.from(this);
+        int can = bm.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG);
+        biometricButton.setVisibility(can == BiometricManager.BIOMETRIC_SUCCESS ? View.VISIBLE : View.GONE);
+    }
+
+    private void showBiometricPrompt() {
+        if (setupMode || loading) return;
+        BiometricManager bm = BiometricManager.from(this);
+        if (bm.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) != BiometricManager.BIOMETRIC_SUCCESS) return;
+        Executor executor = ContextCompat.getMainExecutor(this);
+        BiometricPrompt prompt = new BiometricPrompt(this, executor, new BiometricPrompt.AuthenticationCallback() {
+            @Override public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
+                super.onAuthenticationSucceeded(result);
+                showMessage("Sidik jari terverifikasi. Membuka akun...", true);
+                mainHandler.postDelayed(PinActivity.this::openRolePage, 180);
+            }
+            @Override public void onAuthenticationError(int errorCode, CharSequence errString) {
+                super.onAuthenticationError(errorCode, errString);
+                if (errorCode != BiometricPrompt.ERROR_USER_CANCELED && errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON && errorCode != BiometricPrompt.ERROR_CANCELED)
+                    showMessage(String.valueOf(errString), false);
+            }
+            @Override public void onAuthenticationFailed() {
+                super.onAuthenticationFailed();
+                showMessage("Sidik jari tidak dikenali. Coba lagi atau gunakan PIN.", false);
+            }
+        });
+        BiometricPrompt.PromptInfo info = new BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Buka Transiva Driver")
+                .setSubtitle("Verifikasi sidik jari untuk melewati PIN")
+                .setNegativeButtonText("Gunakan PIN")
+                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+                .build();
+        prompt.authenticate(info);
     }
 
     private void setPin(String pin) {
