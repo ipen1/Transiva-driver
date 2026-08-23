@@ -30,6 +30,7 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.TextView;
 
 import com.transiva.app.driver.data.DriverApiClient;
@@ -67,7 +68,8 @@ public class DriverTripActivity extends Activity {
     private ProgressBar progressBar;
     private TextView statusBadge, distanceInfo, distanceHint;
     private WebView mapView;
-    private Button arrivedPickupBtn, startDeliveryBtn, arrivedDeliveryBtn, finishBtn, updatePriceBtn;
+    private SlideActionView arrivedPickupBtn, startDeliveryBtn, arrivedDeliveryBtn, finishBtn;
+    private Button updatePriceBtn;
     private JSONObject order;
     private String driverUsername = "";
     private String driverType = "motor";
@@ -473,15 +475,15 @@ public class DriverTripActivity extends Activity {
     }
     private void addActions(){
         LinearLayout c = card(); c.setPadding(dp(16), dp(16), dp(16), dp(16));
-        c.addView(text("⚡ Aksi Perjalanan", 18, "#0B3A78", true));
-        TextView guide = text("Tombol hijau menunjukkan aksi berikutnya. Aksi tiba tetap terlihat dan akan aktif otomatis saat driver mendekati titik pengantaran.", 12, "#64748B", false);
-        guide.setPadding(0, dp(5), 0, dp(2)); c.addView(guide);
+        c.addView(text("Perjalanan", 17, "#0F172A", true));
+        TextView guide = text("Geser ke kanan untuk mengubah status. Ini mencegah status berubah karena salah sentuh.", 12, "#64748B", false);
+        guide.setPadding(0, dp(4), 0, dp(4)); c.addView(guide);
 
-        arrivedPickupBtn = green("📍 Tiba di Lokasi Penjemputan"); arrivedPickupBtn.setOnClickListener(v -> confirm("Konfirmasi bahwa Anda sudah tiba di titik penjemputan?", "arrived_pickup")); c.addView(arrivedPickupBtn, btnLp(10));
-        startDeliveryBtn = green(orderKind.equals("pickup") ? "📦 Paket Sudah Diambil • Mulai Antar" : vehicleEmoji() + " Mulai Perjalanan ke Pengantaran"); startDeliveryBtn.setOnClickListener(v -> confirm("Pesanan sudah siap dan mulai perjalanan ke lokasi pengantaran?", "on_delivery")); c.addView(startDeliveryBtn, btnLp(10));
-        arrivedDeliveryBtn = green("🏁 Tiba di Lokasi Pengantaran"); arrivedDeliveryBtn.setOnClickListener(v -> confirm("Konfirmasi bahwa Anda sudah tiba di lokasi pengantaran?", "arrived_delivery")); c.addView(arrivedDeliveryBtn, btnLp(10));
-        updatePriceBtn = outline("💰 Update Total Dibayar"); updatePriceBtn.setOnClickListener(v -> showUpdatePriceDialog()); c.addView(updatePriceBtn, btnLp(10));
-        finishBtn = green("✅ Pesanan Diterima • Selesaikan Order"); finishBtn.setOnClickListener(v -> { if (isPickupOrder()) showPickupOtpDialog(); else confirm("Pastikan pesanan sudah diterima customer. Selesaikan order sekarang?", "finished"); }); c.addView(finishBtn, btnLp(10));
+        arrivedPickupBtn = slideAction("📍 Geser • Tiba di Penjemputan", () -> updateStatus("arrived_pickup")); c.addView(arrivedPickupBtn, slideLp(8));
+        startDeliveryBtn = slideAction(orderKind.equals("pickup") ? "📦 Geser • Paket Diambil, Mulai Antar" : vehicleEmoji() + " Geser • Mulai Perjalanan", () -> updateStatus("on_delivery")); c.addView(startDeliveryBtn, slideLp(8));
+        arrivedDeliveryBtn = slideAction("🏁 Geser • Tiba di Pengantaran", () -> updateStatus("arrived_delivery")); c.addView(arrivedDeliveryBtn, slideLp(8));
+        finishBtn = slideAction("✅ Geser • Selesaikan Order", () -> { if (isPickupOrder()) showPickupOtpDialog(); else updateStatus("finished"); }); c.addView(finishBtn, slideLp(8));
+        updatePriceBtn = outline("💰 Update Total"); updatePriceBtn.setOnClickListener(v -> showUpdatePriceDialog()); c.addView(updatePriceBtn, btnLp(8));
 
         LinearLayout quick = new LinearLayout(this); quick.setOrientation(LinearLayout.HORIZONTAL);
         Button chat = primary("💬 Chat"); chat.setOnClickListener(v -> openChat()); quick.addView(chat, new LinearLayout.LayoutParams(0, dp(50), 1));
@@ -495,6 +497,68 @@ public class DriverTripActivity extends Activity {
         }
         add(c,0,0,0,dp(12));
     }
+    private LinearLayout.LayoutParams slideLp(int top) {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(58));
+        p.setMargins(0, dp(top), 0, 0);
+        return p;
+    }
+
+    private SlideActionView slideAction(String label, Runnable action) {
+        return new SlideActionView(label, action);
+    }
+
+    private final class SlideActionView extends LinearLayout {
+        private final TextView labelView;
+        private final SeekBar slider;
+        private final Runnable action;
+        private boolean fired = false;
+
+        SlideActionView(String label, Runnable action) {
+            super(DriverTripActivity.this);
+            this.action = action;
+            setOrientation(HORIZONTAL);
+            setGravity(Gravity.CENTER_VERTICAL);
+            setPadding(dp(12), dp(5), dp(8), dp(5));
+            setBackground(roundStroke("#F0FDF4", "#86EFAC", dp(16), 1));
+
+            labelView = text(label, 13, "#166534", true);
+            addView(labelView, new LinearLayout.LayoutParams(0, -2, 1));
+
+            slider = new SeekBar(DriverTripActivity.this);
+            slider.setMax(100);
+            slider.setProgress(0);
+            LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(dp(118), -2);
+            slider.setLayoutParams(sp);
+            addView(slider);
+
+            slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) { }
+                @Override public void onStartTrackingTouch(SeekBar seekBar) { }
+                @Override public void onStopTrackingTouch(SeekBar seekBar) {
+                    if (!isEnabled() || updatingStatus) { seekBar.setProgress(0); return; }
+                    if (seekBar.getProgress() >= 92 && !fired) {
+                        fired = true;
+                        seekBar.setProgress(100);
+                        if (action != null) action.run();
+                        mainHandler.postDelayed(() -> {
+                            fired = false;
+                            if (slider != null) slider.setProgress(0);
+                        }, 900L);
+                    } else {
+                        seekBar.setProgress(0);
+                    }
+                }
+            });
+        }
+
+        @Override public void setEnabled(boolean enabled) {
+            super.setEnabled(enabled);
+            if (slider != null) slider.setEnabled(enabled);
+            if (labelView != null) labelView.setAlpha(enabled ? 1f : 0.45f);
+            setAlpha(1f);
+        }
+    }
+
     private void startLocationWatch(){
         if(order == null) return;
         if(Build.VERSION.SDK_INT >= 23 && checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED){ requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, 701); return; }
@@ -682,12 +746,12 @@ public class DriverTripActivity extends Activity {
                 boolean near = pd <= ARRIVE_RADIUS_METER;
                 showAction(arrivedPickupBtn, near);
                 distanceInfo.setText("📍 Jarak ke penjemputan: " + meter(pd));
-                distanceHint.setText(near ? "✓ Anda sudah berada di area penjemputan. Tekan tombol Tiba di Lokasi Penjemputan." : "Menuju penjemputan • tombol akan aktif dalam radius " + (int)ARRIVE_RADIUS_METER + " meter.");
+                distanceHint.setText(near ? "✓ Anda sudah berada di area penjemputan. Geser kontrol Tiba di Penjemputan ke kanan." : "Menuju penjemputan • kontrol geser akan aktif dalam radius " + (int)ARRIVE_RADIUS_METER + " meter.");
             }else{
                 // Jangan menghilangkan aksi ketika GPS belum mendapatkan fix. Driver tetap melihat tahap berikutnya.
                 showAction(arrivedPickupBtn, true);
                 distanceInfo.setText("📡 GPS belum mendapatkan posisi akurat.");
-                distanceHint.setText("Tombol tiba tersedia sebagai konfirmasi manual. Pastikan Anda benar-benar sudah berada di titik penjemputan.");
+                distanceHint.setText("Kontrol geser tersedia sebagai konfirmasi manual. Pastikan Anda benar-benar sudah berada di titik penjemputan.");
             }
             return;
         }
@@ -695,7 +759,7 @@ public class DriverTripActivity extends Activity {
             showAction(startDeliveryBtn, true);
             showAction(updatePriceBtn, true);
             distanceInfo.setText("✅ Anda sudah tiba di titik penjemputan.");
-            distanceHint.setText(orderKind.equals("pickup") ? "Ambil paket, lalu tekan Mulai Antar." : "Pastikan pesanan sudah siap, lalu mulai perjalanan ke pengantaran.");
+            distanceHint.setText(orderKind.equals("pickup") ? "Ambil paket, lalu geser Mulai Antar." : "Pastikan pesanan sudah siap, lalu mulai perjalanan ke pengantaran.");
             return;
         }
         if(st.equals("on_delivery")){
@@ -706,11 +770,11 @@ public class DriverTripActivity extends Activity {
                 boolean near = dd <= ARRIVE_RADIUS_METER;
                 showAction(arrivedDeliveryBtn, near);
                 distanceInfo.setText("🏁 Jarak ke pengantaran: " + meter(dd));
-                distanceHint.setText(near ? "✓ Anda sudah berada di area pengantaran. Tekan tombol Tiba di Lokasi Pengantaran." : "Menuju pengantaran • tombol akan aktif dalam radius " + (int)ARRIVE_RADIUS_METER + " meter.");
+                distanceHint.setText(near ? "✓ Anda sudah berada di area pengantaran. Geser kontrol Tiba di Pengantaran ke kanan." : "Menuju pengantaran • kontrol geser akan aktif dalam radius " + (int)ARRIVE_RADIUS_METER + " meter.");
             }else{
                 showAction(arrivedDeliveryBtn, true);
                 distanceInfo.setText("📡 GPS belum mendapatkan posisi akurat.");
-                distanceHint.setText("Tombol tiba tersedia sebagai konfirmasi manual. Pastikan Anda benar-benar sudah sampai di titik pengantaran.");
+                distanceHint.setText("Kontrol geser tersedia sebagai konfirmasi manual. Pastikan Anda benar-benar sudah sampai di titik pengantaran.");
             }
             return;
         }
@@ -718,7 +782,7 @@ public class DriverTripActivity extends Activity {
             showAction(finishBtn, true);
             showAction(updatePriceBtn, true);
             distanceInfo.setText("🏁 Anda sudah tiba di lokasi pengantaran.");
-            distanceHint.setText("Serahkan pesanan ke customer. Setelah diterima, tekan Selesaikan Order.");
+            distanceHint.setText("Serahkan pesanan ke customer. Setelah diterima, geser Selesaikan Order.");
             return;
         }
         if(st.equals("finished") || st.equals("completed")){
@@ -730,17 +794,17 @@ public class DriverTripActivity extends Activity {
         // Fallback aman: status server yang belum dikenali tidak boleh membuat halaman tanpa tombol aksi.
         showAction(arrivedPickupBtn, true);
         distanceInfo.setText("ℹ Status perjalanan: " + statusLabel(st));
-        distanceHint.setText("Status server belum dikenali penuh. Gunakan tombol tiba penjemputan bila order memang sedang menuju penjemputan.");
+        distanceHint.setText("Status server belum dikenali penuh. Gunakan kontrol geser tiba penjemputan bila order memang sedang menuju penjemputan.");
     }
 
-    private void hideAction(Button b){
+    private void hideAction(View b){
         if(b == null) return;
         b.setVisibility(View.GONE);
         b.setEnabled(false);
         b.setAlpha(1f);
     }
 
-    private void showAction(Button b, boolean enabled){
+    private void showAction(View b, boolean enabled){
         if(b == null) return;
         b.setVisibility(View.VISIBLE);
         b.setEnabled(enabled && !updatingStatus);
@@ -781,6 +845,7 @@ public class DriverTripActivity extends Activity {
 
     private void confirm(String msg, String next){ if(updatingStatus)return; new AlertDialog.Builder(this).setTitle("Konfirmasi").setMessage(msg).setNegativeButton("Batal",null).setPositiveButton("Ya",(d,w)->updateStatus(next)).show(); }
     private void updateStatus(String next){
+        if (updatingStatus) return;
         updatingStatus = true; setLoading(true);
         DriverNetworkExecutor.execute(() -> { try{
             JSONObject p = new JSONObject();

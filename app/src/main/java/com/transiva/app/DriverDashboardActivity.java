@@ -967,6 +967,24 @@ public class DriverDashboardActivity extends Activity
         return out.toString();
     }
 
+    private String serviceIcon(String service) {
+        String s = clean(service).toLowerCase(Locale.US);
+        if (s.contains("food")) return "🍜";
+        if (s.contains("send")) return "📦";
+        if (s.contains("car")) return "🚗";
+        if (s.contains("shop") || s.contains("mart")) return "🛍";
+        return "🏍";
+    }
+
+    private String serviceSubtitle(String service) {
+        String s = clean(service).toLowerCase(Locale.US);
+        if (s.contains("food")) return "Ambil pesanan di merchant lalu antar ke customer";
+        if (s.contains("send")) return "Ambil paket dari pengirim lalu antar ke penerima";
+        if (s.contains("car")) return "Jemput penumpang • layanan mobil Transiva";
+        if (s.contains("shop") || s.contains("mart")) return "Belanja titipan customer lalu antar ke tujuan";
+        return "Jemput penumpang • layanan motor Transiva";
+    }
+
     private View orderCard(DriverOrder order, boolean active) {
         LinearLayout card = card();
         boolean queued = !active && order.raw != null && order.raw.optBoolean("queued", false);
@@ -980,8 +998,32 @@ public class DriverDashboardActivity extends Activity
             add(card, text("Sudah diterima • antrean " + Math.max(1, queuePosition) + ". Selesaikan order aktif terlebih dahulu.",
                     13, "#B45309", true), 0, dp(6), 0, 0);
         }
-        add(card, text(order.serviceName, 14, "#0B7CFF", true),
-                0, dp(5), 0, 0);
+        String serviceLabel = aiServiceLabel(order);
+        String serviceIcon = serviceIcon(serviceLabel);
+        TextView serviceBadge = text(serviceIcon + "  " + serviceLabel, 15, "#0B7CFF", true);
+        serviceBadge.setPadding(dp(12), dp(8), dp(12), dp(8));
+        serviceBadge.setBackground(roundStroke("#EFF6FF", "#BFDBFE", dp(16), 1));
+        add(card, serviceBadge, 0, dp(7), 0, 0);
+
+        JSONObject identityRaw = order.raw == null ? new JSONObject() : order.raw;
+        boolean familyOrder = "family".equalsIgnoreCase(identityRaw.optString("account_type", "personal"));
+        String customerName = firstNonEmpty(identityRaw.optString("customer_name", ""), "Customer");
+        String familyName = firstNonEmpty(identityRaw.optString("family_name", ""), customerName);
+        String familyRelation = firstNonEmpty(identityRaw.optString("family_relationship", ""), "Keluarga");
+        String identityTitle = familyOrder ? "👨‍👩‍👧 Transiva Family" : "👤 Akun Pribadi";
+        String identityName = familyOrder ? (familyName + " • " + familyRelation) : customerName;
+        LinearLayout identity = new LinearLayout(this);
+        identity.setOrientation(LinearLayout.VERTICAL);
+        identity.setPadding(dp(12), dp(10), dp(12), dp(10));
+        identity.setBackground(roundStroke(familyOrder ? "#F5F3FF" : "#F8FAFC", familyOrder ? "#DDD6FE" : "#E2E8F0", dp(14), 1));
+        identity.addView(text(identityTitle, 12, familyOrder ? "#6D28D9" : "#475569", true));
+        TextView identityPerson = text(identityName, 16, "#0F172A", true);
+        identityPerson.setPadding(0, dp(3), 0, 0);
+        identity.addView(identityPerson);
+        add(card, identity, 0, dp(8), 0, 0);
+
+        TextView serviceExplain = text(serviceSubtitle(serviceLabel), 12, "#64748B", false);
+        add(card, serviceExplain, 0, dp(6), 0, 0);
         add(card, text("Penjemputan:\n" + order.pickupAddress,
                 13, "#334155", false), 0, dp(8), 0, 0);
         add(card, text("Pengantaran:\n" + order.destinationAddress,
