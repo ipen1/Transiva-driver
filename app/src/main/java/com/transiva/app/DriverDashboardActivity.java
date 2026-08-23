@@ -166,6 +166,43 @@ public class DriverDashboardActivity extends Activity
         setContentView(buildScreen());
         DriverAppSettings.apply(this);
         presenter.load(true);
+        showOpportunityPromptIfNeeded(getIntent());
+    }
+
+
+    private void showOpportunityPromptIfNeeded(Intent intent) {
+        if (intent == null || isFinishing()) return;
+        String type = clean(intent.getStringExtra("notif_type")).toLowerCase(Locale.US);
+        String suggestOnline = clean(intent.getStringExtra("suggest_online"));
+        if (!"driver_opportunity".equals(type) || !"1".equals(suggestOnline)) return;
+
+        String reason = clean(intent.getStringExtra("reason"));
+        String distance = clean(intent.getStringExtra("pickup_distance_km"));
+        String service = clean(intent.getStringExtra("service"));
+        if (service.isEmpty()) service = "Transiva";
+        String message = "all_online_busy".equals(reason)
+                ? "Semua driver online di sekitar sedang sibuk. Ada permintaan " + service
+                    + (distance.isEmpty() ? " di dekat lokasi terakhirmu." : " sekitar " + distance + " km dari lokasi terakhirmu.")
+                : "Belum ada driver online yang siap di sekitar pickup. Ada permintaan " + service
+                    + (distance.isEmpty() ? " di dekat lokasi terakhirmu." : " sekitar " + distance + " km dari lokasi terakhirmu.");
+        message += "\n\nAktifkan status ONLINE jika kamu siap menerima order.";
+
+        new AlertDialog.Builder(this)
+                .setTitle("Peluang order di sekitar")
+                .setMessage(message)
+                .setPositiveButton("Online sekarang", (dialog, which) -> {
+                    if (!ensureLocationReady()) return;
+                    setSwitch(true);
+                    if (presenter != null) {
+                        presenter.setOnline(true, normalizeDriverType(session.getDriverType()));
+                    }
+                    showMessage("Status ONLINE sedang diaktifkan. Siap terima cuan!");
+                })
+                .setNegativeButton("Nanti", null)
+                .show();
+
+        // Mencegah dialog yang sama muncul lagi saat Activity memakai intent lama.
+        intent.removeExtra("suggest_online");
     }
 
     @Override protected void onStart() {

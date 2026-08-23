@@ -42,6 +42,8 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
             "transiva_new_order_channel_v3";
     private static final String CH_ORDER =
             "transiva_order_channel";
+    private static final String CH_OPPORTUNITY =
+            "transiva_driver_opportunity_v1";
     private static final String CH_WALLET =
             "transiva_wallet_channel";
     private static final String CH_CHAT =
@@ -520,6 +522,11 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
         intent.putExtra("order_id", orderId);
         intent.putExtra("from_fcm", true);
         intent.putExtra("notif_type", type);
+        if (data != null) {
+            for (Map.Entry<String,String> entry : data.entrySet()) {
+                intent.putExtra(entry.getKey(), entry.getValue());
+            }
+        }
         return intent;
     }
 
@@ -534,6 +541,13 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                 CH_ORDER,
                 "Update Order Transiva",
                 "Pembaruan status order yang sedang berjalan",
+                NotificationManager.IMPORTANCE_HIGH
+        );
+
+        createChannel(
+                CH_OPPORTUNITY,
+                "Peluang Order di Sekitar",
+                "Ajakan online saat permintaan tinggi atau driver online sedang sibuk",
                 NotificationManager.IMPORTANCE_HIGH
         );
 
@@ -724,6 +738,10 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
             return CH_WALLET;
         }
 
+        if ("driver_opportunity".equals(type)) {
+            return CH_OPPORTUNITY;
+        }
+
         if (isOrder(type)) {
             return CH_ORDER;
         }
@@ -750,6 +768,7 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                         || "driver_emergency".equals(type)
                         || isChat(type)
                         || isOrder(type)
+                        || "driver_opportunity".equals(type)
                         || isWallet(type)
                         || type.contains("broadcast")
                         || type.contains("promo")
@@ -771,7 +790,7 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
             return NotificationCompat.CATEGORY_MESSAGE;
         }
 
-        if (isOrder(type) || isWallet(type)) {
+        if (isOrder(type) || isWallet(type) || "driver_opportunity".equals(type)) {
             return NotificationCompat.CATEGORY_STATUS;
         }
 
