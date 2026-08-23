@@ -519,7 +519,7 @@ public class DriverTripActivity extends Activity {
             setOrientation(HORIZONTAL);
             setGravity(Gravity.CENTER_VERTICAL);
             setPadding(dp(12), dp(5), dp(8), dp(5));
-            setBackground(roundStroke("#F0FDF4", "#86EFAC", dp(16), 1));
+            setBackground(stroke("#F0FDF4", "#86EFAC", dp(16), 1));
 
             labelView = text(label, 13, "#166534", true);
             addView(labelView, new LinearLayout.LayoutParams(0, -2, 1));
