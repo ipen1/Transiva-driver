@@ -3,6 +3,7 @@ package com.transiva.app;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.animation.ObjectAnimator;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -10,6 +11,9 @@ import android.graphics.Typeface;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.ClipDrawable;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.LayerDrawable;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -498,7 +502,7 @@ public class DriverTripActivity extends Activity {
         add(c,0,0,0,dp(12));
     }
     private LinearLayout.LayoutParams slideLp(int top) {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(58));
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(72));
         p.setMargins(0, dp(top), 0, 0);
         return p;
     }
@@ -507,55 +511,133 @@ public class DriverTripActivity extends Activity {
         return new SlideActionView(label, action);
     }
 
+    /** Premium thick progress track for the trip status slider. */
+    private Drawable premiumSliderTrack() {
+        GradientDrawable base = round("#DCEBFA", dp(18));
+        base.setSize(dp(180), dp(26));
+        base.setStroke(dp(1), Color.parseColor("#BBD8F5"));
+
+        GradientDrawable fill = new GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{Color.parseColor("#0878F9"), Color.parseColor("#29A8FF")}
+        );
+        fill.setCornerRadius(dp(18));
+        fill.setSize(dp(180), dp(26));
+        ClipDrawable clip = new ClipDrawable(fill, Gravity.LEFT, ClipDrawable.HORIZONTAL);
+
+        LayerDrawable layers = new LayerDrawable(new Drawable[]{base, clip});
+        layers.setId(0, android.R.id.background);
+        layers.setId(1, android.R.id.progress);
+        return layers;
+    }
+
+    private Drawable premiumSliderThumb() {
+        GradientDrawable thumb = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.parseColor("#FFFFFF"), Color.parseColor("#EAF5FF")}
+        );
+        thumb.setShape(GradientDrawable.OVAL);
+        thumb.setSize(dp(42), dp(42));
+        thumb.setStroke(dp(3), Color.parseColor("#0878F9"));
+        return thumb;
+    }
+
     private final class SlideActionView extends LinearLayout {
         private final TextView labelView;
         private final SeekBar slider;
         private final Runnable action;
+        private final String idleLabel;
         private boolean fired = false;
 
         SlideActionView(String label, Runnable action) {
             super(DriverTripActivity.this);
             this.action = action;
+            this.idleLabel = label;
             setOrientation(HORIZONTAL);
             setGravity(Gravity.CENTER_VERTICAL);
-            setPadding(dp(12), dp(5), dp(8), dp(5));
-            setBackground(stroke("#F0FDF4", "#86EFAC", dp(16), 1));
+            setPadding(dp(14), dp(7), dp(10), dp(7));
+            setBackground(stroke("#F7FBFF", "#B9D9FA", dp(20), 1));
+            setElevation(dp(2));
 
-            labelView = text(label, 13, "#166534", true);
-            addView(labelView, new LinearLayout.LayoutParams(0, -2, 1));
+            labelView = text(label, 13, "#0B3A78", true);
+            labelView.setGravity(Gravity.CENTER_VERTICAL);
+            addView(labelView, new LinearLayout.LayoutParams(0, -1, 1));
 
             slider = new SeekBar(DriverTripActivity.this);
             slider.setMax(100);
             slider.setProgress(0);
-            LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(dp(118), -2);
+            slider.setProgressDrawable(premiumSliderTrack());
+            slider.setThumb(premiumSliderThumb());
+            if (Build.VERSION.SDK_INT >= 21) slider.setSplitTrack(false);
+            slider.setThumbOffset(0);
+            slider.setPadding(dp(2), 0, dp(2), 0);
+            slider.setMinimumHeight(dp(48));
+            LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(dp(158), dp(50));
             slider.setLayoutParams(sp);
             addView(slider);
 
             slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-                @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) { }
-                @Override public void onStartTrackingTouch(SeekBar seekBar) { }
+                @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                    if (!fromUser || fired) return;
+                    if (progress > 8) {
+                        labelView.setText(progress >= 92 ? "Lepas untuk konfirmasi ✓" : "Geser sampai penuh  ›››");
+                    } else {
+                        labelView.setText(idleLabel);
+                    }
+                }
+
+                @Override public void onStartTrackingTouch(SeekBar seekBar) {
+                    if (!isEnabled() || updatingStatus) return;
+                    seekBar.animate().scaleX(1.025f).scaleY(1.08f).setDuration(120L).start();
+                    labelView.animate().alpha(0.72f).setDuration(110L).withEndAction(() ->
+                            labelView.animate().alpha(1f).setDuration(140L).start()).start();
+                }
+
                 @Override public void onStopTrackingTouch(SeekBar seekBar) {
-                    if (!isEnabled() || updatingStatus) { seekBar.setProgress(0); return; }
+                    seekBar.animate().scaleX(1f).scaleY(1f).setDuration(150L).start();
+                    if (!isEnabled() || updatingStatus) {
+                        animateBack(seekBar);
+                        return;
+                    }
                     if (seekBar.getProgress() >= 92 && !fired) {
                         fired = true;
                         seekBar.setProgress(100);
+                        labelView.setText("✓ Memproses status...");
                         if (action != null) action.run();
                         mainHandler.postDelayed(() -> {
                             fired = false;
-                            if (slider != null) slider.setProgress(0);
-                        }, 900L);
+                            labelView.setText(idleLabel);
+                            if (slider != null) animateBack(slider);
+                        }, 950L);
                     } else {
-                        seekBar.setProgress(0);
+                        labelView.setText("Geser sampai ujung untuk konfirmasi");
+                        animateBack(seekBar);
+                        mainHandler.postDelayed(() -> {
+                            if (!fired && labelView != null) labelView.setText(idleLabel);
+                        }, 320L);
                     }
                 }
             });
         }
 
+        private void animateBack(SeekBar seekBar) {
+            try {
+                ObjectAnimator back = ObjectAnimator.ofInt(seekBar, "progress", seekBar.getProgress(), 0);
+                back.setDuration(240L);
+                back.start();
+            } catch (Exception ignored) {
+                seekBar.setProgress(0);
+            }
+        }
+
         @Override public void setEnabled(boolean enabled) {
             super.setEnabled(enabled);
             if (slider != null) slider.setEnabled(enabled);
-            if (labelView != null) labelView.setAlpha(enabled ? 1f : 0.45f);
-            setAlpha(1f);
+            if (labelView != null) {
+                labelView.setAlpha(enabled ? 1f : 0.42f);
+                if (!fired) labelView.setText(idleLabel);
+            }
+            setAlpha(enabled ? 1f : 0.66f);
         }
     }
 
