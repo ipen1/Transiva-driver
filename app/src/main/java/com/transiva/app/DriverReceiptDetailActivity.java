@@ -123,7 +123,7 @@ public class DriverReceiptDetailActivity extends Activity {
 
         income.addView(row("🛵 Ongkir Normal" + modeLabel, rupiah(num("ongkir")), "#0F172A", false));
         if (voucherDiscount > 0) {
-            income.addView(row("👤 Dibayar Customer", rupiah(customerContribution), "#0F172A", false));
+            income.addView(row(isFood ? "👤 Total Dibayar Customer" : "👤 Dibayar Customer", rupiah(customerContribution), "#0F172A", false));
             income.addView(row("🏷️ Voucher Customer", "- " + rupiah(voucherDiscount), "#DC2626", false));
             income.addView(row("🛡️ Subsidi Transiva", "+ " + rupiah(promoSubsidy), "#16A34A", true));
         }
@@ -136,7 +136,9 @@ public class DriverReceiptDetailActivity extends Activity {
             LinearLayout protectedBox = sectionCard();
             protectedBox.setBackground(roundStroke("#ECFDF5", "#86EFAC", dp(22), 1));
             protectedBox.addView(text("🛡️ Pendapatan Dilindungi", 16, "#047857", true));
-            TextView protectedText = text("Diskon customer ditanggung Transiva dan tidak mengurangi ongkir normal driver.", 13, "#059669", false);
+            TextView protectedText = text(isFood
+                    ? "Voucher TransFood ditanggung Transiva. Nilai order merchant dan ongkir driver tetap dilindungi."
+                    : "Diskon customer ditanggung Transiva dan tidak mengurangi ongkir normal driver.", 13, "#059669", false);
             protectedText.setPadding(0, dp(5), 0, 0);
             protectedBox.addView(protectedText);
             root.addView(protectedBox);
