@@ -115,11 +115,32 @@ public class DriverReceiptDetailActivity extends Activity {
         String modeLabel = isFood ? " " + deliveryLabel : "";
 
         LinearLayout income = sectionCard();
-        income.addView(row("🛵 Pendapatan Ongkir" + modeLabel, rupiah(num("ongkir")), "#0F172A", false));
-        income.addView(row("🍔 Orderan Merchant", rupiah(num("merchant_order")), "#0F172A", false));
+        double voucherDiscount = num("voucher_discount");
+        double promoSubsidy = num("promo_subsidy");
+        double protectedGross = num("driver_gross_protected");
+        if (protectedGross <= 0) protectedGross = num("ongkir");
+        double customerContribution = num("customer_contribution");
+
+        income.addView(row("🛵 Ongkir Normal" + modeLabel, rupiah(num("ongkir")), "#0F172A", false));
+        if (voucherDiscount > 0) {
+            income.addView(row("👤 Dibayar Customer", rupiah(customerContribution), "#0F172A", false));
+            income.addView(row("🏷️ Voucher Customer", "- " + rupiah(voucherDiscount), "#DC2626", false));
+            income.addView(row("🛡️ Subsidi Transiva", "+ " + rupiah(promoSubsidy), "#16A34A", true));
+        }
+        if (num("merchant_order") > 0) income.addView(row("🍔 Orderan Merchant", rupiah(num("merchant_order")), "#0F172A", false));
         income.addView(divider());
-        income.addView(row("Total Pendapatan", rupiah(num("total_pendapatan")), "#16A34A", true));
+        income.addView(row(voucherDiscount > 0 ? "Pendapatan Driver Terlindungi" : "Total Pendapatan", rupiah(num("total_pendapatan")), "#16A34A", true));
         root.addView(income);
+
+        if (voucherDiscount > 0) {
+            LinearLayout protectedBox = sectionCard();
+            protectedBox.setBackground(roundStroke("#ECFDF5", "#86EFAC", dp(22), 1));
+            protectedBox.addView(text("🛡️ Pendapatan Dilindungi", 16, "#047857", true));
+            TextView protectedText = text("Diskon customer ditanggung Transiva dan tidak mengurangi ongkir normal driver.", 13, "#059669", false);
+            protectedText.setPadding(0, dp(5), 0, 0);
+            protectedBox.addView(protectedText);
+            root.addView(protectedBox);
+        }
 
         LinearLayout cut = sectionCard();
         cut.setBackground(roundStroke("#FFF7F7", "#FECACA", dp(22), 1));
@@ -127,6 +148,10 @@ public class DriverReceiptDetailActivity extends Activity {
         cut.addView(row("🏪 Fee Gross Up Merchant", "- " + rupiah(num("merchant_grossup_fee")), "#DC2626", false));
         cut.addView(divider());
         cut.addView(row("Total Potongan", "- " + rupiah(num("total_potongan")), "#DC2626", true));
+        if (num("driver_net") > 0) {
+            cut.addView(divider());
+            cut.addView(row("Pendapatan Bersih Driver", rupiah(num("driver_net")), "#16A34A", true));
+        }
         root.addView(cut);
 
         LinearLayout bal = sectionCard();
@@ -147,6 +172,10 @@ public class DriverReceiptDetailActivity extends Activity {
     private void renderWalletDetail() {
         String direction = data.optString("direction", "out").toLowerCase(Locale.US);
         boolean incoming = "in".equals(direction);
+        String walletType = data.optString("type", "").toLowerCase(Locale.US);
+        boolean promoSubsidy = "promo_subsidy".equals(walletType);
+        boolean appFeeEntry = "app_fee".equals(walletType);
+        boolean escrowRelease = "escrow_release".equals(walletType);
         String counterpart = firstNonEmpty(data.optString("counterparty_username"), "Driver tidak diketahui");
         double amount = data.optDouble("amount", 0);
         double fee = data.optDouble("admin_fee", 0);
@@ -155,7 +184,8 @@ public class DriverReceiptDetailActivity extends Activity {
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(16), dp(14), dp(16), dp(14));
-        TextView icon = text(incoming ? "💰" : "📤", 30, "#FFFFFF", true);
+        String walletIcon = promoSubsidy ? "🛡️" : (appFeeEntry ? "⚙️" : (escrowRelease ? "💳" : (incoming ? "💰" : "📤")));
+        TextView icon = text(walletIcon, 30, "#FFFFFF", true);
         icon.setGravity(Gravity.CENTER);
         icon.setBackground(roundGradient(incoming ? "#059669" : "#DC2626", incoming ? "#34D399" : "#FB7185", dp(22)));
         LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(dp(54), dp(54));
@@ -164,21 +194,24 @@ public class DriverReceiptDetailActivity extends Activity {
         LinearLayout txt = new LinearLayout(this);
         txt.setOrientation(LinearLayout.VERTICAL);
         header.addView(txt, new LinearLayout.LayoutParams(0, -2, 1));
-        txt.addView(text(incoming ? "Transfer Masuk" : "Transfer Keluar", 13, "#64748B", true));
+        String walletTitle = promoSubsidy ? "Subsidi Voucher Transiva" : (appFeeEntry ? "Fee Aplikasi" : (escrowRelease ? "Pembayaran Customer" : (incoming ? "Transfer Masuk" : "Transfer Keluar")));
+        txt.addView(text(walletTitle, 13, "#64748B", true));
         txt.addView(text(firstNonEmpty(data.optString("reference"), "TRANSFER"), 20, "#0B3A78", true));
         root.addView(header);
 
         LinearLayout status = sectionCard();
         status.setBackground(roundStroke(incoming ? "#ECFDF5" : "#FFF7F7", incoming ? "#86EFAC" : "#FECACA", dp(22), 1));
-        status.addView(text(incoming ? "✅ Saldo Diterima" : "✅ Saldo Berhasil Dikirim", 18, incoming ? "#047857" : "#B91C1C", true));
+        String statusText = promoSubsidy ? "✅ Subsidi Masuk ke Saldo" : (appFeeEntry ? "✅ Fee Aplikasi Tercatat" : (escrowRelease ? "✅ Pembayaran Dicairkan" : (incoming ? "✅ Saldo Diterima" : "✅ Saldo Berhasil Dikirim")));
+        status.addView(text(statusText, 18, incoming ? "#047857" : "#B91C1C", true));
         TextView created = text(firstNonEmpty(data.optString("created_at"), "-"), 13, "#64748B", false);
         created.setPadding(0, dp(4), 0, 0);
         status.addView(created);
         root.addView(status);
 
         LinearLayout party = sectionCard();
-        party.addView(row(incoming ? "👤 Diterima dari" : "👤 Dikirim ke", counterpart, "#0B3A78", true));
-        party.addView(row("Nominal Transfer", rupiah(amount), incoming ? "#16A34A" : "#DC2626", true));
+        if (!promoSubsidy && !appFeeEntry && !escrowRelease) party.addView(row(incoming ? "👤 Diterima dari" : "👤 Dikirim ke", counterpart, "#0B3A78", true));
+        String amountLabel = promoSubsidy ? "Subsidi Promo" : (appFeeEntry ? "Fee Aplikasi" : (escrowRelease ? "Dana Customer" : "Nominal Transfer"));
+        party.addView(row(amountLabel, rupiah(amount), incoming ? "#16A34A" : "#DC2626", true));
         if (fee > 0) party.addView(row("Biaya Admin", "- " + rupiah(fee), "#DC2626", false));
         String note = firstNonEmpty(data.optString("note"));
         if (note.length() > 0) party.addView(row("Catatan", note, "#334155", false));

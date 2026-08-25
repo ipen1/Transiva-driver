@@ -31,6 +31,11 @@ public class DriverReceiptOpener {
             putNumber(item, "merchant_grossup_fee", receipt, "merchant_grossup_fee");
             putNumber(item, "total_pendapatan", receipt, "total_pendapatan");
             putNumber(item, "total_potongan", receipt, "total_potongan");
+            putNumber(item, "voucher_discount", receipt, "voucher_discount");
+            putNumber(item, "promo_subsidy", receipt, "promo_subsidy");
+            putNumber(item, "customer_contribution", receipt, "customer_contribution");
+            putNumber(item, "driver_gross_protected", receipt, "driver_gross_protected");
+            putNumber(item, "driver_net", receipt, "driver_net");
             putNumber(item, "saldo_sebelum", receipt, "saldo_sebelum");
             putNumber(item, "saldo_saat_ini", receipt, "saldo_saat_ini");
             putNumber(item, "sisa_saldo", receipt, "sisa_saldo");
