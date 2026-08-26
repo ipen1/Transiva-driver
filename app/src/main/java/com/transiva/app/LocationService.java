@@ -50,6 +50,7 @@ public class LocationService extends Service {
     private long lastSentAt;
     private Location lastSent;
     private final SmoothLocationEngine smoothLocation = new SmoothLocationEngine(5000L);
+    private final DriverGuardianManager guardian = new DriverGuardianManager();
 
     private final LocationListener listener = new LocationListener() {
         @Override public void onLocationChanged(Location location) {
@@ -181,6 +182,8 @@ public class LocationService extends Service {
         if (fix == null || !fix.upload) return;
 
         Location accepted = fix.location;
+        String activeOrderId = session == null ? "" : session.get("current_order_id");
+        guardian.onLocation(this, accepted, activeOrderId != null && !activeOrderId.trim().isEmpty());
         long now = System.currentTimeMillis();
         if (lastSentAt > 0L && now - lastSentAt < desiredInterval()) return;
         lastSentAt = now;

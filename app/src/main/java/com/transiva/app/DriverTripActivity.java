@@ -928,6 +928,10 @@ public class DriverTripActivity extends Activity {
     private void confirm(String msg, String next){ if(updatingStatus)return; new AlertDialog.Builder(this).setTitle("Konfirmasi").setMessage(msg).setNegativeButton("Batal",null).setPositiveButton("Ya",(d,w)->updateStatus(next)).show(); }
     private void updateStatus(String next){
         if (updatingStatus) return;
+        if (!DriverOrderStateGuard.canTransition(status(), next)) {
+            info("Status belum sesuai", "Urutan perjalanan harus: diterima → tiba pickup → dalam perjalanan → tiba tujuan → selesai.");
+            return;
+        }
         updatingStatus = true; setLoading(true);
         DriverNetworkExecutor.execute(() -> { try{
             JSONObject p = new JSONObject();

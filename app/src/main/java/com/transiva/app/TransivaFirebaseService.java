@@ -87,6 +87,10 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
         Map<String, String> data =
                 remoteMessage.getData();
 
+        if (DriverFcmDeduplicator.isDuplicate(this, remoteMessage.getMessageId(), data)) {
+            return;
+        }
+
         if (data == null || data.isEmpty()) {
             String title =
                     remoteMessage.getNotification() != null

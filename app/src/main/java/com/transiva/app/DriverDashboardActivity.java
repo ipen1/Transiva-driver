@@ -94,6 +94,10 @@ public class DriverDashboardActivity extends Activity
     private TextView assistantTitleText;
     private TextView assistantMessageText;
     private TextView hotspotText;
+    private TextView growthScoreText;
+    private TextView growthGoalText;
+    private TextView growthRateText;
+    private TextView destinationModeText;
     private TextView clusterCurrentText;
     private TextView clusterListText;
     private LinearLayout clusterGrid;
@@ -324,6 +328,7 @@ public class DriverDashboardActivity extends Activity
         buildOrderSections();
 
         buildWalletAndPerformance();
+        buildDriverGrowth();
         buildSmartAssistant();
 
         shell.addView(
@@ -478,6 +483,75 @@ public class DriverDashboardActivity extends Activity
         return number;
     }
 
+
+    private void buildDriverGrowth() {
+        LinearLayout card = card();
+        card.addView(text("🏆 Driver Growth", 17, "#0B3A78", true));
+        growthScoreText = text("Driver Score 70/100 • Good", 15, "#0B7CFF", true);
+        add(card, growthScoreText, 0, dp(10), 0, 0);
+        growthGoalText = text("Target hari ini Rp 0 / Rp 200.000", 13, "#334155", true);
+        add(card, growthGoalText, 0, dp(7), 0, 0);
+        growthRateText = text("Pendapatan/jam Rp 0", 12, "#64748B", false);
+        add(card, growthRateText, 0, dp(5), 0, 0);
+        destinationModeText = text("🏠 Mode tujuan: Nonaktif", 12, "#475569", true);
+        add(card, destinationModeText, 0, dp(8), 0, 0);
+        TextView hint = text("Ketuk untuk mengatur target pendapatan dan Mode Pulang/Area. Score tidak mengubah urutan status order.", 10, "#64748B", false);
+        add(card, hint, 0, dp(7), 0, 0);
+        card.setOnClickListener(v -> showGrowthSettings());
+        add(homeSections, card, 0, dp(12), 0, 0);
+    }
+
+    private void showGrowthSettings() {
+        final DriverDashboardState state = currentState;
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(22), dp(6), dp(22), 0);
+        EditText goal = new EditText(this);
+        goal.setHint("Target harian, contoh 200000");
+        goal.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        goal.setText(String.valueOf(state == null ? 200000 : Math.max(50000, state.dailyGoal)));
+        box.addView(goal);
+        EditText destination = new EditText(this);
+        destination.setHint("Tujuan pulang / area, kosong = nonaktif");
+        destination.setText(state == null ? "" : clean(state.destinationLabel));
+        box.addView(destination);
+        new AlertDialog.Builder(this)
+                .setTitle("Driver Growth & Mode Pulang")
+                .setMessage("Isi area tujuan agar Transiva dapat menyimpan preferensi arah driver. Kosongkan tujuan untuk menonaktifkan mode tujuan.")
+                .setView(box)
+                .setNegativeButton("Batal", null)
+                .setPositiveButton("Simpan", (d,w) -> {
+                    long target;
+                    try { target = Long.parseLong(clean(goal.getText().toString())); } catch (Exception e) { target = 200000L; }
+                    target = Math.max(50000L, Math.min(5000000L, target));
+                    String label = clean(destination.getText().toString());
+                    saveGrowthSettings(target, label.isEmpty() ? "off" : "home", label);
+                }).show();
+    }
+
+    private void saveGrowthSettings(long goal, String mode, String label) {
+        showLoading(true);
+        DriverApiClient api = new DriverApiClient(session);
+        api.executor().execute(() -> {
+            try {
+                JSONObject body = new JSONObject();
+                body.put("daily_goal", goal);
+                body.put("destination_mode", mode);
+                body.put("destination_label", label);
+                api.postIdempotent("driver_growth_native.php", body);
+                runOnUiThread(() -> {
+                    showLoading(false);
+                    Toast.makeText(this, "Driver Growth disimpan", Toast.LENGTH_SHORT).show();
+                    if (presenter != null) presenter.load(false);
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    showLoading(false);
+                    Toast.makeText(this, "Gagal menyimpan Driver Growth: " + error.getMessage(), Toast.LENGTH_LONG).show();
+                });
+            }
+        });
+    }
 
     private void buildSmartAssistant() {
         LinearLayout card = card();
@@ -635,6 +709,14 @@ public class DriverDashboardActivity extends Activity
 
         balanceText.setText(rupiah(state.balance));
         earningText.setText(rupiah(state.todayEarning));
+        if (growthScoreText != null) growthScoreText.setText("Driver Score " + state.driverScore + "/100 • " + state.driverScoreLabel);
+        if (growthGoalText != null) growthGoalText.setText("Target hari ini " + rupiah(state.todayEarning) + " / " + rupiah(state.dailyGoal) + " • " + state.goalProgress + "%");
+        if (growthRateText != null) growthRateText.setText("Pendapatan/jam " + rupiah(state.earningPerHour));
+        if (destinationModeText != null) {
+            String dm = clean(state.destinationMode);
+            String dl = clean(state.destinationLabel);
+            destinationModeText.setText("🏠 Mode tujuan: " + ("off".equalsIgnoreCase(dm) ? "Nonaktif" : (dl.isEmpty() ? ("home".equalsIgnoreCase(dm) ? "Pulang" : "Area pilihan") : dl)));
+        }
         tripText.setText(String.valueOf(state.todayTrips));
         ratingText.setText(String.format(Locale.US, "%.1f", state.rating));
         onlineMinutesText.setText(formatMinutes(state.onlineMinutes));
@@ -1034,6 +1116,17 @@ public class DriverDashboardActivity extends Activity
             meta += " • " + order.pickupDistanceText;
         }
         add(card, text(meta, 13, "#0F172A", true), 0, dp(8), 0, 0);
+
+        if (!active) {
+            double tripKm = order.raw == null ? 0d : Math.max(order.raw.optDouble("distance_km", 0d), order.raw.optDouble("trip_distance_km", 0d));
+            double pickupKm = order.raw == null ? 0d : Math.max(order.raw.optDouble("pickup_distance_km", 0d), order.raw.optDouble("driver_distance_km", 0d));
+            double basisKm = tripKm > 0d ? tripKm : pickupKm;
+            String radar = "📡 Smart Radar";
+            if (pickupKm > 0d) radar += " • " + String.format(Locale.US, "%.1f km ke pickup", pickupKm);
+            if (tripKm > 0d) radar += " • trip " + String.format(Locale.US, "%.1f km", tripKm);
+            if (basisKm > 0d && order.driverEarning > 0) radar += " • ±" + rupiah(Math.round(order.driverEarning / basisKm)) + "/km";
+            add(card, text(radar, 12, "#0B7CFF", true), 0, dp(7), 0, 0);
+        }
 
         String customerNote = customerNote(order.raw);
         if (!customerNote.isEmpty()) {
