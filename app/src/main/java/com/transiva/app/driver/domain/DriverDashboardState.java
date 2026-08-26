@@ -22,6 +22,13 @@ public final class DriverDashboardState {
     public final String queueLabel;
     public final String assistantTitle;
     public final String assistantMessage;
+    public final int driverScore;
+    public final String driverScoreLabel;
+    public final long dailyGoal;
+    public final int goalProgress;
+    public final long earningPerHour;
+    public final String destinationMode;
+    public final String destinationLabel;
     public final String hotspotName;
     public final String hotspotLevel;
     public final int hotspotScore;
@@ -52,6 +59,13 @@ public final class DriverDashboardState {
             String queueLabel,
             String assistantTitle,
             String assistantMessage,
+            int driverScore,
+            String driverScoreLabel,
+            long dailyGoal,
+            int goalProgress,
+            long earningPerHour,
+            String destinationMode,
+            String destinationLabel,
             String hotspotName,
             String hotspotLevel,
             int hotspotScore,
@@ -81,6 +95,13 @@ public final class DriverDashboardState {
         this.queueLabel = queueLabel == null ? "" : queueLabel;
         this.assistantTitle = assistantTitle == null ? "" : assistantTitle;
         this.assistantMessage = assistantMessage == null ? "" : assistantMessage;
+        this.driverScore = driverScore;
+        this.driverScoreLabel = driverScoreLabel == null ? "" : driverScoreLabel;
+        this.dailyGoal = dailyGoal;
+        this.goalProgress = goalProgress;
+        this.earningPerHour = earningPerHour;
+        this.destinationMode = destinationMode == null ? "off" : destinationMode;
+        this.destinationLabel = destinationLabel == null ? "" : destinationLabel;
         this.hotspotName = hotspotName == null ? "" : hotspotName;
         this.hotspotLevel = hotspotLevel == null ? "" : hotspotLevel;
         this.hotspotScore = hotspotScore;
