@@ -21,6 +21,7 @@ public final class DriverDashboardMapper {
         JSONObject performance = root.optJSONObject("performance");
         JSONObject queue = root.optJSONObject("smart_queue");
         JSONObject assistant = root.optJSONObject("ai_assistant");
+        JSONObject growth = root.optJSONObject("driver_growth");
         JSONObject hotspot = root.optJSONObject("hotspot");
         JSONObject clusterSystem = root.optJSONObject("cluster_system");
 
@@ -29,6 +30,7 @@ public final class DriverDashboardMapper {
         if (performance == null) performance = new JSONObject();
         if (queue == null) queue = new JSONObject();
         if (assistant == null) assistant = new JSONObject();
+        if (growth == null) growth = new JSONObject();
         if (hotspot == null) hotspot = new JSONObject();
         if (clusterSystem == null) clusterSystem = new JSONObject();
 
@@ -85,6 +87,13 @@ public final class DriverDashboardMapper {
                 queue.optString("label", "Belum masuk antrean"),
                 assistant.optString("title", "Asisten Transiva"),
                 assistant.optString("message", "Aktifkan status online untuk menerima rekomendasi."),
+                readInt(growth, "driver_score", 70),
+                growth.optString("score_label", "Good"),
+                readLong(growth, "daily_goal", 200000),
+                readInt(growth, "goal_progress", 0),
+                readLong(growth, "earning_per_hour", 0),
+                growth.optString("destination_mode", "off"),
+                growth.optString("destination_label", ""),
                 hotspot.optString("name", "Area sekitar Anda"),
                 hotspot.optString("level", "NORMAL"),
                 readInt(hotspot, "score", 0),
