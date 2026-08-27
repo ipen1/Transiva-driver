@@ -24,10 +24,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
-import android.webkit.WebChromeClient;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -38,6 +34,17 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 
 import com.transiva.app.driver.data.DriverApiClient;
+import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.MapView;
+import com.google.android.gms.maps.MapsInitializer;
+import com.google.android.gms.maps.CameraUpdateFactory;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.LatLngBounds;
+import com.google.android.gms.maps.model.Marker;
+import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.Polyline;
+import com.google.android.gms.maps.model.PolylineOptions;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -71,7 +78,10 @@ public class DriverTripActivity extends Activity {
     private LinearLayout root;
     private ProgressBar progressBar;
     private TextView statusBadge, distanceInfo, distanceHint;
-    private WebView mapView;
+    private MapView mapView;
+    private GoogleMap googleMap;
+    private Marker driverMarker, pickupMarker, deliveryMarker;
+    private Polyline pickupPolyline, deliveryPolyline;
     private SlideActionView arrivedPickupBtn, startDeliveryBtn, arrivedDeliveryBtn, finishBtn;
     private Button updatePriceBtn;
     private JSONObject order;
@@ -143,9 +153,10 @@ public class DriverTripActivity extends Activity {
             if(valid(lastDriverLat,lastDriverLng)) requestStableRoute(true);
         }, 250L);
     }
-    @Override protected void onResume(){ super.onResume(); if(order != null) startLocationWatch(); }
-    @Override protected void onPause(){ stopLocationWatch(); super.onPause(); }
-    @Override protected void onDestroy(){ stopLocationWatch(); try{ if(mapView != null) mapView.destroy(); }catch(Exception ignored){} super.onDestroy(); }
+    @Override protected void onResume(){ super.onResume(); try{ if(mapView!=null) mapView.onResume(); }catch(Exception ignored){} if(order != null) startLocationWatch(); }
+    @Override protected void onPause(){ stopLocationWatch(); try{ if(mapView!=null) mapView.onPause(); }catch(Exception ignored){} super.onPause(); }
+    @Override protected void onDestroy(){ stopLocationWatch(); try{ if(mapView != null) mapView.onDestroy(); }catch(Exception ignored){} super.onDestroy(); }
+    @Override public void onLowMemory(){ super.onLowMemory(); try{ if(mapView!=null) mapView.onLowMemory(); }catch(Exception ignored){} }
 
     private void loadSession(){
         try{
@@ -283,52 +294,55 @@ public class DriverTripActivity extends Activity {
     }
     private void addMapCard(){
         LinearLayout c = card(); c.setPadding(dp(12), dp(12), dp(12), dp(12));
-        c.addView(text("🗺️ Peta Perjalanan", 16, "#0B3A78", true)); c.addView(text("Ikon driver mengikuti mode order dan dikunci di dalam jalur rute.", 12, "#64748B", false));
-        mapView = new WebView(this); try{ WebSettings st = mapView.getSettings(); st.setJavaScriptEnabled(true); st.setDomStorageEnabled(true); st.setLoadWithOverviewMode(true); st.setUseWideViewPort(true); st.setAllowFileAccess(true); st.setAllowContentAccess(true); st.setCacheMode(WebSettings.LOAD_NO_CACHE); if(Build.VERSION.SDK_INT >= 21) st.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW); mapView.setBackgroundColor(Color.TRANSPARENT); mapView.setWebChromeClient(new WebChromeClient()); }catch(Exception ignored){}
-        mapView.setWebViewClient(new WebViewClient(){
-            @Override public void onPageFinished(WebView view, String url){
-                mapReady = true;
-                mainHandler.postDelayed(() -> {
-                    applyPendingRoute();
-                    updateMap();
-                    if(pendingRoutePoints.isEmpty()) requestStableRoute(true);
-                }, 120);
-            }
+        c.addView(text("🗺️ Peta Perjalanan", 16, "#0B3A78", true));
+        c.addView(text("Google Maps SDK • posisi driver, pickup, delivery, dan jalur perjalanan.", 12, "#64748B", false));
+        mapView = new MapView(this);
+        mapView.onCreate(null);
+        try { MapsInitializer.initialize(getApplicationContext(), MapsInitializer.Renderer.LATEST, null); } catch (Throwable ignored) {}
+        mapView.getMapAsync(map -> {
+            googleMap = map; mapReady = true;
+            try {
+                googleMap.getUiSettings().setCompassEnabled(true);
+                googleMap.getUiSettings().setZoomControlsEnabled(false);
+                googleMap.getUiSettings().setMapToolbarEnabled(false);
+                googleMap.setBuildingsEnabled(true);
+            } catch (Throwable ignored) {}
+            initNativeTripMarkers();
+            applyPendingRoute();
+            updateMap();
+            if(pendingPickupRoutePoints.isEmpty()) requestStableRoute(true);
         });
-        mapView.loadDataWithBaseURL("https://transiva.my.id/", mapHtml(), "text/html", "UTF-8", null); LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(-1, dp(230)); mp.setMargins(0,dp(8),0,0); c.addView(mapView, mp); add(c,0,0,0,dp(12));
+        LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(-1, dp(250)); mp.setMargins(0,dp(8),0,0);
+        c.addView(mapView, mp); add(c,0,0,0,dp(12));
     }
-    private String mapHtml(){
-        double pLat = coord("pickup_lat","user_lat"), pLng = coord("pickup_lng","user_lng"), dLat = coord("delivery_lat","destination_lat"), dLng = coord("delivery_lng","destination_lng");
-        double cLat = valid(pLat,pLng) ? pLat : (valid(dLat,dLng) ? dLat : -0.9), cLng = valid(pLat,pLng) ? pLng : (valid(dLat,dLng) ? dLng : 119.87);
-        String mode = routeTargetMode();
-        String vehicle = resolveDriverTypeFromOrder();
-        String carIcon = drawableDataUri("map_car_top", "ic_car_top", "car_top", "ic_transcar", "transcar", "car", "transcar_marker");
-        String bikeIcon = drawableDataUri("map_motor_top", "ic_motor_top", "motor_top", "ic_transbike", "transbike", "motor", "bike_marker");
-        String pickupPin = drawableDataUri("map_pickup_pin", "ic_pickup_pin", "pickup_pin", "pickup_marker");
-        String destPin = drawableDataUri("map_destination_pin", "map_delivery_pin", "ic_destination_pin", "destination_pin", "delivery_marker");
 
-        return "<!doctype html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'>"+
-                "<link rel='stylesheet' href='"+LEAFLET_CSS+"?v=trip_overview_1'>"+
-                "<script src='"+LEAFLET_JS+"?v=trip_overview_1'></script>"+
-                "<style>html,body,#map{height:100%;width:100%;margin:0;background:#EAF4FF;overflow:hidden}.leaflet-container{font-family:Arial,sans-serif;background:#EAF4FF;border-radius:18px}.leaflet-control-attribution{display:none!important}.leaflet-tile-pane{filter:saturate(.92) contrast(.98) brightness(1.03)}.pinImg{width:48px;height:48px;object-fit:contain;filter:drop-shadow(0 5px 8px rgba(15,23,42,.28))}.fallbackPin{width:42px;height:42px;border-radius:22px;display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff;border:3px solid #fff;box-shadow:0 5px 14px rgba(15,23,42,.24)}.vehicle{width:48px;height:48px;object-fit:contain;filter:drop-shadow(0 5px 6px rgba(0,0,0,.38));transform-origin:center center}.vehicleFallback{width:46px;height:46px;border-radius:23px;background:#fff;display:flex;align-items:center;justify-content:center;font-size:27px;filter:drop-shadow(0 5px 6px rgba(0,0,0,.38));transform-origin:center center}.routeBadge{position:absolute;z-index:999;top:10px;left:10px;right:10px;background:rgba(255,255,255,.96);border:1px solid #D7E6F8;border-radius:14px;padding:9px 11px;color:#0B3A78;font-size:12px;font-weight:700;box-shadow:0 7px 18px rgba(15,23,42,.12)}</style></head><body><div id='map'></div><div id='badge' class='routeBadge'>Menyiapkan seluruh rute...</div><script>"+
-                "var pickup=["+pLat+","+pLng+"],dest=["+dLat+","+dLng+"],targetMode='"+mode+"',vehicleType='"+vehicle+"';"+
-                "var bikeIconData='"+bikeIcon+"',carIconData='"+carIcon+"',pickupPinData='"+pickupPin+"',destPinData='"+destPin+"';"+
-                "var map=null,pickupMarker=null,destMarker=null,driverMarker=null,legPickup=null,legDelivery=null,pickupPts=[],deliveryPts=[],activePts=[],animId=null,lastDeg=0,driverRaw=null,routeProgress=0,lastFitKey='';"+
-                "function valid(a,b){a=+a;b=+b;return isFinite(a)&&isFinite(b)&&a!==0&&b!==0;}function setBadge(t){var e=document.getElementById('badge');if(e)e.innerHTML=t;}"+
-                "function pinIcon(type){var data=type==='pickup'?pickupPinData:destPinData;if(data&&data.length>20)return L.divIcon({html:'<img class=pinImg src='+data+'>',className:'',iconSize:[48,48],iconAnchor:[24,44]});return L.divIcon({html:'<div class=fallbackPin style=background:'+(type==='pickup'?'#ef4444':'#16a34a')+'>'+(type==='pickup'?'●':'⚑')+'</div>',className:'',iconSize:[44,44],iconAnchor:[22,22]});}"+
-                "function vehicleIcon(type,deg){type=type==='car'?'car':'motor';var data=type==='car'?carIconData:bikeIconData;if(data&&data.length>20)return L.divIcon({html:'<img class=vehicle src='+data+' style=\"transform:rotate('+(+deg||0)+'deg)\">',className:'',iconSize:[50,50],iconAnchor:[25,25]});return L.divIcon({html:'<div class=vehicleFallback style=\"transform:rotate('+(+deg||0)+'deg)\">'+(type==='car'?'🚘':'🏍️')+'</div>',className:'',iconSize:[50,50],iconAnchor:[25,25]});}"+
-                "function init(){if(typeof L==='undefined'){setTimeout(init,250);return}if(map)return;map=L.map('map',{zoomControl:true,attributionControl:false,preferCanvas:true,zoomAnimation:true,fadeAnimation:false,markerZoomAnimation:false}).setView(["+cLat+","+cLng+"],14);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:20,crossOrigin:true,updateWhenIdle:true,keepBuffer:4}).addTo(map);if(valid(pickup[0],pickup[1]))pickupMarker=L.marker(pickup,{icon:pinIcon('pickup'),zIndexOffset:600}).addTo(map);if(valid(dest[0],dest[1]))destMarker=L.marker(dest,{icon:pinIcon('delivery'),zIndexOffset:600}).addTo(map);setTimeout(function(){try{map.invalidateSize(false)}catch(e){}},350)}"+
-                "function bearingOf(a,b){try{var x1=a[0]*Math.PI/180,x2=b[0]*Math.PI/180,dl=(b[1]-a[1])*Math.PI/180,y=Math.sin(dl)*Math.cos(x2),x=Math.cos(x1)*Math.sin(x2)-Math.sin(x1)*Math.cos(x2)*Math.cos(dl),v=(Math.atan2(y,x)*180/Math.PI)%360;return v<0?v+360:v}catch(e){return null}}"+
-                "function selectActive(){activePts=targetMode==='delivery'?deliveryPts:pickupPts;routeProgress=0}"+
-                "function snap(lat,lng){if(!activePts||activePts.length<2)return{lat:+lat,lng:+lng,bearing:null};var cos=Math.cos((+lat)*Math.PI/180);if(!isFinite(cos)||Math.abs(cos)<.000001)cos=1;var px=(+lng)*cos,py=+lat,best=1e99,bx=+lng,by=+lat,bi=routeProgress,st=Math.max(0,routeProgress-3),en=Math.min(activePts.length-2,routeProgress+70);for(var i=st;i<=en;i++){var a=activePts[i],b=activePts[i+1],ax=a[1]*cos,ay=a[0],cx=b[1]*cos,cy=b[0],vx=cx-ax,vy=cy-ay,wx=px-ax,wy=py-ay,ll=vx*vx+vy*vy,t=ll?(wx*vx+wy*vy)/ll:0;t=Math.max(0,Math.min(1,t));var qx=ax+vx*t,qy=ay+vy*t,dx=px-qx,dy=py-qy,dd=dx*dx+dy*dy;if(dd<best){best=dd;bx=qx/cos;by=qy;bi=i}}if(Math.sqrt(best)*111320>90)return{lat:+lat,lng:+lng,bearing:null};if(bi>=routeProgress)routeProgress=bi;return{lat:by,lng:bx,bearing:bearingOf(activePts[bi],activePts[Math.min(bi+1,activePts.length-1)])}}"+
-                "function rotate(deg){if(!driverMarker)return;var e=driverMarker.getElement();if(!e)return;var i=e.querySelector('.vehicle')||e.querySelector('.vehicleFallback');if(i)i.style.transform='rotate('+(+deg||0)+'deg)'}"+
-                "function fitOverview(force){if(!map)return;var key=targetMode+'|'+pickupPts.length+'|'+deliveryPts.length;if(!force&&key===lastFitKey)return;var all=[];if(pickupPts.length)all=all.concat(pickupPts);if(deliveryPts.length)all=all.concat(deliveryPts);if(driverMarker){var d=driverMarker.getLatLng();all.push([d.lat,d.lng])}if(!all.length){if(pickupMarker)all.push(pickup);if(destMarker)all.push(dest)}if(all.length>1){lastFitKey=key;map.fitBounds(L.latLngBounds(all),{paddingTopLeft:[28,58],paddingBottomRight:[28,28],maxZoom:16,animate:false})}}"+
-                "function drawLeg(oldLine,pts,color,opacity){if(oldLine){try{map.removeLayer(oldLine)}catch(e){}}if(!pts||pts.length<2)return null;var l=L.polyline(pts,{weight:6,opacity:opacity,color:color,lineCap:'round',lineJoin:'round',smoothFactor:1.2}).addTo(map);try{l.bringToBack()}catch(e){}return l}"+
-                "window.applyTripRoutes=function(p1,p2,km1,s1,km2,s2,status,forceFit){try{if(typeof p1==='string')p1=JSON.parse(p1);if(typeof p2==='string')p2=JSON.parse(p2);pickupPts=(p1&&p1.length>1)?p1:[];deliveryPts=(p2&&p2.length>1)?p2:[];targetMode=(status==='arrived_pickup'||status==='on_delivery'||status==='arrived_delivery')?'delivery':'pickup';var pickupDone=targetMode==='delivery';legPickup=drawLeg(legPickup,pickupPts,pickupDone?'#94A3B8':'#1683FF',pickupDone ? .58 : .94);legDelivery=drawLeg(legDelivery,deliveryPts,'#16A34A',targetMode==='delivery' ? .96 : .78);selectActive();var total=(+km1||0)+(+km2||0),mins=Math.max(1,Math.round(((+s1||0)+(+s2||0))/60));setBadge((targetMode==='delivery'?'Menuju delivery':'Menuju penjemputan')+' • seluruh rute '+total.toFixed(1)+' km • '+mins+' menit');fitOverview(!!forceFit)}catch(e){}};"+
-                "function animateTo(target,deg,type){if(animId)cancelAnimationFrame(animId);var cur=driverMarker.getLatLng(),from=[cur.lat,cur.lng],to=[target.lat,target.lng],start=0;driverMarker.setIcon(vehicleIcon(type,deg));function step(ts){if(!start)start=ts;var t=Math.min(1,(ts-start)/1100),q=snap(from[0]+(to[0]-from[0])*t,from[1]+(to[1]-from[1])*t),bd=q.bearing==null?deg:q.bearing;driverMarker.setLatLng([q.lat,q.lng]);rotate(bd);if(t<1)animId=requestAnimationFrame(step);else animId=null}animId=requestAnimationFrame(step)}"+
-                "window.updateDrv=function(lat,lng,deg,type){if(!map||!valid(lat,lng))return;driverRaw={lat:+lat,lng:+lng};type=type==='car'?'car':'motor';var q=snap(lat,lng),bd=q.bearing==null?(+deg||lastDeg):q.bearing;lastDeg=bd;var t=L.latLng(q.lat,q.lng);if(!driverMarker)driverMarker=L.marker(t,{icon:vehicleIcon(type,bd),zIndexOffset:9999}).addTo(map);else animateTo(t,bd,type)};"+
-                "window.setVehicleType=function(t){vehicleType=t==='car'?'car':'motor';if(driverMarker)driverMarker.setIcon(vehicleIcon(vehicleType,lastDeg))};window.setTargetMode=function(m){targetMode=m==='delivery'?'delivery':'pickup';selectActive()};window.focusTarget=function(m){targetMode=m==='delivery'?'delivery':'pickup';selectActive();fitOverview(true)};window.setSpeed=function(){};init();setTimeout(init,800);"+
-                "</script></body></html>";
+    private void initNativeTripMarkers(){
+        if(googleMap==null) return;
+        double pLat=coord("pickup_lat","user_lat"), pLng=coord("pickup_lng","user_lng");
+        double dLat=coord("delivery_lat","destination_lat"), dLng=coord("delivery_lng","destination_lng");
+        if(valid(pLat,pLng) && pickupMarker==null) pickupMarker=googleMap.addMarker(new MarkerOptions().position(new LatLng(pLat,pLng)).title("Pickup").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)));
+        if(valid(dLat,dLng) && deliveryMarker==null) deliveryMarker=googleMap.addMarker(new MarkerOptions().position(new LatLng(dLat,dLng)).title("Delivery").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)));
+        fitNativeOverview();
+    }
+
+    private java.util.List<LatLng> parseRoutePoints(String json){
+        java.util.ArrayList<LatLng> out=new java.util.ArrayList<>();
+        try{ JSONArray a=new JSONArray(first(json,"[]")); for(int i=0;i<a.length();i++){ JSONArray q=a.optJSONArray(i); if(q!=null && q.length()>=2){ double lat=q.optDouble(0),lng=q.optDouble(1); if(valid(lat,lng)) out.add(new LatLng(lat,lng)); } } }catch(Exception ignored){}
+        return out;
+    }
+
+    private void fitNativeOverview(){
+        if(googleMap==null) return;
+        try{
+            LatLngBounds.Builder b=new LatLngBounds.Builder(); int n=0;
+            if(pickupMarker!=null){b.include(pickupMarker.getPosition());n++;}
+            if(deliveryMarker!=null){b.include(deliveryMarker.getPosition());n++;}
+            if(driverMarker!=null){b.include(driverMarker.getPosition());n++;}
+            for(LatLng p:parseRoutePoints(pendingPickupRoutePoints)){b.include(p);n++;}
+            for(LatLng p:parseRoutePoints(pendingDeliveryRoutePoints)){b.include(p);n++;}
+            if(n>=2) mapView.post(() -> { try{ googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(b.build(), dp(42))); }catch(Exception ignored){} });
+            else if(n==1){ LatLng x=driverMarker!=null?driverMarker.getPosition():(pickupMarker!=null?pickupMarker.getPosition():deliveryMarker.getPosition()); googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(x,15f)); }
+        }catch(Exception ignored){}
     }
 
     private String routeTargetMode(){
@@ -745,19 +759,19 @@ public class DriverTripActivity extends Activity {
 
     private void updateMap(){
         try{
-            if(mapView == null || Build.VERSION.SDK_INT < 19 || !mapReady || !valid(lastDriverLat, lastDriverLng)) return;
-            double deg = 0;
-            if(valid(prevDriverLat, prevDriverLng)) deg = bearing(prevDriverLat, prevDriverLng, lastDriverLat, lastDriverLng);
-            driverType = resolveDriverTypeFromOrder();
-            String js = "if(window.setVehicleType)setVehicleType('" + driverType + "');if(window.setTargetMode)setTargetMode('" + routeTargetMode() + "');if(window.updateDrv)updateDrv(" + lastDriverLat + "," + lastDriverLng + "," + deg + ",'" + driverType + "');";
-            mapView.evaluateJavascript(js, null);
+            if(googleMap == null || !mapReady || !valid(lastDriverLat, lastDriverLng)) return;
+            double deg = valid(prevDriverLat, prevDriverLng) ? bearing(prevDriverLat, prevDriverLng, lastDriverLat, lastDriverLng) : 0d;
+            LatLng pos=new LatLng(lastDriverLat,lastDriverLng);
+            if(driverMarker==null){
+                float hue="car".equals(resolveDriverTypeFromOrder())?BitmapDescriptorFactory.HUE_AZURE:BitmapDescriptorFactory.HUE_BLUE;
+                driverMarker=googleMap.addMarker(new MarkerOptions().position(pos).title("Posisi Driver").flat(true).rotation((float)deg).anchor(.5f,.5f).icon(BitmapDescriptorFactory.defaultMarker(hue)));
+            }else{ driverMarker.setPosition(pos); driverMarker.setRotation((float)deg); }
             requestStableRoute(false);
-            prevDriverLat = lastDriverLat;
-            prevDriverLng = lastDriverLng;
+            prevDriverLat = lastDriverLat; prevDriverLng = lastDriverLng;
         }catch(Exception ignored){}
     }
     private void requestStableRoute(boolean force){
-        if(mapView == null || !valid(lastDriverLat,lastDriverLng)) return;
+        if(googleMap == null || !valid(lastDriverLat,lastDriverLng)) return;
         final double pLat=coord("pickup_lat","user_lat"), pLng=coord("pickup_lng","user_lng");
         final double dLat=coord("delivery_lat","destination_lat"), dLng=coord("delivery_lng","destination_lng");
         if(!valid(pLat,pLng) || !valid(dLat,dLng) || routeRequestInFlight) return;
@@ -794,19 +808,17 @@ public class DriverTripActivity extends Activity {
     }
 
     private void applyPendingRoute(){
-        if(mapView==null || !mapReady || Build.VERSION.SDK_INT<19) return;
-        if(pendingPickupRoutePoints==null || pendingPickupRoutePoints.length()<4) return;
-        if(pendingDeliveryRoutePoints==null || pendingDeliveryRoutePoints.length()<4) return;
+        if(googleMap==null || !mapReady) return;
+        java.util.List<LatLng> p=parseRoutePoints(pendingPickupRoutePoints);
+        java.util.List<LatLng> d=parseRoutePoints(pendingDeliveryRoutePoints);
+        if(p.size()<2 || d.size()<2) return;
         try{
-            boolean forceFit=!overviewMapApplied;
-            String js="if(window.applyTripRoutes)applyTripRoutes("+
-                    JSONObject.quote(pendingPickupRoutePoints)+","+
-                    JSONObject.quote(pendingDeliveryRoutePoints)+","+
-                    pendingPickupRouteKm+","+pendingPickupRouteSeconds+","+
-                    pendingDeliveryRouteKm+","+pendingDeliveryRouteSeconds+","+
-                    JSONObject.quote(status())+","+forceFit+");";
-            mapView.evaluateJavascript(js, null);
-            overviewMapApplied=true;
+            if(pickupPolyline!=null) pickupPolyline.remove();
+            if(deliveryPolyline!=null) deliveryPolyline.remove();
+            boolean pickupDone="delivery".equals(routeTargetMode());
+            pickupPolyline=googleMap.addPolyline(new PolylineOptions().addAll(p).width(dp(5)).color(Color.parseColor(pickupDone?"#94A3B8":"#1683FF")).geodesic(true).zIndex(2f));
+            deliveryPolyline=googleMap.addPolyline(new PolylineOptions().addAll(d).width(dp(5)).color(Color.parseColor("#16A34A")).geodesic(true).zIndex(2f));
+            if(!overviewMapApplied){ fitNativeOverview(); overviewMapApplied=true; }
         }catch(Exception ignored){}
     }
 
@@ -1018,10 +1030,7 @@ public class DriverTripActivity extends Activity {
     }
 
     private void pushSpeedToMap(){
-        if(mapView==null || !mapReady || Build.VERSION.SDK_INT<19) return;
-        try{
-            mapView.evaluateJavascript("if(window.setSpeed)setSpeed("+currentSpeedKmh+","+averageSpeedKmh+");",null);
-        }catch(Exception ignored){}
+        // Speed tetap dihitung untuk UI/navigasi; Google Maps SDK tidak memerlukan JavaScript bridge.
     }
 
     // Upload lokasi hanya dilakukan oleh LocationService. Activity ini hanya
@@ -1127,9 +1136,7 @@ public class DriverTripActivity extends Activity {
 
         String mode = pickup ? "pickup" : "delivery";
         try{
-            if(mapView != null && Build.VERSION.SDK_INT >= 19){
-                mapView.evaluateJavascript("if(window.focusTarget)focusTarget('" + mode + "');", null);
-            }
+            fitNativeOverview();
         }catch(Exception ignored){}
 
         try{

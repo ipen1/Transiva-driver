@@ -155,6 +155,7 @@ public class DriverDashboardActivity extends Activity
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        TransivaNotificationPermission.ask(this);
 
         session = new SessionManager(this);
         requestGpsAfterLogin = getIntent() != null
