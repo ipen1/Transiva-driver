@@ -2,4 +2,6 @@
 <resources>
     <string name="app_name">Transiva Driver</string>
     <string name="base_url">https://transiva.my.id/</string>
+    <!-- Google Maps SDK for Android. Sama dengan konfigurasi Maps native aplikasi customer. -->
+    <string name="google_maps_key" translatable="false">AIzaSyDVYsFIkrthm5g7zvpLxZS9mX1sThmOXqo</string>
 </resources>
