@@ -4,8 +4,6 @@ plugins {
     id 'com.google.firebase.crashlytics'
 }
 
-def transivaEnableR8 = project.hasProperty("transivaEnableR8") && project.property("transivaEnableR8").toString().toBoolean()
-
 android {
     namespace 'com.transiva.app'
     compileSdk 36
@@ -14,8 +12,8 @@ android {
         applicationId 'com.transiva.driver'
         minSdk 23
         targetSdk 36
-        versionCode 15
-        versionName '2.8.15'
+        versionCode 16
+        versionName '2.8.16'
     }
 
     signingConfigs {
@@ -37,14 +35,12 @@ android {
             signingConfig signingConfigs.release
             debuggable false
 
-            // Deliberately kept OFF for the launch candidate. Enabling R8 immediately
-            // before production can introduce reflection/library regressions. The
-            // ProGuard files are declared now so hardening can be enabled after the
-            // regression suite passes without changing the release contract.
-            // Default OFF untuk launching. Aktifkan hanya setelah regression test:
-            // ./gradlew assembleRelease -PtransivaEnableR8=true
-            minifyEnabled transivaEnableR8
-            shrinkResources transivaEnableR8
+            // Production/development release optimization.
+            // R8 mengecilkan bytecode dan resource shrinker membuang resource yang
+            // benar-benar tidak dipakai. Resource yang dipanggil dinamis dilindungi
+            // melalui res/raw/keep.xml dan proguard-rules.pro.
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
