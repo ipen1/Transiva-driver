@@ -29,6 +29,14 @@ public final class DriverGlobalChatApi {
         try { JSONObject b=new JSONObject(); b.put("action","send"); b.put("message",message); request(c,"POST",ENDPOINT,b,cb); }
         catch(Exception e){ MAIN.post(() -> cb.onError("Pesan tidak valid.")); }
     }
+
+    public static void suggestUsers(Context c, String prefix, Callback cb) {
+        try {
+            String q=java.net.URLEncoder.encode(prefix==null?"":prefix.trim(), "UTF-8");
+            request(c,"GET","https://transiva.my.id/server/driver_global_chat_users.php?prefix="+q,null,cb);
+        } catch(Exception e){ MAIN.post(() -> cb.onError("Gagal mencari username.")); }
+    }
+
     public static void readMention(Context c, long messageId, Callback cb) {
         try { JSONObject b=new JSONObject(); b.put("action","read_mention"); b.put("message_id",messageId); request(c,"POST",ENDPOINT,b,cb); }
         catch(Exception e){ MAIN.post(() -> cb.onError("Gagal menandai mention.")); }
