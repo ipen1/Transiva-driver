@@ -318,6 +318,7 @@ public class DriverDashboardActivity extends Activity
         content.addView(homeSections);
 
         buildStatusAndEmergency();
+        buildDriverLocationMenu();
 
         // Order menjadi prioritas visual. Panel hanya muncul bila ada
         // order aktif/tawaran dan posisinya selalu tepat di bawah status.
@@ -430,6 +431,34 @@ public class DriverDashboardActivity extends Activity
         row.addView(status, left);
         row.addView(sosButton, right);
         add(homeSections, row, 0, dp(16), 0, 0);
+    }
+
+
+    private void buildDriverLocationMenu() {
+        LinearLayout card = card();
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(15), dp(13), dp(15), dp(13));
+
+        TextView icon = text("📍", 24, "#0B7CFF", true);
+        icon.setGravity(Gravity.CENTER);
+        card.addView(icon, new LinearLayout.LayoutParams(dp(42), dp(42)));
+
+        LinearLayout info = new LinearLayout(this);
+        info.setOrientation(LinearLayout.VERTICAL);
+        info.addView(text("Lokasi Driver", 16, "#0B3A78", true));
+        info.addView(text("Lihat driver online & idle dalam radius 20 km", 10, "#64748B", false));
+        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(0, -2, 1);
+        ip.setMargins(dp(7), 0, dp(6), 0);
+        card.addView(info, ip);
+
+        TextView arrow = text("›", 28, "#0B7CFF", true);
+        arrow.setGravity(Gravity.CENTER);
+        card.addView(arrow, new LinearLayout.LayoutParams(dp(28), dp(42)));
+
+        card.setContentDescription("Buka Lokasi Driver");
+        card.setOnClickListener(v -> startActivity(new Intent(this, DriverLocationActivity.class)));
+        add(homeSections, card, 0, dp(10), 0, 0);
     }
 
     private void buildWalletAndPerformance() {

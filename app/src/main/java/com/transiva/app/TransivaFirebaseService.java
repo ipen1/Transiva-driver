@@ -488,6 +488,15 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
             return intent;
         }
 
+        if ("driver_greeting".equals(type)) {
+            Intent intent = new Intent(this, DriverLocationActivity.class);
+            intent.putExtra("from_fcm", true);
+            if (data != null) {
+                for (Map.Entry<String,String> entry : data.entrySet()) intent.putExtra(entry.getKey(), entry.getValue());
+            }
+            return intent;
+        }
+
         if ("driver_emergency".equals(type)) {
             Intent intent = new Intent(this, DriverEmergencyActivity.class);
             if (data != null) {
