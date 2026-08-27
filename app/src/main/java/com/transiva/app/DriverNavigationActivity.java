@@ -249,6 +249,8 @@ public class DriverNavigationActivity extends Activity {
         }
     };
 
+    private double explicitTargetLat;
+    private double explicitTargetLng;
     private double displayLat;
     private double displayLng;
     private boolean displayInitialized;
@@ -302,13 +304,16 @@ public class DriverNavigationActivity extends Activity {
             if (raw != null && raw.trim().startsWith("{")) order = new JSONObject(raw);
         } catch (Exception ignored) {}
         try {
-            String mode = getIntent().getStringExtra("target_mode");
-            if (mode != null && mode.toLowerCase(Locale.US).contains("delivery")) targetMode = "delivery";
+            String mode = first(getIntent().getStringExtra("target"), getIntent().getStringExtra("target_mode"));
+            if (mode.toLowerCase(Locale.US).contains("delivery")) targetMode = "delivery";
+            else if (mode.toLowerCase(Locale.US).contains("pickup")) targetMode = "pickup";
             else targetMode = routeTargetMode();
         } catch (Exception ignored) {}
 
         driverLat = getIntent().getDoubleExtra("driver_lat", 0d);
         driverLng = getIntent().getDoubleExtra("driver_lng", 0d);
+        explicitTargetLat = getIntent().getDoubleExtra("target_lat", 0d);
+        explicitTargetLng = getIntent().getDoubleExtra("target_lng", 0d);
     }
 
     private void readIdentity() {
@@ -529,9 +534,12 @@ public class DriverNavigationActivity extends Activity {
     private void addVehicleStyleImage(String imageName, String drawableName, int fallback) {
         if (style == null) return;
         try {
-            int id = getResources().getIdentifier(drawableName, "drawable", getPackageName());
-            if (id <= 0) id = fallback;
-            Bitmap raw = BitmapFactory.decodeResource(getResources(), id);
+            Bitmap raw = ResourceUpdateManager.loadBitmapOverride(this, "images/" + drawableName + ".png");
+            if (raw == null) {
+                int id = getResources().getIdentifier(drawableName, "drawable", getPackageName());
+                if (id <= 0) id = fallback;
+                raw = BitmapFactory.decodeResource(getResources(), id);
+            }
             if (raw == null) return;
             Bitmap scaled = Bitmap.createScaledBitmap(raw, dp(48), dp(48), true);
             style.addImage(imageName, scaled);
@@ -1563,12 +1571,21 @@ public class DriverNavigationActivity extends Activity {
     // NavigationActivity hanya memproses lokasi untuk UI/rute/kamera.
 
     private double targetLat() {
-        return targetMode.equals("delivery") ?
+        double fromOrder = targetMode.equals("delivery") ?
                 coord("delivery_lat", "destination_lat") :
                 coord("pickup_lat", "user_lat");
+        return valid(fromOrder, targetLngFromOrder()) ? fromOrder : explicitTargetLat;
     }
 
     private double targetLng() {
+        double fromOrder = targetLngFromOrder();
+        double fromLat = targetMode.equals("delivery") ?
+                coord("delivery_lat", "destination_lat") :
+                coord("pickup_lat", "user_lat");
+        return valid(fromLat, fromOrder) ? fromOrder : explicitTargetLng;
+    }
+
+    private double targetLngFromOrder() {
         return targetMode.equals("delivery") ?
                 coord("delivery_lng", "destination_lng") :
                 coord("pickup_lng", "user_lng");
@@ -1667,7 +1684,7 @@ public class DriverNavigationActivity extends Activity {
                     .setAspectRatio(new Rational(3, 4));
             // Android 12+: Home gesture/button enters PiP more smoothly.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                builder.setAutoEnterEnabled(true);
+                builder.setAutoEnterEnabled(false);
                 builder.setSeamlessResizeEnabled(true);
             }
             setPictureInPictureParams(builder.build());
@@ -1681,7 +1698,7 @@ public class DriverNavigationActivity extends Activity {
             PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder()
                     .setAspectRatio(new Rational(3, 4));
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                builder.setAutoEnterEnabled(true);
+                builder.setAutoEnterEnabled(false);
                 builder.setSeamlessResizeEnabled(true);
             }
             enterPictureInPictureMode(builder.build());

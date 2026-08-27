@@ -763,13 +763,36 @@ public class DriverTripActivity extends Activity {
             double deg = valid(prevDriverLat, prevDriverLng) ? bearing(prevDriverLat, prevDriverLng, lastDriverLat, lastDriverLng) : 0d;
             LatLng pos=new LatLng(lastDriverLat,lastDriverLng);
             if(driverMarker==null){
-                float hue="car".equals(resolveDriverTypeFromOrder())?BitmapDescriptorFactory.HUE_AZURE:BitmapDescriptorFactory.HUE_BLUE;
-                driverMarker=googleMap.addMarker(new MarkerOptions().position(pos).title("Posisi Driver").flat(true).rotation((float)deg).anchor(.5f,.5f).icon(BitmapDescriptorFactory.defaultMarker(hue)));
+                driverMarker=googleMap.addMarker(new MarkerOptions()
+                        .position(pos)
+                        .title("Posisi Driver")
+                        .flat(true)
+                        .rotation((float)deg)
+                        .anchor(.5f,.5f)
+                        .icon(driverVehicleIcon()));
             }else{ driverMarker.setPosition(pos); driverMarker.setRotation((float)deg); }
             requestStableRoute(false);
             prevDriverLat = lastDriverLat; prevDriverLng = lastDriverLng;
         }catch(Exception ignored){}
     }
+
+    private com.google.android.gms.maps.model.BitmapDescriptor driverVehicleIcon(){
+        String name = "car".equals(resolveDriverTypeFromOrder()) ? "map_car_top" : "map_motor_top";
+        try{
+            Bitmap raw = ResourceUpdateManager.loadBitmapOverride(this, "images/" + name + ".png");
+            if(raw == null){
+                int id = getResources().getIdentifier(name, "drawable", getPackageName());
+                if(id > 0) raw = BitmapFactory.decodeResource(getResources(), id);
+            }
+            if(raw != null){
+                int size = dp("car".equals(resolveDriverTypeFromOrder()) ? 46 : 42);
+                Bitmap scaled = Bitmap.createScaledBitmap(raw, size, size, true);
+                return BitmapDescriptorFactory.fromBitmap(scaled);
+            }
+        }catch(Exception ignored){}
+        return BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE);
+    }
+
     private void requestStableRoute(boolean force){
         if(googleMap == null || !valid(lastDriverLat,lastDriverLng)) return;
         final double pLat=coord("pickup_lat","user_lat"), pLng=coord("pickup_lng","user_lng");

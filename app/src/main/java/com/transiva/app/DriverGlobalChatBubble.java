@@ -64,7 +64,7 @@ public final class DriverGlobalChatBubble {
         int unread=DriverGlobalChatStore.getUnreadMentions(b.getContext());
         b.setText(">"); b.setTextSize(24);
         b.setTextColor(Color.WHITE);
-        b.setBackground(bg(unread>0?"#F59E0B":"#0B7CFF","#FFFFFF"));
+        b.setBackground(bg(unread>0?"#B3F59E0B":"#990B7CFF","#CCFFFFFF"));
         b.setContentDescription(unread>0?"Chat global, ada "+unread+" mention baru":"Buka chat global driver");
     }
 
