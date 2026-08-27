@@ -43,6 +43,7 @@ public class TransivaDriverApplication extends Application implements Applicatio
             RootSecurityGuard.enforce(activity);
         }
         AppUpdateRuntimeGate.onActivityResumed(activity);
+        DriverGlobalChatBubble.attach(activity);
     }
 
     /**

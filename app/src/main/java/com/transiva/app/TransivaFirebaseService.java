@@ -125,6 +125,15 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                 "general"
         ).toLowerCase();
 
+        if ("driver_global_mention".equals(type)) {
+            try {
+                long mentionId = Long.parseLong(first(data.get("message_id"), "0"));
+                DriverGlobalChatStore.onMentionPush(this, mentionId);
+            } catch (Throwable ignored) {
+                DriverGlobalChatStore.onMentionPush(this, 0L);
+            }
+        }
+
         if ("webrtc_call".equals(type)) {
             final String event = first(data.get("event"), "").toLowerCase();
             final String callId = first(data.get("call_id"), "");
@@ -488,6 +497,15 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
             return intent;
         }
 
+        if ("driver_global_mention".equals(type)) {
+            Intent intent = new Intent(this, DriverGlobalChatActivity.class);
+            long messageId = 0L;
+            try { messageId = Long.parseLong(data != null ? first(data.get("message_id"), "0") : "0"); } catch (Throwable ignored) {}
+            intent.putExtra("jump_message_id", messageId);
+            intent.putExtra("from_fcm", true);
+            return intent;
+        }
+
         if ("driver_greeting".equals(type)) {
             Intent intent = new Intent(this, DriverLocationActivity.class);
             intent.putExtra("from_fcm", true);
@@ -824,7 +842,7 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
     private boolean isChat(String type) {
         type = first(type, "").toLowerCase();
 
-        return type.contains("chat")
+        return type.contains("chat") || "driver_global_mention".equals(type)
                 || type.contains("message");
     }
 
