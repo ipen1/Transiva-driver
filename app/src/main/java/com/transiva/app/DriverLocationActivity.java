@@ -128,6 +128,11 @@ public class DriverLocationActivity extends FragmentActivity implements OnMapRea
             if (tag instanceof JSONObject) { showDriver((JSONObject) tag); return true; }
             return false;
         });
+
+        // Kamera awal hanya sebagai fallback visual. Setelah GPS tersedia kamera otomatis
+        // berpindah ke posisi driver pada acceptLocation(). Ini juga membuat kegagalan
+        // autentikasi Maps mudah dibedakan dari kegagalan GPS/API driver.
+        map.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(-0.9003, 119.8779), 11.5f));
         enableMyLocation();
     }
 
