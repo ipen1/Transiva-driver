@@ -51,10 +51,12 @@
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
 
-        <!-- google_api_key dibuat otomatis oleh plugin google-services dari google-services.json. -->
+        <!-- Gunakan Maps SDK key yang sama dengan aplikasi customer yang sudah teruji.
+             Jangan memakai google_api_key dari google-services.json: itu Firebase API key
+             dan belum tentu diizinkan untuk Google Maps SDK for Android. -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="@string/google_api_key" />
+            android:value="@string/google_maps_key" />
 
         <service
             android:name=".TransivaFirebaseService"
