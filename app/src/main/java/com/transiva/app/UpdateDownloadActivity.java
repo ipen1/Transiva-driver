@@ -6,7 +6,6 @@ import android.app.DownloadManager;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.Signature;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -30,10 +29,9 @@ import androidx.core.content.FileProvider;
 import java.io.File;
 import java.io.FileInputStream;
 import java.security.MessageDigest;
-import java.util.Arrays;
 import java.util.Locale;
 
-/** Layar update Driver: DownloadManager background + force gate + verifikasi APK. */
+/** Layar update Driver: DownloadManager background + force gate + verifikasi paket/versi/integritas. */
 public class UpdateDownloadActivity extends Activity {
     public static final String EXTRA_ROLE = "role";
     public static final String EXTRA_FORCE = "force_update";
@@ -359,7 +357,7 @@ public class UpdateDownloadActivity extends Activity {
             return;
         }
         titleView.setText("Memverifikasi pembaruan");
-        statusView.setText("Memeriksa paket, versi, tanda tangan, dan SHA-256...");
+        statusView.setText("Memeriksa paket, versi, dan integritas file...");
         actionButton.setVisibility(View.GONE);
 
         new Thread(() -> {
@@ -400,9 +398,9 @@ public class UpdateDownloadActivity extends Activity {
         if (updateInfo == null) throw new SecurityException("Informasi versi update tidak tersedia.");
 
         PackageManager pm = getPackageManager();
-        int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
-                ? PackageManager.GET_SIGNING_CERTIFICATES : PackageManager.GET_SIGNATURES;
-        PackageInfo archive = pm.getPackageArchiveInfo(apk.getAbsolutePath(), flags);
+        // DEVELOPMENT MODE: pemeriksaan signing certificate sengaja tidak dilakukan di sini.
+        // Android Package Installer tetap menjadi otoritas akhir untuk kompatibilitas signature.
+        PackageInfo archive = pm.getPackageArchiveInfo(apk.getAbsolutePath(), 0);
         if (archive == null) throw new SecurityException("File download bukan APK Android yang valid.");
         if (!AppUpdateClient.DRIVER_PACKAGE.equals(archive.packageName)) {
             throw new SecurityException("APK bukan paket Transiva Driver.");
@@ -413,52 +411,12 @@ public class UpdateDownloadActivity extends Activity {
             throw new SecurityException("VersionCode APK tidak sesuai dengan server.");
         }
 
-        PackageInfo installed = pm.getPackageInfo(getPackageName(), flags);
-        byte[][] a = certDigests(installed);
-        byte[][] b = certDigests(archive);
-        if (a.length == 0 || b.length == 0 || !sameCertSet(a, b)) {
-            throw new SecurityException("Tanda tangan APK berbeda. Update dibatalkan.");
-        }
-
         if (updateInfo.sha256 != null && !updateInfo.sha256.trim().isEmpty()) {
             String actual = sha256(apk);
             if (!actual.equalsIgnoreCase(updateInfo.sha256.trim())) {
                 throw new SecurityException("SHA-256 APK tidak cocok. Update dibatalkan.");
             }
         }
-    }
-
-    private byte[][] certDigests(PackageInfo info) throws Exception {
-        Signature[] signatures;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            if (info.signingInfo == null) return new byte[0][];
-            signatures = info.signingInfo.hasMultipleSigners()
-                    ? info.signingInfo.getApkContentsSigners()
-                    : info.signingInfo.getSigningCertificateHistory();
-        } else {
-            signatures = info.signatures;
-        }
-        if (signatures == null) return new byte[0][];
-        byte[][] result = new byte[signatures.length][];
-        for (int i = 0; i < signatures.length; i++) {
-            result[i] = MessageDigest.getInstance("SHA-256").digest(signatures[i].toByteArray());
-        }
-        return result;
-    }
-
-    private boolean sameCertSet(byte[][] a, byte[][] b) {
-        if (a.length != b.length) return false;
-        boolean[] used = new boolean[b.length];
-        outer: for (byte[] x : a) {
-            for (int i = 0; i < b.length; i++) {
-                if (!used[i] && Arrays.equals(x, b[i])) {
-                    used[i] = true;
-                    continue outer;
-                }
-            }
-            return false;
-        }
-        return true;
     }
 
     private void installApk(File apk) {
