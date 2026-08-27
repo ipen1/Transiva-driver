@@ -51,6 +51,11 @@
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
 
+        <!-- google_api_key dibuat otomatis oleh plugin google-services dari google-services.json. -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="@string/google_api_key" />
+
         <service
             android:name=".TransivaFirebaseService"
             android:directBootAware="true"
@@ -139,6 +144,7 @@
         <activity android:name=".UpdateDownloadActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
 
         <activity android:name=".DriverEmergencyActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name=".DriverLocationActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
         <activity android:name=".DriverDashboardActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
         <activity android:name=".DriverSettingsActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
         <activity android:name=".DriverTripActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
