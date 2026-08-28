@@ -129,7 +129,8 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
             try {
                 long mentionId = Long.parseLong(first(data.get("message_id"), "0"));
                 DriverGlobalChatStore.onMentionPush(this, mentionId);
-            } catch (Throwable ignored) {
+            } catch (Throwable t) {
+                TransivaDiagnostics.error(this,"fcm","MENTION_PUSH_PARSE_FAILED",t);
                 DriverGlobalChatStore.onMentionPush(this, 0L);
             }
         }
@@ -255,6 +256,7 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
             state.putExtra(WebRtcCallActivity.EXTRA_CALL_STATUS, status);
             sendBroadcast(state);
         } catch (Throwable t) {
+            TransivaDiagnostics.error(this,"fcm","CALL_STATE_BROADCAST_FAILED",t);
         }
     }
 
@@ -264,7 +266,7 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
             NotificationManager nm =
                     (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm != null) nm.cancel(Math.abs(("webrtc_call|" + callId).hashCode()));
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) { TransivaDiagnostics.error(this,"fcm","NON_FATAL_EXCEPTION",ignored); }
     }
 
     private void showNotification(
@@ -500,7 +502,7 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
         if ("driver_global_mention".equals(type)) {
             Intent intent = new Intent(this, DriverGlobalChatActivity.class);
             long messageId = 0L;
-            try { messageId = Long.parseLong(data != null ? first(data.get("message_id"), "0") : "0"); } catch (Throwable ignored) {}
+            try { messageId = Long.parseLong(data != null ? first(data.get("message_id"), "0") : "0"); } catch (Throwable ignored) { TransivaDiagnostics.error(this,"fcm","NON_FATAL_EXCEPTION",ignored); }
             intent.putExtra("jump_message_id", messageId);
             intent.putExtra("from_fcm", true);
             return intent;

@@ -136,7 +136,7 @@ public class DriverTripActivity extends Activity {
             getWindow().setStatusBarColor(Color.WHITE);
             getWindow().setNavigationBarColor(Color.WHITE);
             if(Build.VERSION.SDK_INT >= 23) getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-        }catch(Exception ignored){}
+        }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_WINDOW_SETUP_FAILED",e); }
         session = new SessionManager(this);
         api = new DriverApiClient(session);
         loadSession();
@@ -153,17 +153,17 @@ public class DriverTripActivity extends Activity {
             if(valid(lastDriverLat,lastDriverLng)) requestStableRoute(true);
         }, 250L);
     }
-    @Override protected void onResume(){ super.onResume(); try{ if(mapView!=null) mapView.onResume(); }catch(Exception ignored){} if(order != null) startLocationWatch(); }
-    @Override protected void onPause(){ stopLocationWatch(); try{ if(mapView!=null) mapView.onPause(); }catch(Exception ignored){} super.onPause(); }
-    @Override protected void onDestroy(){ stopLocationWatch(); try{ if(mapView != null) mapView.onDestroy(); }catch(Exception ignored){} super.onDestroy(); }
-    @Override public void onLowMemory(){ super.onLowMemory(); try{ if(mapView!=null) mapView.onLowMemory(); }catch(Exception ignored){} }
+    @Override protected void onResume(){ super.onResume(); try{ if(mapView!=null) mapView.onResume(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_RESUME_FAILED",e); } if(order != null) startLocationWatch(); }
+    @Override protected void onPause(){ stopLocationWatch(); try{ if(mapView!=null) mapView.onPause(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_PAUSE_FAILED",e); } super.onPause(); }
+    @Override protected void onDestroy(){ stopLocationWatch(); try{ if(mapView != null) mapView.onDestroy(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_DESTROY_FAILED",e); } super.onDestroy(); }
+    @Override public void onLowMemory(){ super.onLowMemory(); try{ if(mapView!=null) mapView.onLowMemory(); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } }
 
     private void loadSession(){
         try{
             SessionManager s = new SessionManager(this);
             driverUsername = first(s.getUsername(), s.getName(), "");
             driverType = normalizeDriverType(first(s.getDriverType(), s.getRole(), ""));
-        }catch(Exception ignored){}
+        }catch(Exception e){ TransivaDiagnostics.error(this,"session","TRIP_SESSION_LOAD_FAILED",e); }
         if(driverUsername.isEmpty()) driverUsername = getSharedPreferences(PREF_NAME, MODE_PRIVATE).getString("username", "");
         driverType = normalizeDriverType(first(driverType, getSharedPreferences(PREF_NAME, MODE_PRIVATE).getString("driver_type", ""), "motor"));
     }
@@ -202,7 +202,7 @@ public class DriverTripActivity extends Activity {
         try{
             String raw = first(getIntent().getStringExtra("order_json"), getIntent().getStringExtra("active_order_json"), pref("driver_active_order_json"), pref("active_order_json"), pref("activeOrder"));
             if(raw.trim().startsWith("{")) order = new JSONObject(raw);
-        }catch(Exception ignored){}
+        }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
         if(order == null){
             String id = first(getIntent().getStringExtra("order_id"), pref("driver_active_order_id"));
             if(!id.isEmpty()){
@@ -213,7 +213,7 @@ public class DriverTripActivity extends Activity {
                     order.put("pickup_lat", pref("driver_active_pickup_lat")); order.put("pickup_lng", pref("driver_active_pickup_lng"));
                     order.put("delivery_lat", pref("driver_active_delivery_lat")); order.put("delivery_lng", pref("driver_active_delivery_lng"));
                     order.put("price", pref("driver_active_price"));
-                }catch(Exception ignored){}
+                }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
             }
         }
         if(order != null){
@@ -298,7 +298,7 @@ public class DriverTripActivity extends Activity {
         c.addView(text("Google Maps SDK • posisi driver, pickup, delivery, dan jalur perjalanan.", 12, "#64748B", false));
         mapView = new MapView(this);
         mapView.onCreate(null);
-        try { MapsInitializer.initialize(getApplicationContext(), MapsInitializer.Renderer.LATEST, null); } catch (Throwable ignored) {}
+        try { MapsInitializer.initialize(getApplicationContext(), MapsInitializer.Renderer.LATEST, null); } catch (Throwable ignored) { TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
         mapView.getMapAsync(map -> {
             googleMap = map; mapReady = true;
             try {
@@ -306,7 +306,7 @@ public class DriverTripActivity extends Activity {
                 googleMap.getUiSettings().setZoomControlsEnabled(false);
                 googleMap.getUiSettings().setMapToolbarEnabled(false);
                 googleMap.setBuildingsEnabled(true);
-            } catch (Throwable ignored) {}
+            } catch (Throwable ignored) { TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
             initNativeTripMarkers();
             applyPendingRoute();
             updateMap();
@@ -327,7 +327,7 @@ public class DriverTripActivity extends Activity {
 
     private java.util.List<LatLng> parseRoutePoints(String json){
         java.util.ArrayList<LatLng> out=new java.util.ArrayList<>();
-        try{ JSONArray a=new JSONArray(first(json,"[]")); for(int i=0;i<a.length();i++){ JSONArray q=a.optJSONArray(i); if(q!=null && q.length()>=2){ double lat=q.optDouble(0),lng=q.optDouble(1); if(valid(lat,lng)) out.add(new LatLng(lat,lng)); } } }catch(Exception ignored){}
+        try{ JSONArray a=new JSONArray(first(json,"[]")); for(int i=0;i<a.length();i++){ JSONArray q=a.optJSONArray(i); if(q!=null && q.length()>=2){ double lat=q.optDouble(0),lng=q.optDouble(1); if(valid(lat,lng)) out.add(new LatLng(lat,lng)); } } }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
         return out;
     }
 
@@ -340,9 +340,9 @@ public class DriverTripActivity extends Activity {
             if(driverMarker!=null){b.include(driverMarker.getPosition());n++;}
             for(LatLng p:parseRoutePoints(pendingPickupRoutePoints)){b.include(p);n++;}
             for(LatLng p:parseRoutePoints(pendingDeliveryRoutePoints)){b.include(p);n++;}
-            if(n>=2) mapView.post(() -> { try{ googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(b.build(), dp(42))); }catch(Exception ignored){} });
+            if(n>=2) mapView.post(() -> { try{ googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(b.build(), dp(42))); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } });
             else if(n==1){ LatLng x=driverMarker!=null?driverMarker.getPosition():(pickupMarker!=null?pickupMarker.getPosition():deliveryMarker.getPosition()); googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(x,15f)); }
-        }catch(Exception ignored){}
+        }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
     }
 
     private String routeTargetMode(){
@@ -665,16 +665,16 @@ public class DriverTripActivity extends Activity {
                 Location last = getBestLastKnownLocation();
                 if(last != null && isFreshEnough(last)) onDriverLocationChanged(last);
             }
-            try{ locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 900, 0, locationListener, Looper.getMainLooper()); }catch(Exception ignored){}
-            try{ locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1400, 0, locationListener, Looper.getMainLooper()); }catch(Exception ignored){}
+            try{ locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 900, 0, locationListener, Looper.getMainLooper()); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
+            try{ locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1400, 0, locationListener, Looper.getMainLooper()); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
             locationWatchRunning = true;
-        }catch(Exception ignored){}
+        }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
     }
-    private void stopLocationWatch(){ try{ if(locationManager != null && locationListener != null) locationManager.removeUpdates(locationListener); }catch(Exception ignored){} locationWatchRunning = false; locationListener = null; }
+    private void stopLocationWatch(){ try{ if(locationManager != null && locationListener != null) locationManager.removeUpdates(locationListener); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } locationWatchRunning = false; locationListener = null; }
     private Location getBestLastKnownLocation(){
         Location gps = null, net = null;
-        try{ if(locationManager != null) gps = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER); }catch(Exception ignored){}
-        try{ if(locationManager != null) net = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER); }catch(Exception ignored){}
+        try{ if(locationManager != null) gps = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
+        try{ if(locationManager != null) net = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
         if(gps == null) return net;
         if(net == null) return gps;
         if(!isFreshEnough(net)) return gps;
@@ -773,7 +773,7 @@ public class DriverTripActivity extends Activity {
             }else{ driverMarker.setPosition(pos); driverMarker.setRotation((float)deg); }
             requestStableRoute(false);
             prevDriverLat = lastDriverLat; prevDriverLng = lastDriverLng;
-        }catch(Exception ignored){}
+        }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
     }
 
     private com.google.android.gms.maps.model.BitmapDescriptor driverVehicleIcon(){
@@ -789,7 +789,7 @@ public class DriverTripActivity extends Activity {
                 Bitmap scaled = Bitmap.createScaledBitmap(raw, size, size, true);
                 return BitmapDescriptorFactory.fromBitmap(scaled);
             }
-        }catch(Exception ignored){}
+        }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
         return BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE);
     }
 
@@ -842,7 +842,7 @@ public class DriverTripActivity extends Activity {
             pickupPolyline=googleMap.addPolyline(new PolylineOptions().addAll(p).width(dp(5)).color(Color.parseColor(pickupDone?"#94A3B8":"#1683FF")).geodesic(true).zIndex(2f));
             deliveryPolyline=googleMap.addPolyline(new PolylineOptions().addAll(d).width(dp(5)).color(Color.parseColor("#16A34A")).geodesic(true).zIndex(2f));
             if(!overviewMapApplied){ fitNativeOverview(); overviewMapApplied=true; }
-        }catch(Exception ignored){}
+        }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
     }
 
     private void refreshButtons(){
@@ -982,7 +982,7 @@ public class DriverTripActivity extends Activity {
             JSONObject r = postJson(BASE_URL + endpoint, p);
             boolean ok = r.optBoolean("success", false);
             String m = first(r.optString("message"), ok ? "Status berhasil diperbarui." : "Gagal update status.");
-            mainHandler.post(() -> { updatingStatus=false; setLoading(false); if(ok){ pendingFinishOtp = ""; try{ order.put("status", next); }catch(Exception ignored){} saveActiveOrder(); refreshButtons(); mainHandler.postDelayed(() -> updateMap(), 250); info("Berhasil", m); if(next.equals("finished") || next.equals("completed")){ clearActiveOrder(); finish(); } } else info("Gagal", m); });
+            mainHandler.post(() -> { updatingStatus=false; setLoading(false); if(ok){ pendingFinishOtp = ""; try{ order.put("status", next); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } saveActiveOrder(); refreshButtons(); mainHandler.postDelayed(() -> updateMap(), 250); info("Berhasil", m); if(next.equals("finished") || next.equals("completed")){ clearActiveOrder(); finish(); } } else info("Gagal", m); });
         }catch(Exception e){
             final String errorMessage = e.getMessage() == null ? "" : e.getMessage().trim();
             mainHandler.post(() -> {
@@ -1080,7 +1080,7 @@ public class DriverTripActivity extends Activity {
         setLoading(true); DriverNetworkExecutor.execute(()->{ try{
             JSONObject p=new JSONObject(); p.put("source",isPickupOrder()?"pickup_orders":"orders"); p.put("id",Integer.parseInt(internalId())); p.put("driver",driverUsername); p.put("new_price",value); p.put("reason",reason);
             JSONObject r=postJson(BASE_URL+"driver_request_price_change.php",p); boolean ok=r.optBoolean("success",false); String m=first(r.optString("message"),ok?"Harga diperbarui":"Gagal memperbarui harga");
-            mainHandler.post(()->{setLoading(false); if(ok){ try{ if(!r.optBoolean("approval_required",false)) order.put("price",value); }catch(Exception ignored){} info("Total Pembayaran",m); renderOrder(); refreshButtons(); } else info("Gagal",m);});
+            mainHandler.post(()->{setLoading(false); if(ok){ try{ if(!r.optBoolean("approval_required",false)) order.put("price",value); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } info("Total Pembayaran",m); renderOrder(); refreshButtons(); } else info("Gagal",m);});
         }catch(Exception e){mainHandler.post(()->{setLoading(false);info("Gagal","Koneksi server bermasalah.");});}});
     }
 
@@ -1160,7 +1160,7 @@ public class DriverTripActivity extends Activity {
         String mode = pickup ? "pickup" : "delivery";
         try{
             fitNativeOverview();
-        }catch(Exception ignored){}
+        }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
 
         try{
             getSharedPreferences(PREF_NAME, MODE_PRIVATE).edit()
@@ -1171,7 +1171,7 @@ public class DriverTripActivity extends Activity {
                     .putString("driver_navigation_driver_lat", String.valueOf(lastDriverLat))
                     .putString("driver_navigation_driver_lng", String.valueOf(lastDriverLng))
                     .apply();
-        }catch(Exception ignored){}
+        }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
 
         // Use the Activity class directly. The driver APK applicationId is
         // com.transiva.driver, while this Activity intentionally remains in the
@@ -1196,7 +1196,7 @@ public class DriverTripActivity extends Activity {
         try{
             String uri = "google.navigation:q=" + lat + "," + lng + "&mode=d";
             Intent fallback = new Intent(Intent.ACTION_VIEW, Uri.parse(uri));
-            try { fallback.setPackage("com.google.android.apps.maps"); } catch (Throwable ignored) {}
+            try { fallback.setPackage("com.google.android.apps.maps"); } catch (Throwable ignored) { TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
             startActivity(fallback);
             NavigationDiagnostics.event(this, "NAV_OPEN_FALLBACK", null);
         }catch(Throwable e){
@@ -1227,7 +1227,7 @@ public class DriverTripActivity extends Activity {
     }
     private String pickupAddress(){ return first(order.optString("pickup_address"), order.optString("pickup"), order.optString("sender_address"), "-"); } private String deliveryAddress(){ return first(order.optString("delivery_address"), order.optString("destination_address"), order.optString("destination"), order.optString("receiver_address"), "-"); }
     private String cleanServiceLabel(){ String s=first(order.optString("service_name"), order.optString("order_type"), orderKind.equals("pickup") ? "TransPickup" : "Food Delivery"); return s.trim(); }
-    private double coord(String a, String b){ try{return Double.parseDouble(first(order.optString(a), order.optString(b), "0"));}catch(Exception e){return 0;} } private double optDouble(String... keys){ for(String k: keys){ try{ if(order.has(k)) return Double.parseDouble(order.optString(k,"0")); }catch(Exception ignored){} } return 0; }
+    private double coord(String a, String b){ try{return Double.parseDouble(first(order.optString(a), order.optString(b), "0"));}catch(Exception e){return 0;} } private double optDouble(String... keys){ for(String k: keys){ try{ if(order.has(k)) return Double.parseDouble(order.optString(k,"0")); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } } return 0; }
     private String statusLabel(String s){ if(s.equals("taken"))return "Menuju Penjemputan"; if(s.equals("arrived_pickup"))return "Tiba di Penjemputan"; if(s.equals("on_delivery"))return "Menuju Delivery"; if(s.equals("arrived_delivery"))return "Tiba Delivery"; if(s.equals("merchant_accepted"))return "Diterima Merchant"; if(s.equals("finished")||s.equals("completed"))return "Selesai"; return first(s,"Menuju Penjemputan"); }
     private float distanceTo(double lat, double lng){ if(!valid(lastDriverLat,lastDriverLng)||!valid(lat,lng))return -1; float[] r=new float[1]; Location.distanceBetween(lastDriverLat,lastDriverLng,lat,lng,r); return r[0]; }
     private boolean valid(double lat,double lng){ return lat!=0 && lng!=0 && !Double.isNaN(lat) && !Double.isNaN(lng); } private String meter(float m){ return m>=1000 ? one(m/1000.0)+" km" : Math.round(m)+" meter"; }
@@ -1243,10 +1243,10 @@ public class DriverTripActivity extends Activity {
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
                 bm.compress(Bitmap.CompressFormat.PNG, 100, out);
                 String b64 = Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP);
-                try{ bm.recycle(); }catch(Exception ignored){}
+                try{ bm.recycle(); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
                 return "data:image/png;base64," + b64;
             }
-        }catch(Exception ignored){}
+        }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
         return "";
     }
 
@@ -1256,5 +1256,5 @@ public class DriverTripActivity extends Activity {
     private TextView text(String s,int sp,String color,boolean bold){ TextView t=new TextView(this); t.setText(s); t.setTextSize(sp); t.setTextColor(Color.parseColor(color)); if(bold)t.setTypeface(Typeface.DEFAULT_BOLD); return t; }
     private Button primary(String s){ Button b=new Button(this); b.setText(s); b.setAllCaps(false); b.setTextColor(Color.WHITE); b.setTextSize(14); b.setTypeface(Typeface.DEFAULT_BOLD); b.setBackground(gradient("#086BFF", "#2EA2FF", dp(18))); return b; } private Button green(String s){ Button b=primary(s); b.setBackground(gradient("#10B981", "#059669", dp(18))); return b; } private Button outline(String s){ Button b=new Button(this); b.setText(s); b.setAllCaps(false); b.setTextColor(Color.parseColor("#0B7CFF")); b.setTextSize(14); b.setTypeface(Typeface.DEFAULT_BOLD); b.setBackground(stroke("#FFFFFF", "#9DCAFF", dp(18), 1)); return b; }
     private GradientDrawable round(String color,int radius){ GradientDrawable g=new GradientDrawable(); g.setColor(Color.parseColor(color)); g.setCornerRadius(radius); return g; } private GradientDrawable stroke(String color,String st,int radius,int sw){ GradientDrawable g=round(color,radius); g.setStroke(dp(sw), Color.parseColor(st)); return g; } private GradientDrawable gradient(String c1,String c2,int radius){ GradientDrawable g=new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{Color.parseColor(c1), Color.parseColor(c2)}); g.setCornerRadius(radius); return g; }
-    private void setLoading(boolean b){ if(progressBar!=null) progressBar.setVisibility(b?View.VISIBLE:View.GONE); } private void info(String t,String m){ try{ new AlertDialog.Builder(this).setTitle(t).setMessage(m).setPositiveButton("OK", null).show(); }catch(Exception ignored){} }
+    private void setLoading(boolean b){ if(progressBar!=null) progressBar.setVisibility(b?View.VISIBLE:View.GONE); } private void info(String t,String m){ try{ new AlertDialog.Builder(this).setTitle(t).setMessage(m).setPositiveButton("OK", null).show(); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } }
 }

@@ -61,7 +61,7 @@ public final class ResourceUpdateManager {
         if (now - p.getLong(K_LAST_CHECK, 0L) < CHECK_INTERVAL_MS) return;
         p.edit().putLong(K_LAST_CHECK, now).apply();
         IO.execute(() -> {
-            try { execute(app, null); } catch (Throwable ignored) {}
+            try { execute(app, null); } catch (Throwable t) { TransivaDiagnostics.error(app,"update","BACKGROUND_UPDATE_FAILED",t); }
         });
     }
 
@@ -72,6 +72,7 @@ public final class ResourceUpdateManager {
         IO.execute(() -> {
             try { execute(app, listener); }
             catch (Throwable t) {
+                TransivaDiagnostics.error(app,"update","INTERACTIVE_UPDATE_FAILED",t);
                 if (listener != null) listener.onError(safeMessage(t), true);
             }
         });
@@ -231,21 +232,21 @@ public final class ResourceUpdateManager {
             String root = active.getCanonicalPath() + File.separator;
             if (!target.getCanonicalPath().startsWith(root)) return null;
             return target.isFile() ? target : null;
-        } catch (Exception ignored) { return null; }
+        } catch (Exception e) { TransivaDiagnostics.error(context,"update","ACTIVE_FILE_RESOLVE_FAILED",e); return null; }
     }
 
     public static Bitmap loadBitmapOverride(Context context, String relativePath) {
         File f = activeFile(context, relativePath);
         if (f == null || f.length() <= 0 || f.length() > 8L * 1024L * 1024L) return null;
         try { return BitmapFactory.decodeFile(f.getAbsolutePath()); }
-        catch (Throwable ignored) { return null; }
+        catch (Throwable t) { TransivaDiagnostics.error(context,"update","BITMAP_OVERRIDE_LOAD_FAILED",t); return null; }
     }
 
     public static JSONObject loadJsonOverride(Context context, String relativePath) {
         File f = activeFile(context, relativePath);
         if (f == null || f.length() > 512L * 1024L) return null;
         try { return new JSONObject(readString(new FileInputStream(f), 512 * 1024)); }
-        catch (Throwable ignored) { return null; }
+        catch (Throwable t) { TransivaDiagnostics.error(context,"update","JSON_OVERRIDE_LOAD_FAILED",t); return null; }
     }
 
     private static File baseDir(Context c) { return new File(c.getFilesDir(), "resource_update"); }
@@ -311,7 +312,7 @@ public final class ResourceUpdateManager {
     private static void deleteTree(File f) {
         if (f == null || !f.exists()) return;
         if (f.isDirectory()) { File[] kids = f.listFiles(); if (kids != null) for (File k : kids) deleteTree(k); }
-        try { f.delete(); } catch (Exception ignored) {}
+        try { f.delete(); } catch (Exception ignored) { android.util.Log.w("TransivaResource","Delete failed: "+f,ignored); }
     }
 
     private static final class ManifestInfo {

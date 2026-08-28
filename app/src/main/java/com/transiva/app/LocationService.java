@@ -108,7 +108,8 @@ public class LocationService extends Service {
         try {
             String orderId = session == null ? "" : session.get("current_order_id");
             return orderId == null || orderId.trim().isEmpty() ? IDLE_INTERVAL : ACTIVE_INTERVAL;
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            TransivaDiagnostics.error(this,"location","DESIRED_INTERVAL_FAILED",e);
             return IDLE_INTERVAL;
         }
     }

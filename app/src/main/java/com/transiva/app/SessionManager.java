@@ -257,7 +257,8 @@ public class SessionManager {
             clearLegacyOnlineFlags();
             TransivaSession.logout(appContext, safe(reason));
 
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            TransivaDiagnostics.error(appContext,"session","CLEAR_SESSION_FAILED",e);
         }
     }
 
@@ -479,7 +480,8 @@ public class SessionManager {
             }
             e.putLong("driver_profile_synced_at", System.currentTimeMillis());
             e.apply();
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            TransivaDiagnostics.error(appContext,"session","DRIVER_RUNTIME_SYNC_FAILED",e);
         }
     }
 

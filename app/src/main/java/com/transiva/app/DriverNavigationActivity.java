@@ -140,6 +140,9 @@ public class DriverNavigationActivity extends Activity {
     private String targetMode = "pickup";
     private String mapStyleUrl = MAP_STYLE;
     private long mapStyleTimeoutMs = 9000L;
+    private NavigationRuntimeConfig navConfig;
+    private NavigationCompatibilityProfile navProfile;
+    private NavigationMapController mapController;
 
     private double driverLat;
     private double driverLng;
@@ -255,7 +258,7 @@ public class DriverNavigationActivity extends Activity {
             // Align the visual loop to Android VSYNC when the map view is available.
             // This prevents Handler drift and uneven 16/32 ms frame pacing.
             if (mapView != null) mapView.postOnAnimation(this);
-            else main.postDelayed(this, VISUAL_FRAME_MS);
+            else main.postDelayed(this, navProfile != null ? navProfile.visualFrameMs : VISUAL_FRAME_MS);
         }
     };
 
@@ -278,6 +281,7 @@ public class DriverNavigationActivity extends Activity {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         NavigationDiagnostics.event(this, "NAV_ACTIVITY_CREATED", null);
+        NavigationHealthTelemetry.mark(this, "open");
 
         try {
             if (getActionBar() != null) getActionBar().hide();
@@ -291,6 +295,8 @@ public class DriverNavigationActivity extends Activity {
         readOrder();
         readIdentity();
         applyNavigationResourceConfig();
+        navProfile = NavigationCompatibilityProfile.resolve(this, navConfig != null ? navConfig.profile : "auto");
+        NavigationDiagnostics.event(this, "NAV_PROFILE_" + navProfile.mode.name(), null);
         seedLastKnownLocation();
 
         // P0: render a lightweight navigation shell first. Heavy MapLibre startup is
@@ -302,7 +308,8 @@ public class DriverNavigationActivity extends Activity {
         main.postDelayed(() -> {
             if (!styleReady && !isFinishing()) {
                 NavigationDiagnostics.event(this, "NAV_STYLE_TIMEOUT", null);
-                showMapFallback("Peta sedang lambat. Navigasi eksternal tetap tersedia.");
+                if (mapController != null) mapController.trySecondary("NAV_PRIMARY_STYLE_TIMEOUT", new IllegalStateException("Primary map style timeout"));
+                if (navConfig == null || navConfig.externalFallback) showMapFallback("Peta sedang lambat. Menyiapkan jalur cadangan…");
             }
         }, mapStyleTimeoutMs);
 
@@ -317,13 +324,13 @@ public class DriverNavigationActivity extends Activity {
         try {
             String raw = getIntent().getStringExtra("order_json");
             if (raw != null && raw.trim().startsWith("{")) order = new JSONObject(raw);
-        } catch (Exception ignored) {}
+        } catch (Exception e) { TransivaDiagnostics.error(this,"navigation","ORDER_JSON_PARSE_FAILED",e); }
         try {
             String mode = first(getIntent().getStringExtra("target"), getIntent().getStringExtra("target_mode"));
             if (mode.toLowerCase(Locale.US).contains("delivery")) targetMode = "delivery";
             else if (mode.toLowerCase(Locale.US).contains("pickup")) targetMode = "pickup";
             else targetMode = routeTargetMode();
-        } catch (Exception ignored) {}
+        } catch (Exception e) { TransivaDiagnostics.error(this,"navigation","TARGET_MODE_PARSE_FAILED",e); }
 
         driverLat = getIntent().getDoubleExtra("driver_lat", 0d);
         driverLng = getIntent().getDoubleExtra("driver_lng", 0d);
@@ -337,22 +344,15 @@ public class DriverNavigationActivity extends Activity {
                     getSharedPreferences("transiva", MODE_PRIVATE).getString("username", ""));
             vehicleType = normalizeVehicle(first(session.getDriverType(),
                     getSharedPreferences("transiva", MODE_PRIVATE).getString("driver_type", "motor")));
-        } catch (Exception ignored) {}
+        } catch (Exception e) { TransivaDiagnostics.error(this,"session","NAV_IDENTITY_READ_FAILED",e); }
     }
 
 
     private void applyNavigationResourceConfig() {
-        try {
-            JSONObject cfg = ResourceUpdateManager.loadJsonOverride(this, "config/navigation.json");
-            if (cfg == null) return;
-            String styleUrl = cfg.optString("map_style_url", "").trim();
-            if (styleUrl.startsWith("https://")) mapStyleUrl = styleUrl;
-            long timeout = cfg.optLong("style_timeout_ms", mapStyleTimeoutMs);
-            mapStyleTimeoutMs = Math.max(5000L, Math.min(20000L, timeout));
-            NavigationDiagnostics.event(this, "NAV_RESOURCE_CONFIG_APPLIED", null);
-        } catch (Throwable t) {
-            NavigationDiagnostics.error(this, "NAV_RESOURCE_CONFIG_FAILED", t);
-        }
+        navConfig = NavigationRuntimeConfig.load(this);
+        mapStyleUrl = navConfig.primaryStyle;
+        mapStyleTimeoutMs = navConfig.styleTimeoutMs;
+        NavigationDiagnostics.event(this, "NAV_RESOURCE_CONFIG_APPLIED", null);
     }
 
     private void seedLastKnownLocation() {
@@ -364,8 +364,8 @@ public class DriverNavigationActivity extends Activity {
         try {
             LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE);
             Location gps = null, net = null;
-            try { if (lm != null) gps = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER); } catch (Exception ignored) {}
-            try { if (lm != null) net = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER); } catch (Exception ignored) {}
+            try { if (lm != null) gps = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER); } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
+            try { if (lm != null) net = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER); } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
             Location best = gps != null ? gps : net;
             if (gps != null && net != null && net.getTime() > gps.getTime()) best = net;
             if (best != null && valid(best.getLatitude(), best.getLongitude())) {
@@ -373,7 +373,7 @@ public class DriverNavigationActivity extends Activity {
                 driverLng = best.getLongitude();
                 lastLocation = new Location(best);
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
     }
 
     private void buildUiShell() {
@@ -459,65 +459,41 @@ public class DriverNavigationActivity extends Activity {
         if (mapInitAttempted || isFinishing() || navigationRoot == null) return;
         mapInitAttempted = true;
         NavigationDiagnostics.event(this, "NAV_MAP_INIT", null);
-        try {
-            MapLibre.getInstance(getApplicationContext());
-            MapLibreMapOptions options = MapLibreMapOptions.createFromAttributes(this)
-                    .compassEnabled(false)
-                    .attributionEnabled(false)
-                    .logoEnabled(false)
-                    .rotateGesturesEnabled(false)
-                    .tiltGesturesEnabled(false)
-                    .scrollGesturesEnabled(false)
-                    .zoomGesturesEnabled(true);
-
-            mapView = new MapView(this, options);
-            navigationRoot.addView(mapView, 0, new FrameLayout.LayoutParams(-1, -1));
-            mapView.onCreate(state);
-            if (activityStarted && !mapViewStarted) {
-                mapView.onStart();
-                mapViewStarted = true;
-            }
-            if (activityResumed && !mapViewResumed) {
-                mapView.onResume();
-                mapViewResumed = true;
-            }
-            mapView.getMapAsync(m -> {
-                if (isFinishing()) return;
-                map = m;
-                NavigationDiagnostics.event(this, "NAV_MAP_READY", null);
-                try {
-                    map.getUiSettings().setCompassEnabled(false);
-                    map.getUiSettings().setRotateGesturesEnabled(false);
-                    map.getUiSettings().setTiltGesturesEnabled(false);
-                    map.getUiSettings().setZoomGesturesEnabled(true);
-                    map.getUiSettings().setAttributionEnabled(false);
-                    map.getUiSettings().setLogoEnabled(false);
-                    map.setStyle(new Style.Builder().fromUri(mapStyleUrl), st -> {
+        mapController = new NavigationMapController(this, navigationRoot, navConfig, navProfile,
+                new NavigationMapController.Listener() {
+                    @Override public void onMapReady(MapLibreMap m) {
                         if (isFinishing()) return;
-                        style = st;
-                        styleReady = true;
-                        nativeMapFailed = false;
+                        map = m;
+                        mapView = mapController.view();
+                        NavigationDiagnostics.event(DriverNavigationActivity.this, "NAV_MAP_READY", null);
+                        NavigationHealthTelemetry.mark(DriverNavigationActivity.this, "map");
+                    }
+                    @Override public void onStyleReady(MapLibreMap m, Style st, boolean secondary) {
+                        if (isFinishing()) return;
+                        map = m; style = st; styleReady = true; nativeMapFailed = false;
                         hideMapFallback();
-                        NavigationDiagnostics.event(this, "NAV_STYLE_READY", null);
-                        installRouteLayers();
-                        installVehicleLayer();
-                        installMarkers();
-                        drawPendingRoute();
-                        updateNativePosition(true);
-                    });
-                } catch (Throwable t) {
-                    failNativeMap("NAV_STYLE_START_FAILED", t);
-                }
-            });
-        } catch (Throwable t) {
-            failNativeMap("NAV_MAP_INIT_FAILED", t);
-        }
+                        NavigationDiagnostics.event(DriverNavigationActivity.this,
+                                secondary ? "NAV_STYLE_READY_SECONDARY" : "NAV_STYLE_READY_PRIMARY", null);
+                        NavigationHealthTelemetry.mark(DriverNavigationActivity.this, "style");
+                        installRouteLayers(); installVehicleLayer(); installMarkers(); drawPendingRoute(); updateNativePosition(true);
+                    }
+                    @Override public void onFailure(String stage, Throwable error) { failNativeMap(stage, error); }
+                });
+        if (activityStarted) mapController.onStart();
+        if (activityResumed) mapController.onResume();
+        mapController.create(state);
+        mapView = mapController.view();
     }
 
     private void failNativeMap(String stage, Throwable t) {
         nativeMapFailed = true;
         NavigationDiagnostics.error(this, stage, t);
-        showMapFallback("Peta native tidak dapat dimuat di perangkat ini.");
+        if (mapController != null && !styleReady && navConfig != null && !stage.contains("SECONDARY")) {
+            mapController.trySecondary(stage, t);
+            return;
+        }
+        if (navConfig == null || navConfig.externalFallback) showMapFallback("Peta native tidak dapat dimuat di perangkat ini.");
+        else if (routeBadge != null) routeBadge.setText("Peta native gagal dimuat. Coba buka ulang navigasi.");
     }
 
     private void showMapFallback(String message) {
@@ -546,25 +522,13 @@ public class DriverNavigationActivity extends Activity {
     }
 
     private void openExternalNavigation() {
-        double lat = explicitTargetLat;
-        double lng = explicitTargetLng;
+        double lat = explicitTargetLat, lng = explicitTargetLng;
         if (!valid(lat, lng)) {
             if (targetMode.equals("delivery")) { lat = coord("delivery_lat", "destination_lat"); lng = coord("delivery_lng", "destination_lng"); }
             else { lat = coord("pickup_lat", "user_lat"); lng = coord("pickup_lng", "user_lng"); }
         }
-        if (!valid(lat, lng)) return;
-        try {
-            Intent g = new Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=" + lat + "," + lng + "&mode=d"));
-            g.setPackage("com.google.android.apps.maps");
-            startActivity(g);
-            NavigationDiagnostics.event(this, "NAV_FALLBACK_GOOGLE_MAPS", null);
-        } catch (Throwable first) {
-            try {
-                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("geo:" + lat + "," + lng + "?q=" + lat + "," + lng)));
-            } catch (Throwable second) {
-                NavigationDiagnostics.error(this, "NAV_FALLBACK_FAILED", second);
-            }
-        }
+        if (!valid(lat, lng)) { TransivaDiagnostics.event(this,"navigation","EXTERNAL_TARGET_INVALID"); return; }
+        NavigationExternalController.open(this, lat, lng);
     }
 
     private android.graphics.drawable.GradientDrawable roundRect(int color, int radiusDp) {
@@ -609,7 +573,7 @@ public class DriverNavigationActivity extends Activity {
                         lineJoin(LINE_JOIN_ROUND)
                 ));
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
     }
 
     private void installVehicleLayer() {
@@ -641,7 +605,7 @@ public class DriverNavigationActivity extends Activity {
                 style.addLayer(layer);
             }
             updateVehicleSource();
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
     }
 
     private void addVehicleStyleImage(String imageName, String drawableName, int fallback) {
@@ -656,7 +620,7 @@ public class DriverNavigationActivity extends Activity {
             if (raw == null) return;
             Bitmap scaled = Bitmap.createScaledBitmap(raw, dp(48), dp(48), true);
             style.addImage(imageName, scaled);
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
     }
 
     private void updateVehicleSource() {
@@ -685,7 +649,7 @@ public class DriverNavigationActivity extends Activity {
 
             GeoJsonSource source = style.getSourceAs(VEHICLE_SOURCE);
             if (source != null) source.setGeoJson(collection.toString());
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
     }
 
     private void installMarkers() {
@@ -699,7 +663,7 @@ public class DriverNavigationActivity extends Activity {
                         android.R.drawable.ic_menu_mylocation, dp(34), dp(34));
                 pickupMarker = map.addMarker(new MarkerOptions().position(new LatLng(pLat, pLng)).icon(icon));
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
 
         try {
             double dLat = coord("delivery_lat", "destination_lat");
@@ -709,7 +673,7 @@ public class DriverNavigationActivity extends Activity {
                         android.R.drawable.ic_menu_mylocation, dp(34), dp(34));
                 deliveryMarker = map.addMarker(new MarkerOptions().position(new LatLng(dLat, dLng)).icon(icon));
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
 
         // Driver vehicle is rendered by a dedicated SymbolLayer, not a legacy Marker.
         // Style layers have deterministic Z-order, so the vehicle always stays above
@@ -780,12 +744,12 @@ public class DriverNavigationActivity extends Activity {
             try {
                 locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,
                         700L, 0f, locationListener, Looper.getMainLooper());
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
             try {
                 locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
                         1300L, 0f, locationListener, Looper.getMainLooper());
-            } catch (Exception ignored) {}
-        } catch (Exception ignored) {}
+            } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
+        } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
     }
 
     /**
@@ -818,7 +782,7 @@ public class DriverNavigationActivity extends Activity {
             if (locationManager != null && locationListener != null) {
                 locationManager.removeUpdates(locationListener);
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
         locationListener = null;
     }
 
@@ -929,10 +893,10 @@ public class DriverNavigationActivity extends Activity {
                 ? snappedBearing
                 : (Double.isFinite(currentBearing) ? currentBearing : 0d);
         smoothCameraBearing = easeBearing(smoothCameraBearing, desiredBearing,
-                immediate ? 1.0f : 0.065f);
+                immediate ? 1.0f : (navProfile != null ? navProfile.cameraBearingAlpha : 0.065f));
         double cameraBearing = smoothCameraBearing;
         smoothMarkerBearing = easeBearing(smoothMarkerBearing, desiredBearing,
-                immediate ? 1.0f : (currentSpeedKmh < 5d ? 0.10f : 0.16f));
+                immediate ? 1.0f : (navProfile != null ? navProfile.bearingEaseAlpha : (currentSpeedKmh < 5d ? 0.10f : 0.16f)));
         // MapLibre Marker annotation tidak menyediakan setRotation(float).
         // Ikon kendaraan tetap menghadap ke atas layar, sedangkan kamera diputar
         // secara halus mengikuti bearing perjalanan sehingga arah kendaraan tetap selaras.
@@ -962,6 +926,7 @@ public class DriverNavigationActivity extends Activity {
             desiredZoom = 15.5d;
             desiredTilt = 49d;
         }
+        if (navProfile != null) desiredTilt = Math.min(desiredTilt, navProfile.cameraTilt);
         smoothCameraZoom = Double.isNaN(smoothCameraZoom) ? desiredZoom
                 : smoothCameraZoom + (desiredZoom - smoothCameraZoom) * (immediate ? 1d : 0.035d);
         smoothCameraTilt = Double.isNaN(smoothCameraTilt) ? desiredTilt
@@ -1061,6 +1026,7 @@ public class DriverNavigationActivity extends Activity {
                 lastRouteSuccessAt = System.currentTimeMillis();
                 routeFailureCount = 0;
                 NavigationDiagnostics.event(this, "NAV_ROUTE_READY", null);
+                NavigationHealthTelemetry.mark(this, "route");
 
                 Location rl = new Location("route");
                 rl.setLatitude(fromLat);
@@ -1259,7 +1225,7 @@ public class DriverNavigationActivity extends Activity {
                         ? lastMatchedProgressMeters : visualRouteProgressMeters;
                 lastRouteLineUpdateAt = SystemClock.elapsedRealtime();
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
     }
 
     /**
@@ -1775,26 +1741,11 @@ public class DriverNavigationActivity extends Activity {
     }
 
     @Override protected void onStart() {
-        super.onStart();
-        activityStarted = true;
-        try {
-            if (mapView != null && !mapViewStarted) {
-                mapView.onStart();
-                mapViewStarted = true;
-            }
-        } catch (Throwable t) { NavigationDiagnostics.error(this, "NAV_MAP_ONSTART_FAILED", t); }
+        super.onStart(); activityStarted = true; if (mapController != null) mapController.onStart();
     }
 
     @Override protected void onResume() {
-        super.onResume();
-        activityResumed = true;
-        try {
-            if (mapView != null && !mapViewResumed) {
-                mapView.onResume();
-                mapViewResumed = true;
-            }
-        } catch (Throwable t) { NavigationDiagnostics.error(this, "NAV_MAP_ONRESUME_FAILED", t); }
-        startLocationWatch();
+        super.onResume(); activityResumed = true; if (mapController != null) mapController.onResume(); startLocationWatch();
     }
 
     /**
@@ -1809,7 +1760,7 @@ public class DriverNavigationActivity extends Activity {
     }
 
     private void configurePictureInPicture() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || (navProfile != null && !navProfile.allowPip)) return;
         try {
             PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder()
                     .setAspectRatio(new Rational(3, 4));
@@ -1819,11 +1770,11 @@ public class DriverNavigationActivity extends Activity {
                 builder.setSeamlessResizeEnabled(true);
             }
             setPictureInPictureParams(builder.build());
-        } catch (Exception ignored) {}
+        } catch (Exception e) { TransivaDiagnostics.error(this,"navigation","PIP_CONFIG_FAILED",e); }
     }
 
     private void enterNavigationPictureInPicture() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || isFinishing()) return;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || isFinishing() || (navProfile != null && !navProfile.allowPip)) return;
         try {
             if (isInPictureInPictureMode()) return;
             PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder()
@@ -1833,7 +1784,7 @@ public class DriverNavigationActivity extends Activity {
                 builder.setSeamlessResizeEnabled(true);
             }
             enterPictureInPictureMode(builder.build());
-        } catch (Exception ignored) {}
+        } catch (Exception e) { TransivaDiagnostics.error(this,"navigation","PIP_ENTER_FAILED",e); }
     }
 
     @Override public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode,
@@ -1863,7 +1814,7 @@ public class DriverNavigationActivity extends Activity {
                         .target(new LatLng(lat, lng))
                         .zoom(17.8d)
                         .bearing(smoothCameraBearing)
-                        .tilt(42d)
+                        .tilt(navProfile != null ? navProfile.cameraTilt : 42d)
                         .build();
                 map.moveCamera(CameraUpdateFactory.newCameraPosition(restored));
             }
@@ -1872,43 +1823,26 @@ public class DriverNavigationActivity extends Activity {
 
     @Override protected void onPause() {
         activityResumed = false;
-        boolean pip = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-                (inPictureInPicture || isInPictureInPictureMode());
-        if (!pip) {
-            stopLocationWatch();
-            try {
-                if (mapView != null && mapViewResumed) mapView.onPause();
-            } catch (Throwable t) { NavigationDiagnostics.error(this, "NAV_MAP_ONPAUSE_FAILED", t); }
-            mapViewResumed = false;
-        }
+        boolean pip = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && (inPictureInPicture || isInPictureInPictureMode());
+        if (!pip) { stopLocationWatch(); if (mapController != null) mapController.onPause(); }
         super.onPause();
     }
 
     @Override protected void onStop() {
         activityStarted = false;
         boolean pip = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && isInPictureInPictureMode();
-        if (!pip) {
-            stopLocationWatch();
-            try {
-                if (mapView != null) {
-                    if (mapViewResumed) mapView.onPause();
-                    mapViewResumed = false;
-                    if (mapViewStarted) mapView.onStop();
-                    mapViewStarted = false;
-                }
-            } catch (Throwable t) { NavigationDiagnostics.error(this, "NAV_MAP_ONSTOP_FAILED", t); }
-        }
+        if (!pip) { stopLocationWatch(); if (mapController != null) mapController.onStop(); }
         super.onStop();
     }
 
     @Override protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
-        if (mapView != null) mapView.onSaveInstanceState(outState);
+        if (mapController != null) mapController.onSaveInstanceState(outState);
     }
 
     @Override public void onLowMemory() {
         super.onLowMemory();
-        if (mapView != null) mapView.onLowMemory();
+        if (mapController != null) mapController.onLowMemory();
     }
 
     @Override protected void onDestroy() {
@@ -1918,8 +1852,7 @@ public class DriverNavigationActivity extends Activity {
         main.removeCallbacks(routeRetryTick);
         main.removeCallbacksAndMessages(null);
         routeExecutor.shutdownNow();
-        try { if (mapView != null) mapView.onDestroy(); }
-        catch (Throwable t) { NavigationDiagnostics.error(this, "NAV_MAP_ONDESTROY_FAILED", t); }
+        if (mapController != null) mapController.onDestroy();
         super.onDestroy();
     }
 }
