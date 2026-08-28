@@ -1186,14 +1186,21 @@ public class DriverTripActivity extends Activity {
         nativeNav.putExtra("driver_lat", lastDriverLat);
         nativeNav.putExtra("driver_lng", lastDriverLng);
         try{
+            NavigationDiagnostics.event(this, "NAV_OPEN_CLICK", null);
             startActivity(nativeNav);
             return;
-        }catch(Exception ignored){}
+        }catch(Throwable openError){
+            NavigationDiagnostics.error(this, "NAV_ACTIVITY_OPEN_FAILED", openError);
+        }
 
         try{
             String uri = "google.navigation:q=" + lat + "," + lng + "&mode=d";
-            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(uri)));
-        }catch(Exception e){
+            Intent fallback = new Intent(Intent.ACTION_VIEW, Uri.parse(uri));
+            try { fallback.setPackage("com.google.android.apps.maps"); } catch (Throwable ignored) {}
+            startActivity(fallback);
+            NavigationDiagnostics.event(this, "NAV_OPEN_FALLBACK", null);
+        }catch(Throwable e){
+            NavigationDiagnostics.error(this, "NAV_OPEN_FALLBACK_FAILED", e);
             info("Navigasi", pickup ? "Rute diarahkan ke titik penjemputan." : "Rute diarahkan ke titik pengantaran.");
         }
     }
