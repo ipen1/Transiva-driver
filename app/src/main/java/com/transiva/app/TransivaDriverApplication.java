@@ -26,8 +26,7 @@ public class TransivaDriverApplication extends Application implements Applicatio
         appContext = getApplicationContext();
         TransivaDriverCrashReporter.initialize(this);
         registerActivityLifecycleCallbacks(this);
-        // MLBB-style resource/config update. Runs off the UI thread and never blocks startup.
-        ResourceUpdateManager.checkInBackground(this);
+        // Resource update startup dikendalikan SplashActivity agar progress selalu terlihat.
 
         // Global security changes use a topic so admin can refresh every Driver
         // without looping over thousands of FCM tokens.

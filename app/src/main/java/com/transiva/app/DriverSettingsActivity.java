@@ -186,7 +186,7 @@ public class DriverSettingsActivity extends Activity {
         LinearLayout updateLabels = new LinearLayout(this);
         updateLabels.setOrientation(LinearLayout.VERTICAL);
         updateLabels.addView(text("Cek Pembaruan Aplikasi", 15, "#0B3A78", true));
-        updateLabels.addView(text("Versi terpasang " + AppUpdateClient.installedVersionName(this), 11, "#64748B", false));
+        updateLabels.addView(text("App " + AppUpdateClient.installedVersionName(this) + " • Resource v" + ResourceUpdateManager.activeVersion(this), 11, "#64748B", false));
         updateRow.addView(updateLabels, new LinearLayout.LayoutParams(0, -2, 1));
         TextView updateArrow = text("›", 30, "#0B7CFF", true);
         updateRow.addView(updateArrow);
