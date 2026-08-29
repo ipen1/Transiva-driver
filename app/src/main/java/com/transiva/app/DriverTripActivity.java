@@ -938,7 +938,7 @@ public class DriverTripActivity extends Activity {
             JSONObject r = postJson(BASE_URL + endpoint, p);
             boolean ok = r.optBoolean("success", false);
             String m = first(r.optString("message"), ok ? "Status berhasil diperbarui." : "Gagal update status.");
-            mainHandler.post(() -> { updatingStatus=false; setLoading(false); if(ok){ pendingFinishOtp = ""; try{ order.put("status", next); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } saveActiveOrder(); refreshButtons(); mainHandler.postDelayed(() -> updateMap(), 250); info("Berhasil", m); if(next.equals("finished") || next.equals("completed")){ clearActiveOrder(); finish(); } } else info("Gagal", m); });
+            mainHandler.post(() -> { updatingStatus=false; setLoading(false); if(ok){ pendingFinishOtp = ""; try{ order.put("status", next); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } saveActiveOrder(); refreshButtons(); mainHandler.postDelayed(() -> updateMap(), 250); info("Berhasil", m); if(next.equals("finished") || next.equals("completed")){ DriverMessageUnreadRepository.clearOrder(this, orderId()); clearActiveOrder(); finish(); } } else info("Gagal", m); });
         }catch(Exception e){
             final String errorMessage = e.getMessage() == null ? "" : e.getMessage().trim();
             mainHandler.post(() -> {

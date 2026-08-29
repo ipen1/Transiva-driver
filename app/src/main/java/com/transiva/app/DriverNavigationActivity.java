@@ -626,21 +626,29 @@ public class DriverNavigationActivity extends Activity {
         // Dead-reckoning between GPS fixes: the visual target keeps moving at the
         // measured speed for a short bounded window, so the icon/map does not
         // move-stop-move between 700-1300 ms location samples.
-        if (base.onRoute && currentSpeedKmh > 1d && lastFixRealtimeMs > 0L) {
-            // With a weak signal, continue gently along the already-matched route
-            // for a little longer instead of allowing the marker/camera to jump.
-            double maxPredictionSec = lastGpsAccuracyM >= 55f ? 3.2d
-                    : (lastGpsAccuracyM >= 30f ? 2.2d : 1.15d);
+        if (base.onRoute && currentSpeedKmh > 2d && lastFixRealtimeMs > 0L && lastGpsAccuracyM < 35f) {
+            // CLEAN navigation: only a short prediction on a trustworthy GPS fix.
+            // Long dead-reckoning was visually smooth in ideal conditions but could
+            // overshoot corners/tunnels and appear as a map/marker "glitch".
+            double maxPredictionSec = lastGpsAccuracyM < 15f ? 0.80d : 0.55d;
             double ageSec = Math.max(0d, Math.min(maxPredictionSec,
                     (SystemClock.elapsedRealtime() - lastFixRealtimeMs) / 1000d));
-            double predictedSpeedMps = Math.max(0d, currentSpeedKmh / 3.6d + smoothedAccelerationMps2 * ageSec);
-            double lookAheadMeters = Math.min(42d, predictedSpeedMps * ageSec);
+            double predictedSpeedMps = Math.max(0d, currentSpeedKmh / 3.6d);
+            double lookAheadMeters = Math.min(12d, predictedSpeedMps * ageSec);
             target = advanceAlongRoute(base, lookAheadMeters);
         }
 
         if (target.onRoute) {
             visualRouteProgressMeters = target.progressMeters;
             visualRouteSegmentIndex = target.segmentIndex;
+        }
+
+        // A weak GPS sample must never make the visual position teleport far
+        // along the route. Hold the last clean position until a better sample arrives.
+        if (displayInitialized && lastGpsAccuracyM >= 35f
+                && meters(displayLat, displayLng, target.lat, target.lng) > 35f) {
+            updateInstructionBanner(visualRouteProgressMeters);
+            return;
         }
 
         if (!displayInitialized) {
@@ -680,7 +688,8 @@ public class DriverNavigationActivity extends Activity {
             long now = SystemClock.elapsedRealtime();
             boolean pip = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
                     (inPictureInPicture || isInPictureInPictureMode());
-            long renderInterval = pip ? 66L : (currentSpeedKmh >= 20d ? 25L : 33L);
+            long cleanFrame = navProfile != null ? Math.max(16L, navProfile.visualFrameMs) : 33L;
+            long renderInterval = pip ? Math.max(66L, cleanFrame) : cleanFrame;
             if (now - lastMapRenderAt >= renderInterval) {
                 lastMapRenderAt = now;
                 updateNativePosition(false);

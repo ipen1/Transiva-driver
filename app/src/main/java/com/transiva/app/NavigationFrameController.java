@@ -48,9 +48,10 @@ public final class NavigationFrameController {
                 if (callback != null) callback.onVisualFrame();
             }
             if (!running) return;
-            MapView mv = mapView;
-            if (mv != null) mv.postOnAnimation(this);
-            else main.postDelayed(this, frameMs);
+            // Schedule at the requested profile cadence instead of waking on every
+            // display VSYNC. This removes 90/120 Hz micro-jitter on devices where
+            // navigation is intentionally capped to 20/30/60 FPS.
+            main.postDelayed(this, frameMs);
         }
     };
 }

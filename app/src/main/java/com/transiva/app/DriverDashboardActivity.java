@@ -72,6 +72,7 @@ public class DriverDashboardActivity extends Activity
     private DriverDashboardState currentState;
 
     private FrameLayout page;
+    private View bottomNavigationView;
     private LinearLayout shell;
     private LinearLayout content;
     private LinearLayout activeBox;
@@ -164,6 +165,10 @@ public class DriverDashboardActivity extends Activity
         });
         cancellationController = new DashboardCancellationController(this, new DashboardCancellationController.Listener() {
             @Override public void onCancelConfirmed(DriverOrder order, String reason) {
+                // Prevent a cancelled order from leaving a ghost Pesan badge. If
+                // cancellation fails, a later FCM message can mark it unread again.
+                if (order != null) DriverMessageUnreadRepository.clearOrder(DriverDashboardActivity.this, order.id);
+                DriverBottomNavigation.refreshUnread(DriverDashboardActivity.this, bottomNavigationView);
                 if (presenter != null) presenter.cancelOrder(order.id, clean(order.source), clean(order.status), reason);
             }
             @Override public void onMessage(String message) { showMessage(message); }
@@ -339,13 +344,9 @@ public class DriverDashboardActivity extends Activity
         buildDriverGrowth();
         buildSmartAssistant();
 
-        shell.addView(
-                DriverBottomNavigation.build(
-                        this,
-                        DriverBottomNavigation.ActiveItem.HOME
-                ),
-                new LinearLayout.LayoutParams(-1, dp(66))
-        );
+        bottomNavigationView = DriverBottomNavigation.build(
+                this, DriverBottomNavigation.ActiveItem.HOME);
+        shell.addView(bottomNavigationView, new LinearLayout.LayoutParams(-1, dp(66)));
 
         loading = new ProgressBar(this);
         loading.setVisibility(View.GONE);
@@ -803,6 +804,17 @@ public class DriverDashboardActivity extends Activity
         );
 
         lastUpdateText.setText("Baru diperbarui");
+
+        // Dashboard response is authoritative: badge Pesan only belongs to an
+        // order that is still active. Cancelled/finished orders are pruned here.
+        java.util.Set<String> activeMessageOrders = new java.util.HashSet<>();
+        if (state.activeOrders != null) {
+            for (DriverOrder active : state.activeOrders) {
+                if (active != null && clean(active.id).length() > 0) activeMessageOrders.add(clean(active.id));
+            }
+        }
+        DriverMessageUnreadRepository.retainOnlyActiveOrders(this, activeMessageOrders);
+        DriverBottomNavigation.refreshUnread(this, bottomNavigationView);
 
         activeBox.removeAllViews();
         if (state.activeOrders == null || state.activeOrders.isEmpty()) {

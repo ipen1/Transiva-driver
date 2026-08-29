@@ -96,6 +96,7 @@ public final class TripCancellationController {
                 host.runOnUiThread(() -> {
                     DriverRequestGate.leave(gate);
                     host.tripSetLoading(false);
+                    DriverMessageUnreadRepository.clearOrder(host, host.tripOrderId());
                     host.tripClearActiveOrder();
                     new AlertDialog.Builder(host)
                             .setTitle("Order Dibatalkan")

@@ -53,6 +53,43 @@ public final class DriverMessageUnreadRepository {
         }
     }
 
+    /** Remove unread state for an order that is no longer active. */
+    public static void clearOrder(Context context, String orderId) {
+        if (context == null) return;
+        String order = clean(orderId);
+        if (order.isEmpty()) return;
+        try { prefs(context).edit().remove(ORDER_PREFIX + order).apply(); }
+        catch (Throwable t) { TransivaDiagnostics.error(context, "message", "UNREAD_ORDER_CLEAR_FAILED", t); }
+    }
+
+    /**
+     * Dashboard is authoritative for currently active orders. This removes badge
+     * counts belonging to cancelled/finished/expired orders so the main Pesan
+     * item can never keep a ghost number such as (3).
+     */
+    public static boolean retainOnlyActiveOrders(Context context, java.util.Set<String> activeOrderIds) {
+        if (context == null) return false;
+        java.util.Set<String> active = new java.util.HashSet<>();
+        if (activeOrderIds != null) for (String id : activeOrderIds) {
+            String clean = clean(id); if (!clean.isEmpty()) active.add(clean);
+        }
+        try {
+            SharedPreferences p = prefs(context);
+            SharedPreferences.Editor e = p.edit();
+            boolean changed = false;
+            for (String key : p.getAll().keySet()) {
+                if (!key.startsWith(ORDER_PREFIX)) continue;
+                String id = key.substring(ORDER_PREFIX.length());
+                if (!active.contains(id)) { e.remove(key); changed = true; }
+            }
+            if (changed) e.apply();
+            return changed;
+        } catch (Throwable t) {
+            TransivaDiagnostics.error(context, "message", "UNREAD_PRUNE_FAILED", t);
+            return false;
+        }
+    }
+
     public static int unreadCount(Context context, String orderId, String roomId) {
         if (context == null) return 0;
         String order = clean(orderId);

@@ -278,6 +278,14 @@ public class DriverChatActivity extends Activity {
                 }
 
                 main.post(() -> {
+                    java.util.Set<String> activeIds = new java.util.HashSet<>();
+                    for (JSONObject item : fresh) {
+                        boolean ended = item.optBoolean("is_history", false)
+                                || DriverMessageStatus.isEnded(item.optString("status", ""));
+                        String oid = first(item.optString("order_id"), item.optString("id"));
+                        if (!ended && !clean(oid).isEmpty()) activeIds.add(clean(oid));
+                    }
+                    DriverMessageUnreadRepository.retainOnlyActiveOrders(this, activeIds);
                     conversations.clear();
                     conversations.addAll(fresh);
                     loading = false;
