@@ -214,14 +214,17 @@ public class DriverSettingsActivity extends Activity {
         LinearLayout updateLabels = new LinearLayout(this);
         updateLabels.setOrientation(LinearLayout.VERTICAL);
         updateLabels.addView(text("Cek Pembaruan Aplikasi", 15, "#0B3A78", true));
-        updateLabels.addView(text("App " + AppUpdateClient.installedVersionName(this) + " • Resource v" + ResourceUpdateManager.activeVersion(this), 11, "#64748B", false));
+        updateLabels.addView(text("App " + AppVersionInfo.installedVersionName(this) + " • Resource v" + ResourceUpdateManager.activeVersion(this), 11, "#64748B", false));
         updateRow.addView(updateLabels, new LinearLayout.LayoutParams(0, -2, 1));
         TextView updateArrow = text("›", 30, "#0B7CFF", true);
         updateRow.addView(updateArrow);
         updateRow.setOnClickListener(v -> {
-            Intent intent = new Intent(this, UpdateDownloadActivity.class);
-            intent.putExtra(UpdateDownloadActivity.EXTRA_ROLE, "driver");
-            startActivity(intent);
+            String packageName = getPackageName();
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + packageName)));
+            } catch (Exception ignored) {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=" + packageName)));
+            }
         });
         updateCard.addView(updateRow);
         root.addView(updateCard);

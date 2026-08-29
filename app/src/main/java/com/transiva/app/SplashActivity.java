@@ -18,11 +18,10 @@ import android.widget.TextView;
 
 import java.util.Locale;
 
-/** Splash + security/APK gate + MLBB-style resource update screen. */
+/** Splash + security gate + MLBB-style resource update screen. APK update dikelola Google Play. */
 public class SplashActivity extends Activity {
     private boolean routed;
     private boolean checking;
-    private boolean updateChecking;
     private boolean resourceChecking;
     private static final int SPLASH_DELAY = 650;
 
@@ -119,13 +118,13 @@ public class SplashActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
-        if (!routed && !checking && !updateChecking && !resourceChecking && statusText != null) {
+        if (!routed && !checking && !resourceChecking && statusText != null) {
             new Handler(Looper.getMainLooper()).postDelayed(this::runSecurityCheck, 250L);
         }
     }
 
     private void runSecurityCheck() {
-        if (routed || checking || updateChecking || resourceChecking || isFinishing() || isDestroyed()) return;
+        if (routed || checking || resourceChecking || isFinishing() || isDestroyed()) return;
         checking = true;
         setStage("Menyiapkan Transiva Driver", "Memeriksa keamanan aplikasi...", "", false, 0);
 
@@ -155,37 +154,9 @@ public class SplashActivity extends Activity {
     }
 
     private void checkAppUpdate() {
-        if (routed || updateChecking || resourceChecking || isFinishing() || isDestroyed()) return;
-        updateChecking = true;
-        setStage("Menyiapkan Transiva Driver", "Memeriksa versi aplikasi...", "", false, 0);
-
-        AppUpdateInfo cached = AppUpdateStore.cachedInfo(this);
-        int current = currentVersion();
-        if (cached != null && cached.isForceRequired(current)) { updateChecking = false; openForcedUpdate(); return; }
-
-        AppUpdateClient.check(this, new AppUpdateClient.Callback() {
-            @Override public void onResult(AppUpdateInfo info, boolean available) {
-                runOnUiThread(() -> {
-                    updateChecking = false;
-                    if (isFinishing() || isDestroyed() || routed) return;
-                    int installed = currentVersion();
-                    if (info.isForceRequired(installed)) { openForcedUpdate(); return; }
-                    if (available) {
-                        try { AppUpdateDownloadManager.ensureDownload(SplashActivity.this, info); } catch (Exception ignored) {}
-                    }
-                    checkResourceUpdate();
-                });
-            }
-            @Override public void onError(String message) {
-                runOnUiThread(() -> {
-                    updateChecking = false;
-                    if (isFinishing() || isDestroyed() || routed) return;
-                    AppUpdateInfo old = AppUpdateStore.cachedInfo(SplashActivity.this);
-                    if (old != null && old.isForceRequired(currentVersion())) openForcedUpdate();
-                    else checkResourceUpdate();
-                });
-            }
-        });
+        // Build Google Play tidak boleh mengunduh/memasang APK sendiri.
+        // Update binary aplikasi sepenuhnya dikelola Google Play; resource ZIP tetap diperiksa di sini.
+        checkResourceUpdate();
     }
 
     private void checkResourceUpdate() {
@@ -241,18 +212,7 @@ public class SplashActivity extends Activity {
         versionText.setText("App " + versionName() + "  •  Resource " + ResourceUpdateManager.activeVersion(this));
     }
 
-    private void openForcedUpdate() {
-        if (routed) return;
-        routed = true;
-        Intent i = new Intent(this, UpdateDownloadActivity.class);
-        i.putExtra(UpdateDownloadActivity.EXTRA_ROLE, "driver");
-        i.putExtra(UpdateDownloadActivity.EXTRA_FORCE, true);
-        i.putExtra(UpdateDownloadActivity.EXTRA_AUTO_START, true);
-        i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        startActivity(i); finish();
-    }
-
-    private int currentVersion() { try { return AppUpdateClient.installedVersionCode(this); } catch (Exception ignored) { return 0; } }
+    private int currentVersion() { return AppVersionInfo.installedVersionCode(this); }
     private String versionName() { try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception e) { return "-"; } }
 
     private void routeNext() {

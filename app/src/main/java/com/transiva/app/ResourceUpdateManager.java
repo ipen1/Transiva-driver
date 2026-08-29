@@ -80,7 +80,7 @@ public final class ResourceUpdateManager {
 
     private static void execute(Context app, Listener l) throws Exception {
         emit(l, Stage.CHECKING, 0, 0, 0, 0, "Memeriksa data terbaru...");
-        int installed = AppUpdateClient.installedVersionCode(app);
+        int installed = AppVersionInfo.installedVersionCode(app);
         int currentResource = activeVersion(app);
         ManifestInfo m = fetchManifest(installed, currentResource);
         if (m == null || m.version <= currentResource || m.version <= 0 || installed < m.minAppVersionCode) {

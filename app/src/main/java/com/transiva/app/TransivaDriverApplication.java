@@ -43,7 +43,6 @@ public class TransivaDriverApplication extends Application implements Applicatio
             MockLocationGuard.enforce(activity);
             RootSecurityGuard.enforce(activity);
         }
-        AppUpdateRuntimeGate.onActivityResumed(activity);
         DriverBubbleController.onActivityResumed(activity);
         // Tombol Driver Lounge (chat global) adalah kontrol UI terpisah dari Messenger-style overlay.
         // Jangan sembunyikan tombol kiri hanya karena izin overlay aktif. DriverGlobalChatBubble.attach()
