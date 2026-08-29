@@ -16,6 +16,7 @@ import com.transiva.app.DriverChatActivity;
 import com.transiva.app.DriverDashboardActivity;
 import com.transiva.app.DriverEarningsActivity;
 import com.transiva.app.DriverProfileActivity;
+import com.transiva.app.DriverMessageUnreadRepository;
 
 /**
  * Satu-satunya sumber bottom navigation untuk seluruh halaman utama driver.
@@ -113,7 +114,12 @@ public final class DriverBottomNavigation {
         root.addView(icon, new LinearLayout.LayoutParams(dp(activity, 22), dp(activity, 22)));
 
         TextView title = new TextView(activity);
-        title.setText(label);
+        if (item == ActiveItem.CHAT) {
+            int unread = DriverMessageUnreadRepository.totalUnread(activity);
+            title.setText(unread > 0 ? label + " • " + unread : label);
+        } else {
+            title.setText(label);
+        }
         title.setTextSize(9f);
         title.setGravity(Gravity.CENTER);
         title.setIncludeFontPadding(false);
