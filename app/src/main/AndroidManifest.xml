@@ -81,6 +81,12 @@
             android:foregroundServiceType="location|dataSync" />
 
         <service
+            android:name=".DriverBubbleOverlayService"
+            android:enabled="true"
+            android:exported="false"
+            android:stopWithTask="false" />
+
+        <service
             android:name=".LocationService"
             android:enabled="true"
             android:exported="false"
