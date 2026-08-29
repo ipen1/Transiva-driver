@@ -2,7 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
@@ -149,7 +148,6 @@
         <activity android:name=".PinActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
         <activity android:name=".ChangePinActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".DriverAccountSecurityActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize" />
-        <activity android:name=".UpdateDownloadActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
 
         <activity android:name=".DriverEmergencyActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".DriverLocationActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
