@@ -75,6 +75,21 @@ public final class DriverBottomNavigation {
         return navigation;
     }
 
+    /** Refresh only the Pesan label without rebuilding the whole navigation bar. */
+    public static void refreshUnread(Activity activity, View navigationView) {
+        if (!(navigationView instanceof LinearLayout) || activity == null) return;
+        try {
+            LinearLayout navigation = (LinearLayout) navigationView;
+            if (navigation.getChildCount() <= 2) return;
+            View chat = navigation.getChildAt(2);
+            if (!(chat instanceof LinearLayout)) return;
+            LinearLayout root = (LinearLayout) chat;
+            if (root.getChildCount() <= 1 || !(root.getChildAt(1) instanceof TextView)) return;
+            int unread = DriverMessageUnreadRepository.totalUnread(activity);
+            ((TextView) root.getChildAt(1)).setText(unread > 0 ? "Pesan • " + unread : "Pesan");
+        } catch (Throwable ignored) { }
+    }
+
     private static void add(LinearLayout navigation, View item) {
         navigation.addView(item, new LinearLayout.LayoutParams(0, -1, 1f));
     }
