@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.os.SystemClock;
 
 import com.transiva.app.R;
+import com.transiva.app.DevicePerformanceProfile;
 
 /**
  * Transisi premium untuk lima halaman utama driver.
@@ -59,15 +60,20 @@ public final class DriverPageTransition {
         );
 
         activity.startActivity(intent);
-
-        activity.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+        if (!DevicePerformanceProfile.get(activity).reduceMapMotion) {
+            activity.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+        } else {
+            activity.overridePendingTransition(0, 0);
+        }
     }
 
     public static void animateResume(Activity activity, android.view.View root) {
         if (activity == null || root == null) return;
+        DevicePerformanceProfile perf = DevicePerformanceProfile.get(activity);
+        if (perf.reduceMapMotion) { root.setAlpha(1f); root.setTranslationY(0f); return; }
         root.setAlpha(0.96f);
         root.setTranslationY(Math.round(5 * activity.getResources().getDisplayMetrics().density));
-        root.animate().alpha(1f).translationY(0f).setDuration(180L)
+        root.animate().alpha(1f).translationY(0f).setDuration(perf.targetFps >= 60 ? 180L : 130L)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
     }
 }

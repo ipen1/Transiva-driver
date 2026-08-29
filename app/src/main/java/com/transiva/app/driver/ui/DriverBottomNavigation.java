@@ -17,6 +17,7 @@ import com.transiva.app.DriverDashboardActivity;
 import com.transiva.app.DriverEarningsActivity;
 import com.transiva.app.DriverProfileActivity;
 import com.transiva.app.DriverMessageUnreadRepository;
+import com.transiva.app.DevicePerformanceProfile;
 
 /**
  * Satu-satunya sumber bottom navigation untuk seluruh halaman utama driver.
@@ -58,15 +59,18 @@ public final class DriverBottomNavigation {
         add(navigation, navItem(activity, "Akun", "ic_nav_profile",
                 ActiveItem.PROFILE, activeItem, DriverProfileActivity.class));
 
-        // Animasi masuk dibuat terpusat agar seluruh halaman driver konsisten.
-        navigation.setAlpha(0f);
-        navigation.setTranslationY(dp(activity, 10));
-        navigation.animate()
-                .alpha(1f)
-                .translationY(0f)
-                .setDuration(220L)
-                .setInterpolator(new DecelerateInterpolator(1.8f))
-                .start();
+        // LOW mode benar-benar menekan animasi UI untuk mengurangi render/GPU wakeups.
+        DevicePerformanceProfile perf = DevicePerformanceProfile.get(activity);
+        if (perf.reduceMapMotion) {
+            navigation.setAlpha(1f);
+            navigation.setTranslationY(0f);
+        } else {
+            navigation.setAlpha(0f);
+            navigation.setTranslationY(dp(activity, 10));
+            navigation.animate().alpha(1f).translationY(0f)
+                    .setDuration(perf.targetFps >= 60 ? 220L : 150L)
+                    .setInterpolator(new DecelerateInterpolator(1.8f)).start();
+        }
 
         return navigation;
     }
@@ -132,24 +136,15 @@ public final class DriverBottomNavigation {
 
         if (!active) {
             root.setOnClickListener(view -> {
-                // Efek tombol ditekan: mengecil cepat lalu memantul lembut sebelum pindah halaman.
-                view.animate()
-                        .scaleX(0.90f)
-                        .scaleY(0.90f)
-                        .setDuration(70L)
-                        .withEndAction(() -> view.animate()
-                                .scaleX(1f)
-                                .scaleY(1f)
-                                .setDuration(110L)
+                if (DevicePerformanceProfile.get(activity).reduceMapMotion) {
+                    DriverPageTransition.open(activity, target, pageIndex(activeItem), pageIndex(item));
+                    return;
+                }
+                view.animate().scaleX(0.90f).scaleY(0.90f).setDuration(70L)
+                        .withEndAction(() -> view.animate().scaleX(1f).scaleY(1f).setDuration(110L)
                                 .setInterpolator(new DecelerateInterpolator(1.7f))
-                                .withEndAction(() -> DriverPageTransition.open(
-                                        activity,
-                                        target,
-                                        pageIndex(activeItem),
-                                        pageIndex(item)
-                                ))
-                                .start())
-                        .start();
+                                .withEndAction(() -> DriverPageTransition.open(activity, target, pageIndex(activeItem), pageIndex(item)))
+                                .start()).start();
             });
         }
 
