@@ -22,6 +22,7 @@ import android.util.Rational;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import org.json.JSONArray;
@@ -123,6 +124,9 @@ public class DriverNavigationActivity extends Activity {
     private TextView routeBadge;
     private TextView instructionBadge;
     private TextView speedBadge;
+    private TextView messageButton;
+    private TextView callButton;
+    private NavigationCommunicationController communicationController;
     private TextView backButton;
     private TextView fallbackButton;
     private FrameLayout navigationRoot;
@@ -428,17 +432,35 @@ public class DriverNavigationActivity extends Activity {
         instructionLp.topMargin = dp(86);
         page.addView(instructionBadge, instructionLp);
 
+        LinearLayout bottomActions = new LinearLayout(this);
+        bottomActions.setOrientation(LinearLayout.HORIZONTAL);
+        bottomActions.setGravity(Gravity.CENTER_VERTICAL);
+
         speedBadge = new TextView(this);
         speedBadge.setText("0 km/j\nRata-rata 0 km/j");
         speedBadge.setTextColor(Color.WHITE);
         speedBadge.setTextSize(16);
         speedBadge.setPadding(dp(16), dp(10), dp(16), dp(10));
         speedBadge.setBackground(roundRect(Color.parseColor("#E6071426"), 22));
-        FrameLayout.LayoutParams speedLp = new FrameLayout.LayoutParams(-2, -2);
-        speedLp.leftMargin = dp(18);
-        speedLp.bottomMargin = dp(28);
-        speedLp.gravity = Gravity.BOTTOM | Gravity.LEFT;
-        page.addView(speedBadge, speedLp);
+        bottomActions.addView(speedBadge, new LinearLayout.LayoutParams(0, dp(58), 1.25f));
+
+        messageButton = new TextView(this);
+        LinearLayout.LayoutParams msgLp = new LinearLayout.LayoutParams(0, dp(52), 1f);
+        msgLp.setMargins(dp(8), 0, 0, 0);
+        bottomActions.addView(messageButton, msgLp);
+
+        callButton = new TextView(this);
+        LinearLayout.LayoutParams callLp = new LinearLayout.LayoutParams(0, dp(52), 0.9f);
+        callLp.setMargins(dp(8), 0, 0, 0);
+        bottomActions.addView(callButton, callLp);
+
+        FrameLayout.LayoutParams bottomLp = new FrameLayout.LayoutParams(-1, dp(62));
+        bottomLp.leftMargin = dp(18);
+        bottomLp.rightMargin = dp(18);
+        bottomLp.bottomMargin = dp(24);
+        bottomLp.gravity = Gravity.BOTTOM;
+        page.addView(bottomActions, bottomLp);
+        communicationController = new NavigationCommunicationController(this, order, messageButton, callButton);
 
         TextView attribution = new TextView(this);
         attribution.setText("© OpenStreetMap contributors");
@@ -1742,6 +1764,7 @@ public class DriverNavigationActivity extends Activity {
 
     @Override protected void onStart() {
         super.onStart(); activityStarted = true; if (mapController != null) mapController.onStart();
+        if (communicationController != null) communicationController.onStart();
     }
 
     @Override protected void onResume() {
@@ -1797,6 +1820,7 @@ public class DriverNavigationActivity extends Activity {
         if (backButton != null) backButton.setVisibility(isInPictureInPictureMode ? View.GONE : View.VISIBLE);
         if (routeBadge != null) routeBadge.setVisibility(isInPictureInPictureMode ? View.GONE : View.VISIBLE);
         if (speedBadge != null) speedBadge.setVisibility(isInPictureInPictureMode ? View.GONE : View.VISIBLE);
+        if (communicationController != null) communicationController.onPictureInPictureModeChanged(isInPictureInPictureMode);
         if (instructionBadge != null) {
             instructionBadge.setVisibility(isInPictureInPictureMode ? View.GONE : View.VISIBLE);
             instructionBadge.setTextSize(15);
@@ -1831,7 +1855,11 @@ public class DriverNavigationActivity extends Activity {
     @Override protected void onStop() {
         activityStarted = false;
         boolean pip = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && isInPictureInPictureMode();
-        if (!pip) { stopLocationWatch(); if (mapController != null) mapController.onStop(); }
+        if (!pip) {
+            stopLocationWatch();
+            if (mapController != null) mapController.onStop();
+            if (communicationController != null) communicationController.onStop();
+        }
         super.onStop();
     }
 
@@ -1852,6 +1880,7 @@ public class DriverNavigationActivity extends Activity {
         main.removeCallbacks(routeRetryTick);
         main.removeCallbacksAndMessages(null);
         routeExecutor.shutdownNow();
+        if (communicationController != null) communicationController.onStop();
         if (mapController != null) mapController.onDestroy();
         super.onDestroy();
     }

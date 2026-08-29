@@ -222,14 +222,29 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                 ""
         );
 
+        // Persist customer-chat unread state so navigation can recover the indicator
+        // even if it was briefly covered by the call screen/backgrounded. Merchant/global
+        // chat must not light the customer-message action.
+        if (isChat(type) && !isMerchantDriverChat(type, data) && !orderId.isEmpty()) {
+            try {
+                getSharedPreferences("transiva", MODE_PRIVATE).edit()
+                        .putBoolean("nav_customer_unread_order_" + orderId, true)
+                        .putBoolean(roomId.isEmpty() ? "nav_customer_unread_room_none" : "nav_customer_unread_room_" + roomId, true)
+                        .apply();
+            } catch (Throwable ignored) {
+                TransivaDiagnostics.error(this, "fcm", "NAV_CHAT_UNREAD_PERSIST_FAILED", ignored);
+            }
+        }
+
         // FCM adalah jalur utama real-time. Saat dashboard sedang terbuka,
         // kirim sinyal lokal agar data langsung refresh tanpa menunggu polling berikutnya.
-        if (isDriverRealtimeType(type)) {
+        if (isDriverRealtimeType(type) || isChat(type)) {
             try {
                 Intent changed = new Intent(ACTION_DRIVER_DATA_CHANGED);
                 changed.setPackage(getPackageName());
                 changed.putExtra("type", type);
                 changed.putExtra("order_id", orderId);
+                changed.putExtra("room_id", roomId);
                 sendBroadcast(changed);
             } catch (Throwable ignored) {
                 // Push tetap diproses walau refresh lokal gagal.

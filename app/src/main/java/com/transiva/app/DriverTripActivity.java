@@ -83,7 +83,7 @@ public class DriverTripActivity extends Activity {
     private Marker driverMarker, pickupMarker, deliveryMarker;
     private Polyline pickupPolyline, deliveryPolyline;
     private SlideActionView arrivedPickupBtn, startDeliveryBtn, arrivedDeliveryBtn, finishBtn;
-    private Button updatePriceBtn;
+    private Button updatePriceBtn, cancelOrderBtn;
     private JSONObject order;
     private String driverUsername = "";
     private String driverType = "motor";
@@ -502,6 +502,9 @@ public class DriverTripActivity extends Activity {
         arrivedDeliveryBtn = slideAction("🏁 Geser • Tiba di Pengantaran", () -> updateStatus("arrived_delivery")); c.addView(arrivedDeliveryBtn, slideLp(8));
         finishBtn = slideAction("✅ Geser • Selesaikan Order", () -> { if (isPickupOrder()) showPickupOtpDialog(); else updateStatus("finished"); }); c.addView(finishBtn, slideLp(8));
         updatePriceBtn = outline("💰 Update Total"); updatePriceBtn.setOnClickListener(v -> showUpdatePriceDialog()); c.addView(updatePriceBtn, btnLp(8));
+        cancelOrderBtn = dangerOutlineButton("Batalkan Order");
+        cancelOrderBtn.setOnClickListener(v -> showCancelOrderDialog());
+        c.addView(cancelOrderBtn, btnLp(8));
 
         LinearLayout quick = new LinearLayout(this); quick.setOrientation(LinearLayout.HORIZONTAL);
         Button chat = primary("💬 Chat"); chat.setOnClickListener(v -> openChat()); quick.addView(chat, new LinearLayout.LayoutParams(0, dp(50), 1));
@@ -854,6 +857,8 @@ public class DriverTripActivity extends Activity {
         hideAction(arrivedDeliveryBtn);
         hideAction(finishBtn);
         hideAction(updatePriceBtn);
+        hideAction(cancelOrderBtn);
+        if (DriverOrderCancellationPolicy.canCancel(st)) showAction(cancelOrderBtn, true);
         if(statusBadge != null) statusBadge.setText(statusLabel(st));
 
         if(st.equals("taken")){
@@ -1063,6 +1068,108 @@ public class DriverTripActivity extends Activity {
         String p = first(order == null ? "" : order.optString("payment_method"), "cash").toLowerCase(Locale.US);
         return p.equals("balance") || p.contains("transpay") || p.contains("transiva_pay") || p.equals("wallet") || p.equals("saldo");
     }
+    private Button dangerOutlineButton(String label) {
+        Button button = new Button(this);
+        button.setText(label);
+        button.setAllCaps(false);
+        button.setTextSize(15);
+        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        button.setTextColor(Color.parseColor("#DC2626"));
+        button.setBackground(stroke("#FFF7F7", "#EF4444", dp(15), 1));
+        return button;
+    }
+
+    private void showCancelOrderDialog() {
+        if (order == null || !DriverOrderCancellationPolicy.canCancel(status())) {
+            info("Pembatalan", "Order tidak dapat dibatalkan pada status " + statusLabel(status()) + ".");
+            return;
+        }
+        final String[] reasons = DriverOrderCancellationPolicy.reasons();
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("Batalkan order #" + orderId())
+                .setSingleChoiceItems(reasons, -1, null)
+                .setNegativeButton("Kembali", null)
+                .setPositiveButton("Lanjutkan", null)
+                .create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            int selected = dialog.getListView().getCheckedItemPosition();
+            if (selected < 0) { info("Pembatalan", "Silakan pilih alasan pembatalan."); return; }
+            dialog.dismiss();
+            if (selected == reasons.length - 1) showCustomCancelReasonDialog();
+            else confirmCancelOrder(reasons[selected]);
+        }));
+        dialog.show();
+    }
+
+    private void showCustomCancelReasonDialog() {
+        final EditText input = new EditText(this);
+        input.setHint("Tuliskan alasan pembatalan");
+        input.setSingleLine(false);
+        input.setMinLines(3);
+        input.setMaxLines(5);
+        input.setPadding(dp(16), dp(12), dp(16), dp(12));
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("Alasan lainnya")
+                .setMessage("Jelaskan alasan pembatalan order.")
+                .setView(input)
+                .setNegativeButton("Kembali", null)
+                .setPositiveButton("Lanjutkan", null)
+                .create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String reason = input.getText().toString().trim();
+            if (reason.length() < 5) { input.setError("Alasan minimal 5 karakter"); input.requestFocus(); return; }
+            dialog.dismiss();
+            confirmCancelOrder(reason);
+        }));
+        dialog.show();
+    }
+
+    private void confirmCancelOrder(String reason) {
+        new AlertDialog.Builder(this)
+                .setTitle("Konfirmasi pembatalan")
+                .setMessage("Order akan dilepas dan ditawarkan kepada driver lain.\n\nAlasan: " + reason)
+                .setNegativeButton("Tidak", null)
+                .setPositiveButton("Ya, Batalkan", (d, w) -> performCancelOrder(reason))
+                .show();
+    }
+
+    private void performCancelOrder(String reason) {
+        final String gate = "cancel:" + orderId();
+        if (!DriverRequestGate.enter(gate)) return;
+        setLoading(true);
+        if (cancelOrderBtn != null) cancelOrderBtn.setEnabled(false);
+        DriverNetworkExecutor.execute(() -> {
+            try {
+                JSONObject body = new JSONObject();
+                body.put("order_id", orderId());
+                body.put("source", first(order.optString("source"), order.optString("_transiva_table"), isPickupOrder() ? "pickup_orders" : "orders"));
+                body.put("current_status", first(order.optString("status"), status()));
+                body.put("reason", reason);
+                JSONObject result = postJson(BASE_URL + "driver_cancel_order_native.php", body);
+                String message = first(result.optString("message"), "Order berhasil dibatalkan.");
+                mainHandler.post(() -> {
+                    DriverRequestGate.leave(gate);
+                    setLoading(false);
+                    clearActiveOrder();
+                    new AlertDialog.Builder(this)
+                            .setTitle("Order Dibatalkan")
+                            .setMessage(message)
+                            .setCancelable(false)
+                            .setPositiveButton("Kembali ke Beranda", (x, y) -> finish())
+                            .show();
+                });
+            } catch (Exception e) {
+                TransivaDiagnostics.error(this, "order", "TRIP_CANCEL_ORDER_FAILED", e);
+                mainHandler.post(() -> {
+                    DriverRequestGate.leave(gate);
+                    setLoading(false);
+                    if (cancelOrderBtn != null) cancelOrderBtn.setEnabled(true);
+                    info("Gagal Membatalkan", "Koneksi/server bermasalah. Order tidak diubah.");
+                });
+            }
+        });
+    }
+
     private void showUpdatePriceDialog(){
         if(order == null) return;
         final EditText input = new EditText(this); input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER); input.setHint("Total baru"); input.setText(String.valueOf((long)optDouble("price","fare","total")));

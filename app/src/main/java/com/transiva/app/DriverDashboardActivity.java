@@ -1256,12 +1256,7 @@ public class DriverDashboardActivity extends Activity
     }
 
     private boolean canDriverCancel(String status) {
-        String value = normalizeOrderStatus(status);
-
-        return value.equals("taken")
-                || value.equals("driver_accepted")
-                || value.equals("accepted")
-                || value.equals("arrived_pickup");
+        return DriverOrderCancellationPolicy.canCancel(status);
     }
 
     private void showCancelOrderDialog(DriverOrder order) {
@@ -1273,14 +1268,7 @@ public class DriverDashboardActivity extends Activity
             return;
         }
 
-        final String[] reasons = new String[]{
-                "Kendaraan bermasalah",
-                "Kondisi darurat",
-                "Tidak dapat menemukan titik penjemputan",
-                "Customer tidak dapat dihubungi",
-                "Order tidak sesuai",
-                "Alasan lainnya"
-        };
+        final String[] reasons = DriverOrderCancellationPolicy.reasons();
 
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Batalkan order #" + order.id)
