@@ -168,7 +168,7 @@
             android:exported="false"
             android:screenOrientation="portrait"
             android:supportsPictureInPicture="true"
-            android:configChanges="keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+            android:configChanges="density|fontScale|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
             android:theme="@style/AppTheme" />
         <activity android:name=".DriverChatActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
         <activity android:name=".DriverActivityHistoryActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
