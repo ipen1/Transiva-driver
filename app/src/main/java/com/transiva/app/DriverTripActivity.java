@@ -83,22 +83,19 @@ public class DriverTripActivity extends Activity {
     private Marker driverMarker, pickupMarker, deliveryMarker;
     private Polyline pickupPolyline, deliveryPolyline;
     private SlideActionView arrivedPickupBtn, startDeliveryBtn, arrivedDeliveryBtn, finishBtn;
-    private Button updatePriceBtn, cancelOrderBtn;
+    private Button updatePriceBtn, cancelOrderBtn, customerChatBtn;
+    private TripCancellationController cancellationController;
+    private TripCommunicationController communicationController;
+    private TripLocationController tripLocationController;
     private JSONObject order;
     private String driverUsername = "";
     private String driverType = "motor";
     private String orderKind = "order";
-    private LocationManager locationManager;
-    private LocationListener locationListener;
     private double lastDriverLat = 0, lastDriverLng = 0;
     private double renderedDriverLat = 0, renderedDriverLng = 0;
     private double prevDriverLat = 0, prevDriverLng = 0;
     private boolean updatingStatus = false;
     private boolean mapReady = false;
-    private boolean locationWatchRunning = false;
-    private Location lastAcceptedLocation = null;
-    private long lastAcceptedAt = 0L;
-    private long lastGpsFixAt = 0L;
     private SessionManager session;
     private DriverApiClient api;
     private final SmoothLocationEngine smoothLocation = new SmoothLocationEngine(2500L);
@@ -139,6 +136,12 @@ public class DriverTripActivity extends Activity {
         }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_WINDOW_SETUP_FAILED",e); }
         session = new SessionManager(this);
         api = new DriverApiClient(session);
+        tripLocationController = new TripLocationController(this, new TripLocationController.Callback() {
+            @Override public void onLocation(Location location) { onDriverLocationChanged(location); }
+            @Override public void onPermissionRequired() {
+                requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, 701);
+            }
+        });
         loadSession();
         loadOrder();
         buildBase();
@@ -153,9 +156,9 @@ public class DriverTripActivity extends Activity {
             if(valid(lastDriverLat,lastDriverLng)) requestStableRoute(true);
         }, 250L);
     }
-    @Override protected void onResume(){ super.onResume(); try{ if(mapView!=null) mapView.onResume(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_RESUME_FAILED",e); } if(order != null) startLocationWatch(); }
-    @Override protected void onPause(){ stopLocationWatch(); try{ if(mapView!=null) mapView.onPause(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_PAUSE_FAILED",e); } super.onPause(); }
-    @Override protected void onDestroy(){ stopLocationWatch(); try{ if(mapView != null) mapView.onDestroy(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_DESTROY_FAILED",e); } super.onDestroy(); }
+    @Override protected void onResume(){ super.onResume(); try{ if(mapView!=null) mapView.onResume(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_RESUME_FAILED",e); } if(order != null) startLocationWatch(); if(communicationController!=null) communicationController.onStart(); }
+    @Override protected void onPause(){ if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView!=null) mapView.onPause(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_PAUSE_FAILED",e); } super.onPause(); }
+    @Override protected void onDestroy(){ if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView != null) mapView.onDestroy(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_DESTROY_FAILED",e); } super.onDestroy(); }
     @Override public void onLowMemory(){ super.onLowMemory(); try{ if(mapView!=null) mapView.onLowMemory(); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } }
 
     private void loadSession(){
@@ -503,17 +506,23 @@ public class DriverTripActivity extends Activity {
         finishBtn = slideAction("✅ Geser • Selesaikan Order", () -> { if (isPickupOrder()) showPickupOtpDialog(); else updateStatus("finished"); }); c.addView(finishBtn, slideLp(8));
         updatePriceBtn = outline("💰 Update Total"); updatePriceBtn.setOnClickListener(v -> showUpdatePriceDialog()); c.addView(updatePriceBtn, btnLp(8));
         cancelOrderBtn = dangerOutlineButton("Batalkan Order");
-        cancelOrderBtn.setOnClickListener(v -> showCancelOrderDialog());
+        cancellationController = new TripCancellationController(this, order, session, cancelOrderBtn);
+        cancelOrderBtn.setOnClickListener(v -> cancellationController.show());
         c.addView(cancelOrderBtn, btnLp(8));
 
+        if (communicationController != null) communicationController.onStop();
         LinearLayout quick = new LinearLayout(this); quick.setOrientation(LinearLayout.HORIZONTAL);
-        Button chat = primary("💬 Chat"); chat.setOnClickListener(v -> openChat()); quick.addView(chat, new LinearLayout.LayoutParams(0, dp(50), 1));
-        Button nav = outline("➤ Navigasi"); nav.setOnClickListener(v -> openNativeNavigation(!isDeliveryPhase(status())));
+        customerChatBtn = primary("💬 Chat");
+        communicationController = new TripCommunicationController(this, order, driverUsername, customerChatBtn);
+        communicationController.onStart();
+        customerChatBtn.setOnClickListener(v -> communicationController.openCustomerChat());
+        quick.addView(customerChatBtn, new LinearLayout.LayoutParams(0, dp(50), 1));
+        Button nav = outline("➤ Navigasi"); nav.setOnClickListener(v -> communicationController.openNavigation(!isDeliveryPhase(status()), lastDriverLat, lastDriverLng));
         LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(0, dp(50), 1); np.setMargins(dp(8),0,0,0); quick.addView(nav, np);
         LinearLayout.LayoutParams qp = new LinearLayout.LayoutParams(-1,-2); qp.setMargins(0,dp(10),0,0); c.addView(quick, qp);
         if (isFoodOrder()) {
             Button merchantChat = outline("🏪 Chat Merchant");
-            merchantChat.setOnClickListener(v -> openMerchantChat());
+            merchantChat.setOnClickListener(v -> communicationController.openMerchantChat());
             c.addView(merchantChat, btnLp(8));
         }
         add(c,0,0,0,dp(12));
@@ -658,69 +667,10 @@ public class DriverTripActivity extends Activity {
         }
     }
 
-    private void startLocationWatch(){
-        if(order == null) return;
-        if(Build.VERSION.SDK_INT >= 23 && checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED){ requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, 701); return; }
-        try{
-            locationManager = (LocationManager)getSystemService(LOCATION_SERVICE); if(locationManager == null) return; stopLocationWatch();
-            locationListener = new LocationListener(){ @Override public void onLocationChanged(Location l){ if(l==null)return; onDriverLocationChanged(l); } @Override public void onStatusChanged(String p,int s,Bundle e){} @Override public void onProviderEnabled(String p){} @Override public void onProviderDisabled(String p){} };
-            if(!valid(lastDriverLat, lastDriverLng) && lastAcceptedLocation == null){
-                Location last = getBestLastKnownLocation();
-                if(last != null && isFreshEnough(last)) onDriverLocationChanged(last);
-            }
-            try{ locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 900, 0, locationListener, Looper.getMainLooper()); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
-            try{ locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1400, 0, locationListener, Looper.getMainLooper()); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
-            locationWatchRunning = true;
-        }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
-    }
-    private void stopLocationWatch(){ try{ if(locationManager != null && locationListener != null) locationManager.removeUpdates(locationListener); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } locationWatchRunning = false; locationListener = null; }
-    private Location getBestLastKnownLocation(){
-        Location gps = null, net = null;
-        try{ if(locationManager != null) gps = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
-        try{ if(locationManager != null) net = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
-        if(gps == null) return net;
-        if(net == null) return gps;
-        if(!isFreshEnough(net)) return gps;
-        if(!isFreshEnough(gps)) return net;
-        float ga = gps.hasAccuracy() ? gps.getAccuracy() : 9999f;
-        float na = net.hasAccuracy() ? net.getAccuracy() : 9999f;
-        return ga <= na ? gps : net;
-    }
+    private void startLocationWatch(){ if(order!=null && tripLocationController!=null) tripLocationController.start(); }
+    private void stopLocationWatch(){ if(tripLocationController!=null) tripLocationController.stop(); }
 
-    private boolean isFreshEnough(Location l){
-        if(l == null) return false;
-        if(Build.VERSION.SDK_INT >= 17){
-            long age = android.os.SystemClock.elapsedRealtimeNanos() - l.getElapsedRealtimeNanos();
-            return age <= MAX_LOCATION_AGE_MS * 1000000L;
-        }
-        return System.currentTimeMillis() - l.getTime() <= MAX_LOCATION_AGE_MS;
-    }
 
-    private boolean shouldAcceptLocation(Location l){
-        if(l == null) return false;
-        if(!valid(l.getLatitude(), l.getLongitude())) return false;
-        long now = System.currentTimeMillis();
-        if(LocationManager.NETWORK_PROVIDER.equals(l.getProvider()) && now - lastGpsFixAt < GPS_PRIORITY_MS) return false;
-
-        /*
-         * FIX MARKER DIAM SAAT LOKASI DIGESER:
-         * Versi sebelumnya terlalu ketat menolak lokasi dengan akurasi kasar,
-         * loncatan jauh, atau provider tertentu. Saat testing pakai mock/geser lokasi,
-         * koordinat baru sering ditolak sehingga motor diam.
-         *
-         * Yang perlu ditolak hanya data lama yang datang terlambat dari provider lain,
-         * karena inilah penyebab marker maju lalu balik ke titik awal.
-         */
-        if(lastAcceptedLocation != null){
-            long newTime = l.getTime();
-            long oldTime = lastAcceptedLocation.getTime();
-            if(newTime > 0 && oldTime > 0 && newTime + OUT_OF_ORDER_TOLERANCE_MS < oldTime){
-                return false;
-            }
-        }
-
-        return true;
-    }
 
     private void onDriverLocationChanged(Location l){
         SmoothLocationEngine.Fix fix = smoothLocation.offer(l);
@@ -729,8 +679,6 @@ public class DriverTripActivity extends Activity {
         Location accepted = fix.location;
         double newLat = accepted.getLatitude();
         double newLng = accepted.getLongitude();
-        lastAcceptedLocation = new Location(accepted);
-        lastAcceptedAt = System.currentTimeMillis();
         if(!valid(tripStartLat, tripStartLng)){
             tripStartLat = newLat;
             tripStartLng = newLng;
@@ -1079,96 +1027,9 @@ public class DriverTripActivity extends Activity {
         return button;
     }
 
-    private void showCancelOrderDialog() {
-        if (order == null || !DriverOrderCancellationPolicy.canCancel(status())) {
-            info("Pembatalan", "Order tidak dapat dibatalkan pada status " + statusLabel(status()) + ".");
-            return;
-        }
-        final String[] reasons = DriverOrderCancellationPolicy.reasons();
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Batalkan order #" + orderId())
-                .setSingleChoiceItems(reasons, -1, null)
-                .setNegativeButton("Kembali", null)
-                .setPositiveButton("Lanjutkan", null)
-                .create();
-        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            int selected = dialog.getListView().getCheckedItemPosition();
-            if (selected < 0) { info("Pembatalan", "Silakan pilih alasan pembatalan."); return; }
-            dialog.dismiss();
-            if (selected == reasons.length - 1) showCustomCancelReasonDialog();
-            else confirmCancelOrder(reasons[selected]);
-        }));
-        dialog.show();
-    }
 
-    private void showCustomCancelReasonDialog() {
-        final EditText input = new EditText(this);
-        input.setHint("Tuliskan alasan pembatalan");
-        input.setSingleLine(false);
-        input.setMinLines(3);
-        input.setMaxLines(5);
-        input.setPadding(dp(16), dp(12), dp(16), dp(12));
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Alasan lainnya")
-                .setMessage("Jelaskan alasan pembatalan order.")
-                .setView(input)
-                .setNegativeButton("Kembali", null)
-                .setPositiveButton("Lanjutkan", null)
-                .create();
-        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            String reason = input.getText().toString().trim();
-            if (reason.length() < 5) { input.setError("Alasan minimal 5 karakter"); input.requestFocus(); return; }
-            dialog.dismiss();
-            confirmCancelOrder(reason);
-        }));
-        dialog.show();
-    }
 
-    private void confirmCancelOrder(String reason) {
-        new AlertDialog.Builder(this)
-                .setTitle("Konfirmasi pembatalan")
-                .setMessage("Order akan dilepas dan ditawarkan kepada driver lain.\n\nAlasan: " + reason)
-                .setNegativeButton("Tidak", null)
-                .setPositiveButton("Ya, Batalkan", (d, w) -> performCancelOrder(reason))
-                .show();
-    }
 
-    private void performCancelOrder(String reason) {
-        final String gate = "cancel:" + orderId();
-        if (!DriverRequestGate.enter(gate)) return;
-        setLoading(true);
-        if (cancelOrderBtn != null) cancelOrderBtn.setEnabled(false);
-        DriverNetworkExecutor.execute(() -> {
-            try {
-                JSONObject body = new JSONObject();
-                body.put("order_id", orderId());
-                body.put("source", first(order.optString("source"), order.optString("_transiva_table"), isPickupOrder() ? "pickup_orders" : "orders"));
-                body.put("current_status", first(order.optString("status"), status()));
-                body.put("reason", reason);
-                JSONObject result = postJson(BASE_URL + "driver_cancel_order_native.php", body);
-                String message = first(result.optString("message"), "Order berhasil dibatalkan.");
-                mainHandler.post(() -> {
-                    DriverRequestGate.leave(gate);
-                    setLoading(false);
-                    clearActiveOrder();
-                    new AlertDialog.Builder(this)
-                            .setTitle("Order Dibatalkan")
-                            .setMessage(message)
-                            .setCancelable(false)
-                            .setPositiveButton("Kembali ke Beranda", (x, y) -> finish())
-                            .show();
-                });
-            } catch (Exception e) {
-                TransivaDiagnostics.error(this, "order", "TRIP_CANCEL_ORDER_FAILED", e);
-                mainHandler.post(() -> {
-                    DriverRequestGate.leave(gate);
-                    setLoading(false);
-                    if (cancelOrderBtn != null) cancelOrderBtn.setEnabled(true);
-                    info("Gagal Membatalkan", "Koneksi/server bermasalah. Order tidak diubah.");
-                });
-            }
-        });
-    }
 
     private void showUpdatePriceDialog(){
         if(order == null) return;
@@ -1197,120 +1058,25 @@ public class DriverTripActivity extends Activity {
         return type.contains("food") || type.contains("transfood");
     }
 
-    private void openMerchantChat(){
-        if(order == null || !isFoodOrder()) return;
-        Intent i = new Intent(this, DriverMerchantChatActivity.class);
-        i.putExtra("order_id", orderId());
-        i.putExtra("order_db_id", internalId());
-        i.putExtra("merchant_name", first(order.optString("restaurant_name"), pickupAddress(), "Merchant"));
-        startActivity(i);
-    }
 
-    private void openChat(){
-        try{
-            // Gunakan room_id asli dari server agar identik dengan room yang dibuka
-            // dari menu Pesan. Jangan mengubah underscore/case karena itu dapat
-            // membuat room baru yang berbeda dari customer.
-            String roomId = first(order.optString("room_id"), order.optString("chat_room_id"));
-            if(roomId.isEmpty()) roomId = "ROOM-" + orderId();
 
-            String customerName = first(
-                    order.optString("participant_name"),
-                    order.optString("customer_name"),
-                    order.optString("customer"),
-                    order.optString("username"),
-                    "Customer"
-            );
-            String source = first(
-                    order.optString("source"),
-                    order.optString("_transiva_table"),
-                    isPickupOrder() ? "pickup_orders" : "orders"
-            );
-            String service = first(
-                    order.optString("service_name"),
-                    order.optString("order_type"),
-                    isPickupOrder() ? "TransSend" : "Order"
-            );
+    // Package-private controller bridge: business state remains owned by DriverTripActivity.
+    String tripOrderId(){ return orderId(); }
+    String tripInternalId(){ return internalId(); }
+    String tripStatus(){ return status(); }
+    String tripStatusLabel(String value){ return statusLabel(value); }
+    String tripSource(){ return first(order.optString("source"), order.optString("_transiva_table"), isPickupOrder()?"pickup_orders":"orders"); }
+    String tripPickupAddress(){ return pickupAddress(); }
+    boolean tripIsPickupOrder(){ return isPickupOrder(); }
+    boolean tripIsFoodOrder(){ return isFoodOrder(); }
+    double tripCoord(String a,String b){ return coord(a,b); }
+    boolean tripValid(double lat,double lng){ return valid(lat,lng); }
+    void tripFitNativeOverview(){ fitNativeOverview(); }
+    int tripDp(int value){ return dp(value); }
+    void tripSetLoading(boolean value){ setLoading(value); }
+    void tripClearActiveOrder(){ clearActiveOrder(); }
+    void tripInfo(String title,String message){ info(title,message); }
 
-            getSharedPreferences(PREF_NAME, MODE_PRIVATE).edit()
-                    .putString("active_order_id", orderId())
-                    .putString("active_chat_order_id", orderId())
-                    .putString("active_chat_room_id", roomId)
-                    .putString("active_chat_driver_name", driverUsername)
-                    .putString("active_chat_customer_name", customerName)
-                    .putString("active_chat_order_status", status())
-                    .apply();
-
-            Intent i = new Intent(this, DriverChatRoomActivity.class);
-            i.putExtra("order_id", orderId());
-            i.putExtra("order_db_id", internalId());
-            i.putExtra("id", internalId());
-            i.putExtra("room_id", roomId);
-            i.putExtra("participant_name", customerName);
-            i.putExtra("customer_name", customerName);
-            i.putExtra("order_type", service);
-            i.putExtra("order_status", status());
-            i.putExtra("order_source", source);
-            i.putExtra("source", source);
-            i.putExtra("read_only", false);
-            startActivity(i);
-        }catch(Exception e){
-            info("Chat", "Gagal membuka chat order ini.");
-        }
-    }
-
-    private void openNativeNavigation(boolean pickup){
-        double lat = pickup ? coord("pickup_lat","user_lat") : coord("delivery_lat","destination_lat");
-        double lng = pickup ? coord("pickup_lng","user_lng") : coord("delivery_lng","destination_lng");
-        if(!valid(lat,lng)){ info("Lokasi", "Koordinat belum tersedia."); return; }
-
-        String mode = pickup ? "pickup" : "delivery";
-        try{
-            fitNativeOverview();
-        }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
-
-        try{
-            getSharedPreferences(PREF_NAME, MODE_PRIVATE).edit()
-                    .putString("driver_navigation_order_json", order == null ? "" : order.toString())
-                    .putString("driver_navigation_target", mode)
-                    .putString("driver_navigation_lat", String.valueOf(lat))
-                    .putString("driver_navigation_lng", String.valueOf(lng))
-                    .putString("driver_navigation_driver_lat", String.valueOf(lastDriverLat))
-                    .putString("driver_navigation_driver_lng", String.valueOf(lastDriverLng))
-                    .apply();
-        }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
-
-        // Use the Activity class directly. The driver APK applicationId is
-        // com.transiva.driver, while this Activity intentionally remains in the
-        // Java namespace com.transiva.app. Building the class name from
-        // getPackageName() therefore points to a non-existent Activity and causes
-        // the web fallback below to open instead.
-        Intent nativeNav = new Intent(this, DriverNavigationActivity.class);
-        nativeNav.putExtra("order_json", order == null ? "" : order.toString());
-        nativeNav.putExtra("target", mode);
-        nativeNav.putExtra("target_lat", lat);
-        nativeNav.putExtra("target_lng", lng);
-        nativeNav.putExtra("driver_lat", lastDriverLat);
-        nativeNav.putExtra("driver_lng", lastDriverLng);
-        try{
-            NavigationDiagnostics.event(this, "NAV_OPEN_CLICK", null);
-            startActivity(nativeNav);
-            return;
-        }catch(Throwable openError){
-            NavigationDiagnostics.error(this, "NAV_ACTIVITY_OPEN_FAILED", openError);
-        }
-
-        try{
-            String uri = "google.navigation:q=" + lat + "," + lng + "&mode=d";
-            Intent fallback = new Intent(Intent.ACTION_VIEW, Uri.parse(uri));
-            try { fallback.setPackage("com.google.android.apps.maps"); } catch (Throwable ignored) { TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
-            startActivity(fallback);
-            NavigationDiagnostics.event(this, "NAV_OPEN_FALLBACK", null);
-        }catch(Throwable e){
-            NavigationDiagnostics.error(this, "NAV_OPEN_FALLBACK_FAILED", e);
-            info("Navigasi", pickup ? "Rute diarahkan ke titik penjemputan." : "Rute diarahkan ke titik pengantaran.");
-        }
-    }
     private JSONObject postJson(String urlText, JSONObject payload) throws Exception {
         if (api == null) api = new DriverApiClient(session);
         String endpoint = urlText == null ? "" : urlText.trim();

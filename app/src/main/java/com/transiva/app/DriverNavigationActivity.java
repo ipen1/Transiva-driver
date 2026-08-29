@@ -118,8 +118,6 @@ public class DriverNavigationActivity extends Activity {
     private MapView mapView;
     private MapLibreMap map;
     private Style style;
-    private Marker pickupMarker;
-    private Marker deliveryMarker;
 
     private TextView routeBadge;
     private TextView instructionBadge;
@@ -131,8 +129,6 @@ public class DriverNavigationActivity extends Activity {
     private TextView fallbackButton;
     private FrameLayout navigationRoot;
 
-    private LocationManager locationManager;
-    private LocationListener locationListener;
     private Location lastLocation;
     private Location lastRouteLocation;
     private Location lastSpeedLocation;
@@ -147,6 +143,12 @@ public class DriverNavigationActivity extends Activity {
     private NavigationRuntimeConfig navConfig;
     private NavigationCompatibilityProfile navProfile;
     private NavigationMapController mapController;
+    private NavigationLocationController locationController;
+    private NavigationPipController pipController;
+    private NavigationInstructionController instructionController;
+    private NavigationCameraController cameraController;
+    private NavigationVehicleController vehicleController;
+    private NavigationMarkerController markerController;
 
     private double driverLat;
     private double driverLng;
@@ -186,10 +188,7 @@ public class DriverNavigationActivity extends Activity {
     private static final float POSITION_EASE_ALPHA = 0.16f;
     private static final float BEARING_EASE_ALPHA = 0.10f;
     private static final float CAMERA_BEARING_ALPHA = 0.075f;
-    private double smoothCameraBearing = Double.NaN;
     private double smoothMarkerBearing = Double.NaN;
-    private double smoothCameraZoom = Double.NaN;
-    private double smoothCameraTilt = Double.NaN;
     private String pendingRouteGeoJson = "";
     private double pendingRouteKm;
     private double pendingRouteSeconds;
@@ -272,14 +271,11 @@ public class DriverNavigationActivity extends Activity {
     private double displayLng;
     private boolean displayInitialized;
     private long lastFixRealtimeMs = 0L;
-    private long lastInstructionUiAt = 0L;
     private int lastRenderedRouteIndex = -1;
     private long lastRouteLineUpdateAt = 0L;
     private long lastMapRenderAt = 0L;
     private long lastVisualFrameAt = 0L;
     private long lastSpeedUiAt = 0L;
-    private long lastGpsAcceptedAt = 0L;
-    private float lastGpsAcceptedAccuracy = Float.MAX_VALUE;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -301,12 +297,25 @@ public class DriverNavigationActivity extends Activity {
         applyNavigationResourceConfig();
         navProfile = NavigationCompatibilityProfile.resolve(this, navConfig != null ? navConfig.profile : "auto");
         NavigationDiagnostics.event(this, "NAV_PROFILE_" + navProfile.mode.name(), null);
+        locationController = new NavigationLocationController(this, smoothLocation, new NavigationLocationController.Callback() {
+            @Override public void onSmoothFix(Location raw, SmoothLocationEngine.Fix fix) { handleNavigationLocationFix(raw, fix); }
+            @Override public void onPermissionRequired() {
+                if (routeBadge != null) routeBadge.setText("Aktifkan lokasi untuk memulai navigasi");
+                requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, 801);
+                NavigationDiagnostics.event(DriverNavigationActivity.this, "NAV_LOCATION_PERMISSION_REQUEST", null);
+            }
+        });
+        pipController = new NavigationPipController(this, navProfile);
+        cameraController = new NavigationCameraController(navProfile);
+        vehicleController = new NavigationVehicleController(this, vehicleType);
+        markerController = new NavigationMarkerController(this, order);
         seedLastKnownLocation();
 
         // P0: render a lightweight navigation shell first. Heavy MapLibre startup is
         // deferred until the Activity is already visible, avoiding OEM/GPU startup stalls.
         buildUiShell();
-        configurePictureInPicture();
+        instructionController = new NavigationInstructionController(instructionBadge);
+        if (pipController != null) pipController.configure();
 
         main.postDelayed(() -> initNativeMap(savedInstanceState), 120L);
         main.postDelayed(() -> {
@@ -360,24 +369,11 @@ public class DriverNavigationActivity extends Activity {
     }
 
     private void seedLastKnownLocation() {
-        if (valid(driverLat, driverLng)) return;
-        if (Build.VERSION.SDK_INT >= 23 &&
-                checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            return;
+        if (valid(driverLat, driverLng) || locationController == null) return;
+        Location best = locationController.bestLastKnown();
+        if (best != null && valid(best.getLatitude(), best.getLongitude())) {
+            driverLat = best.getLatitude(); driverLng = best.getLongitude(); lastLocation = new Location(best);
         }
-        try {
-            LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE);
-            Location gps = null, net = null;
-            try { if (lm != null) gps = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER); } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
-            try { if (lm != null) net = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER); } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
-            Location best = gps != null ? gps : net;
-            if (gps != null && net != null && net.getTime() > gps.getTime()) best = net;
-            if (best != null && valid(best.getLatitude(), best.getLongitude())) {
-                driverLat = best.getLatitude();
-                driverLng = best.getLongitude();
-                lastLocation = new Location(best);
-            }
-        } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
     }
 
     private void buildUiShell() {
@@ -599,180 +595,28 @@ public class DriverNavigationActivity extends Activity {
     }
 
     private void installVehicleLayer() {
-        if (style == null) return;
-        try {
-            if (style.getSource(VEHICLE_SOURCE) == null) {
-                style.addSource(new GeoJsonSource(VEHICLE_SOURCE, emptyFeatureCollection()));
-            }
-
-            addVehicleStyleImage(VEHICLE_MOTOR_IMAGE, "map_motor_top",
-                    android.R.drawable.ic_menu_directions);
-            addVehicleStyleImage(VEHICLE_CAR_IMAGE, "map_car_top",
-                    android.R.drawable.ic_menu_directions);
-
-            if (style.getLayer(VEHICLE_LAYER) == null) {
-                String imageName = vehicleType.equals("car") ? VEHICLE_CAR_IMAGE : VEHICLE_MOTOR_IMAGE;
-                SymbolLayer layer = new SymbolLayer(VEHICLE_LAYER, VEHICLE_SOURCE).withProperties(
-                        iconImage(imageName),
-                        iconSize(1.0f),
-                        iconAllowOverlap(true),
-                        iconIgnorePlacement(true),
-                        // The navigation camera is heading-up, so keeping the vehicle
-                        // viewport-aligned makes the nose remain naturally forward.
-                        iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT),
-                        iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT)
-                );
-                // addLayer() appends to the top of the style stack. That is deliberate:
-                // route glow/casing/line and basemap paint beneath the vehicle.
-                style.addLayer(layer);
-            }
-            updateVehicleSource();
-        } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
-    }
-
-    private void addVehicleStyleImage(String imageName, String drawableName, int fallback) {
-        if (style == null) return;
-        try {
-            Bitmap raw = ResourceUpdateManager.loadBitmapOverride(this, "images/" + drawableName + ".png");
-            if (raw == null) {
-                int id = getResources().getIdentifier(drawableName, "drawable", getPackageName());
-                if (id <= 0) id = fallback;
-                raw = BitmapFactory.decodeResource(getResources(), id);
-            }
-            if (raw == null) return;
-            Bitmap scaled = Bitmap.createScaledBitmap(raw, dp(48), dp(48), true);
-            style.addImage(imageName, scaled);
-        } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
-    }
-
-    private void updateVehicleSource() {
-        if (!styleReady || style == null) return;
+        if (vehicleController == null) vehicleController = new NavigationVehicleController(this, vehicleType);
         double lat = displayInitialized ? displayLat : driverLat;
         double lng = displayInitialized ? displayLng : driverLng;
-        if (!valid(lat, lng)) return;
-        try {
-            JSONObject geometry = new JSONObject();
-            geometry.put("type", "Point");
-            JSONArray coordinate = new JSONArray();
-            coordinate.put(lng);
-            coordinate.put(lat);
-            geometry.put("coordinates", coordinate);
+        vehicleController.install(style, lat, lng);
+    }
 
-            JSONObject feature = new JSONObject();
-            feature.put("type", "Feature");
-            feature.put("properties", new JSONObject());
-            feature.put("geometry", geometry);
 
-            JSONObject collection = new JSONObject();
-            collection.put("type", "FeatureCollection");
-            JSONArray features = new JSONArray();
-            features.put(feature);
-            collection.put("features", features);
-
-            GeoJsonSource source = style.getSourceAs(VEHICLE_SOURCE);
-            if (source != null) source.setGeoJson(collection.toString());
-        } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
+    private void updateVehicleSource() {
+        if (vehicleController == null) return;
+        double lat = displayInitialized ? displayLat : driverLat;
+        double lng = displayInitialized ? displayLng : driverLng;
+        vehicleController.update(lat, lng);
     }
 
     private void installMarkers() {
-        if (map == null) return;
-        IconFactory f = IconFactory.getInstance(this);
-        try {
-            double pLat = coord("pickup_lat", "user_lat");
-            double pLng = coord("pickup_lng", "user_lng");
-            if (valid(pLat, pLng) && pickupMarker == null) {
-                Icon icon = iconFromDrawableScaled(f, "map_pickup_pin",
-                        android.R.drawable.ic_menu_mylocation, dp(34), dp(34));
-                pickupMarker = map.addMarker(new MarkerOptions().position(new LatLng(pLat, pLng)).icon(icon));
-            }
-        } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
-
-        try {
-            double dLat = coord("delivery_lat", "destination_lat");
-            double dLng = coord("delivery_lng", "destination_lng");
-            if (valid(dLat, dLng) && deliveryMarker == null) {
-                Icon icon = iconFromDrawableScaled(f, "map_destination_pin",
-                        android.R.drawable.ic_menu_mylocation, dp(34), dp(34));
-                deliveryMarker = map.addMarker(new MarkerOptions().position(new LatLng(dLat, dLng)).icon(icon));
-            }
-        } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
-
-        // Driver vehicle is rendered by a dedicated SymbolLayer, not a legacy Marker.
-        // Style layers have deterministic Z-order, so the vehicle always stays above
-        // the blue route instead of the route being painted over the motorcycle/car.
+        if (markerController != null) markerController.install(map);
         updateVehicleSource();
     }
 
-    private Icon iconFromDrawable(IconFactory factory, String name, int fallback) {
-        int id = getResources().getIdentifier(name, "drawable", getPackageName());
-        if (id <= 0) id = fallback;
-        Bitmap b = BitmapFactory.decodeResource(getResources(), id);
-        return factory.fromBitmap(b);
-    }
 
-    private Icon iconFromDrawableScaled(IconFactory factory, String name, int fallback,
-                                        int widthPx, int heightPx) {
-        int id = getResources().getIdentifier(name, "drawable", getPackageName());
-        if (id <= 0) id = fallback;
-        Bitmap raw = BitmapFactory.decodeResource(getResources(), id);
-        if (raw == null) return factory.defaultMarker();
-        Bitmap scaled = Bitmap.createScaledBitmap(raw,
-                Math.max(1, widthPx), Math.max(1, heightPx), true);
-        return factory.fromBitmap(scaled);
-    }
 
-    private void startLocationWatch() {
-        if (Build.VERSION.SDK_INT >= 23 &&
-                checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            if (routeBadge != null) routeBadge.setText("Aktifkan lokasi untuk memulai navigasi");
-            requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION}, 801);
-            NavigationDiagnostics.event(this, "NAV_LOCATION_PERMISSION_REQUEST", null);
-            return;
-        }
-        try {
-            locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
-            if (locationManager == null) return;
-            stopLocationWatch();
-
-            locationListener = new LocationListener() {
-                @Override public void onLocationChanged(Location raw) {
-                    if (!shouldAcceptProviderFix(raw)) return;
-                    SmoothLocationEngine.Fix fix = smoothLocation.offer(raw);
-                    if (fix == null) return;
-                    Location l = fix.location;
-                    if (LocationManager.GPS_PROVIDER.equals(raw.getProvider())) {
-                        lastGpsAcceptedAt = SystemClock.elapsedRealtime();
-                        lastGpsAcceptedAccuracy = raw.hasAccuracy() ? raw.getAccuracy() : 50f;
-                    }
-                    lastLocation = new Location(l);
-                    driverLat = l.getLatitude();
-                    driverLng = l.getLongitude();
-                    lastFixRealtimeMs = SystemClock.elapsedRealtime();
-                    lastGpsAccuracyM = l.hasAccuracy() ? Math.max(1f, l.getAccuracy()) : 50f;
-                    updateSpeed(l);
-
-                    if (l.hasBearing() && l.getSpeed() > 1.2f) currentBearing = l.getBearing();
-                    else if (displayInitialized) currentBearing = bearing(displayLat, displayLng, driverLat, driverLng);
-
-                    if (fix.render) updateNativePosition(false);
-                    maybeRefreshRoute(l);
-                }
-                @Override public void onStatusChanged(String provider, int status, Bundle extras) {}
-                @Override public void onProviderEnabled(String provider) {}
-                @Override public void onProviderDisabled(String provider) {}
-            };
-
-            try {
-                locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,
-                        700L, 0f, locationListener, Looper.getMainLooper());
-            } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
-            try {
-                locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
-                        1300L, 0f, locationListener, Looper.getMainLooper());
-            } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
-        } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
-    }
+    private void startLocationWatch() { if (locationController != null) locationController.start(); }
 
     /**
      * Android may deliver GPS and NETWORK fixes almost back-to-back. When a fresh,
@@ -780,32 +624,21 @@ public class DriverNavigationActivity extends Activity {
      * the classic left-right map jump. Prefer GPS for a short confidence window,
      * but immediately allow network fallback when GPS becomes stale or weak.
      */
-    private boolean shouldAcceptProviderFix(Location raw) {
-        if (raw == null) return false;
-        String provider = raw.getProvider();
-        if (LocationManager.GPS_PROVIDER.equals(provider)) return true;
 
-        if (LocationManager.NETWORK_PROVIDER.equals(provider)) {
-            long age = SystemClock.elapsedRealtime() - lastGpsAcceptedAt;
-            float networkAcc = raw.hasAccuracy() ? Math.max(1f, raw.getAccuracy()) : 100f;
-            if (lastGpsAcceptedAt > 0L && age < 5500L && lastGpsAcceptedAccuracy <= 45f) {
-                return false;
-            }
-            if (lastLocation != null && lastLocation.hasAccuracy() && age < 9000L &&
-                    networkAcc > Math.max(55f, lastLocation.getAccuracy() * 1.8f)) {
-                return false;
-            }
-        }
-        return true;
-    }
+    private void stopLocationWatch() { if (locationController != null) locationController.stop(); }
 
-    private void stopLocationWatch() {
-        try {
-            if (locationManager != null && locationListener != null) {
-                locationManager.removeUpdates(locationListener);
-            }
-        } catch (Exception ignored) { TransivaDiagnostics.error(this,"navigation","NON_FATAL_EXCEPTION",ignored); }
-        locationListener = null;
+    private void handleNavigationLocationFix(Location raw, SmoothLocationEngine.Fix fix) {
+        if (fix == null || fix.location == null) return;
+        Location l = fix.location;
+        lastLocation = new Location(l);
+        driverLat = l.getLatitude(); driverLng = l.getLongitude();
+        lastFixRealtimeMs = SystemClock.elapsedRealtime();
+        lastGpsAccuracyM = l.hasAccuracy() ? Math.max(1f, l.getAccuracy()) : 50f;
+        updateSpeed(l);
+        if (l.hasBearing() && l.getSpeed() > 1.2f) currentBearing = l.getBearing();
+        else if (displayInitialized) currentBearing = bearing(displayLat, displayLng, driverLat, driverLng);
+        if (fix.render) updateNativePosition(false);
+        maybeRefreshRoute(l);
     }
 
     /**
@@ -914,58 +747,12 @@ public class DriverNavigationActivity extends Activity {
         double desiredBearing = routePoints.size() >= 2 && Double.isFinite(snappedBearing)
                 ? snappedBearing
                 : (Double.isFinite(currentBearing) ? currentBearing : 0d);
-        smoothCameraBearing = easeBearing(smoothCameraBearing, desiredBearing,
-                immediate ? 1.0f : (navProfile != null ? navProfile.cameraBearingAlpha : 0.065f));
-        double cameraBearing = smoothCameraBearing;
+        boolean pipCamera = pipController != null && pipController.isActive();
+        double cameraBearing = cameraController != null
+                ? cameraController.update(map, lat, lng, desiredBearing, currentSpeedKmh, pipCamera, immediate)
+                : desiredBearing;
         smoothMarkerBearing = easeBearing(smoothMarkerBearing, desiredBearing,
                 immediate ? 1.0f : (navProfile != null ? navProfile.bearingEaseAlpha : (currentSpeedKmh < 5d ? 0.10f : 0.16f)));
-        // MapLibre Marker annotation tidak menyediakan setRotation(float).
-        // Ikon kendaraan tetap menghadap ke atas layar, sedangkan kamera diputar
-        // secara halus mengikuti bearing perjalanan sehingga arah kendaraan tetap selaras.
-        boolean pipCamera = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-                (inPictureInPicture || isInPictureInPictureMode());
-
-        // Speed-aware camera: close and detailed when stopping, progressively wider
-        // when travelling quickly so upcoming turns remain visible.
-        double desiredZoom;
-        double desiredTilt;
-        if (pipCamera) {
-            desiredZoom = 14.8d;
-            desiredTilt = 0d;
-        } else if (currentSpeedKmh < 3d) {
-            desiredZoom = 18.2d;
-            desiredTilt = 34d;
-        } else if (currentSpeedKmh < 25d) {
-            desiredZoom = 17.7d;
-            desiredTilt = 40d;
-        } else if (currentSpeedKmh < 55d) {
-            desiredZoom = 17.0d;
-            desiredTilt = 44d;
-        } else if (currentSpeedKmh < 80d) {
-            desiredZoom = 16.2d;
-            desiredTilt = 47d;
-        } else {
-            desiredZoom = 15.5d;
-            desiredTilt = 49d;
-        }
-        if (navProfile != null) desiredTilt = Math.min(desiredTilt, navProfile.cameraTilt);
-        smoothCameraZoom = Double.isNaN(smoothCameraZoom) ? desiredZoom
-                : smoothCameraZoom + (desiredZoom - smoothCameraZoom) * (immediate ? 1d : 0.035d);
-        smoothCameraTilt = Double.isNaN(smoothCameraTilt) ? desiredTilt
-                : smoothCameraTilt + (desiredTilt - smoothCameraTilt) * (immediate ? 1d : 0.04d);
-
-        CameraPosition cp = new CameraPosition.Builder()
-                .target(new LatLng(lat, lng))
-                .zoom(smoothCameraZoom)
-                .bearing(cameraBearing)
-                .tilt(smoothCameraTilt)
-                .build();
-
-        // Do NOT start a new easeCamera animation every frame. Repeatedly cancelling
-        // animations is the main cause of "maju-berhenti-maju". Position/bearing are
-        // already smoothed above, so direct native camera updates are continuous.
-        map.moveCamera(CameraUpdateFactory.newCameraPosition(cp));
-
         long uiNow = SystemClock.elapsedRealtime();
         if (speedBadge != null && uiNow - lastSpeedUiAt >= 400L) {
             lastSpeedUiAt = uiNow;
@@ -1593,58 +1380,7 @@ public class DriverNavigationActivity extends Activity {
     }
 
     private void updateInstructionBanner(double progressMeters) {
-        if (instructionBadge == null) return;
-        long now = SystemClock.elapsedRealtime();
-        if (now - lastInstructionUiAt < 250L) return;
-        lastInstructionUiAt = now;
-
-        JSONObject next = null;
-        double remaining = Double.MAX_VALUE;
-        for (int i = 0; i < routeManeuvers.length(); i++) {
-            JSONObject m = routeManeuvers.optJSONObject(i);
-            if (m == null) continue;
-            double at = m.optDouble("distance_from_start", -1d);
-            if (at < 0d) continue;
-            double d = at - progressMeters;
-            if (d >= -8d && d < remaining) {
-                remaining = Math.max(0d, d);
-                next = m;
-            }
-        }
-
-        if (next == null) {
-            instructionBadge.setText("↑ Terus ikuti rute");
-            return;
-        }
-
-        String modifier = next.optString("modifier", "").toLowerCase(Locale.US);
-        String type = next.optString("type", "").toLowerCase(Locale.US);
-        String road = next.optString("name", "").trim();
-
-        String arrow = "↑";
-        String action = "Terus lurus";
-        if (modifier.contains("left")) {
-            arrow = "↰";
-            action = "Belok kiri";
-        } else if (modifier.contains("right")) {
-            arrow = "↱";
-            action = "Belok kanan";
-        } else if (modifier.contains("uturn")) {
-            arrow = "↶";
-            action = "Putar balik";
-        } else if (type.contains("arrive")) {
-            arrow = "⚑";
-            action = "Tiba di pengantaran";
-        }
-
-        String distText;
-        if (remaining >= 1000d) distText = String.format(Locale.US, "%.1f km", remaining / 1000d);
-        else if (remaining >= 100d) distText = String.format(Locale.US, "%.0f m", Math.round(remaining / 50d) * 50d);
-        else distText = String.format(Locale.US, "%.0f m", Math.round(remaining / 10d) * 10d);
-
-        String text = arrow + " " + distText + " • " + action;
-        if (!road.isEmpty()) text += "\n" + road;
-        instructionBadge.setText(text);
+        if (instructionController != null) instructionController.update(routeManeuvers, progressMeters);
     }
 
     private String routeGeoJson(String pointsJson) throws Exception {
@@ -1782,33 +1518,8 @@ public class DriverNavigationActivity extends Activity {
         enterNavigationPictureInPicture();
     }
 
-    private void configurePictureInPicture() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || (navProfile != null && !navProfile.allowPip)) return;
-        try {
-            PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder()
-                    .setAspectRatio(new Rational(3, 4));
-            // Android 12+: Home gesture/button enters PiP more smoothly.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                builder.setAutoEnterEnabled(false);
-                builder.setSeamlessResizeEnabled(true);
-            }
-            setPictureInPictureParams(builder.build());
-        } catch (Exception e) { TransivaDiagnostics.error(this,"navigation","PIP_CONFIG_FAILED",e); }
-    }
 
-    private void enterNavigationPictureInPicture() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || isFinishing() || (navProfile != null && !navProfile.allowPip)) return;
-        try {
-            if (isInPictureInPictureMode()) return;
-            PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder()
-                    .setAspectRatio(new Rational(3, 4));
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                builder.setAutoEnterEnabled(false);
-                builder.setSeamlessResizeEnabled(true);
-            }
-            enterPictureInPictureMode(builder.build());
-        } catch (Exception e) { TransivaDiagnostics.error(this,"navigation","PIP_ENTER_FAILED",e); }
-    }
+    private void enterNavigationPictureInPicture() { if (pipController != null) pipController.enter(); }
 
     @Override public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode,
                                                          android.content.res.Configuration newConfig) {
@@ -1833,15 +1544,7 @@ public class DriverNavigationActivity extends Activity {
             // Restore a useful full-screen navigation zoom after expanding PiP.
             double lat = displayInitialized ? displayLat : driverLat;
             double lng = displayInitialized ? displayLng : driverLng;
-            if (valid(lat, lng)) {
-                CameraPosition restored = new CameraPosition.Builder()
-                        .target(new LatLng(lat, lng))
-                        .zoom(17.8d)
-                        .bearing(smoothCameraBearing)
-                        .tilt(navProfile != null ? navProfile.cameraTilt : 42d)
-                        .build();
-                map.moveCamera(CameraUpdateFactory.newCameraPosition(restored));
-            }
+            if (valid(lat, lng) && cameraController != null) cameraController.restore(map, lat, lng);
         }
     }
 

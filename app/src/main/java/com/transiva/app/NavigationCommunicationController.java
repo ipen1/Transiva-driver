@@ -51,7 +51,7 @@ public final class NavigationCommunicationController {
             boolean sameOrder = !orderId.isEmpty() && orderId.equalsIgnoreCase(incomingOrder);
             boolean sameRoom = !roomId.isEmpty() && roomId.equalsIgnoreCase(incomingRoom);
             if (sameOrder || sameRoom) {
-                unread = true;
+                unread = DriverMessageUnreadRepository.isUnread(activity, orderId, roomId);
                 renderMessageState();
                 NavigationDiagnostics.event(activity, "NAV_CUSTOMER_MESSAGE_UNREAD", null);
             }
@@ -73,10 +73,7 @@ public final class NavigationCommunicationController {
         this.source = first(this.order.optString("source"), this.order.optString("_transiva_table"), "orders");
         this.service = first(this.order.optString("service_name"), this.order.optString("order_type"), "Order");
         this.status = first(this.order.optString("status"), "taken");
-        this.unread = activity.getSharedPreferences("transiva", Context.MODE_PRIVATE)
-                .getBoolean("nav_customer_unread_order_" + orderId, false)
-                || (!roomId.isEmpty() && activity.getSharedPreferences("transiva", Context.MODE_PRIVATE)
-                .getBoolean("nav_customer_unread_room_" + roomId, false));
+        this.unread = DriverMessageUnreadRepository.isUnread(activity, orderId, roomId);
         loadResourceConfig();
         bind();
     }
@@ -125,9 +122,8 @@ public final class NavigationCommunicationController {
         try {
             unread = false;
             renderMessageState();
+            DriverMessageUnreadRepository.markRead(activity, orderId, roomId);
             activity.getSharedPreferences("transiva", Context.MODE_PRIVATE).edit()
-                    .putBoolean("nav_customer_unread_order_" + orderId, false)
-                    .putBoolean(roomId.isEmpty() ? "nav_customer_unread_room_none" : "nav_customer_unread_room_" + roomId, false)
                     .putString("active_order_id", orderId)
                     .putString("active_chat_order_id", orderId)
                     .putString("active_chat_room_id", roomId)
@@ -170,7 +166,9 @@ public final class NavigationCommunicationController {
 
     private void renderMessageState() {
         if (messageButton == null) return;
-        messageButton.setText(unread ? messageUnreadLabel : messageLabel);
+        int count = DriverMessageUnreadRepository.unreadCount(activity, orderId, roomId);
+        unread = count > 0;
+        messageButton.setText(unread ? (count > 1 ? messageUnreadLabel + " (" + count + ")" : messageUnreadLabel) : messageLabel);
         messageButton.setTextColor(Color.WHITE);
         messageButton.setTextSize(14);
         messageButton.setTypeface(Typeface.DEFAULT, Typeface.BOLD);

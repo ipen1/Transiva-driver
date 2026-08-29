@@ -141,6 +141,7 @@ public class DriverChatRoomActivity extends Activity {
 
         session = new SessionManager(this);
         readIntent();
+        DriverMessageUnreadRepository.markRead(this, orderId, roomId);
         setContentView(buildScreen());
         DriverAppSettings.apply(this);
         DriverChatNotificationPoller.requestPermission(this);
@@ -1374,6 +1375,7 @@ public class DriverChatRoomActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        DriverMessageUnreadRepository.markRead(this, orderId, roomId);
         chatVisible = true;
         readVisibilityGeneration++;
         focusedSinceElapsedMs = hasWindowFocus()
