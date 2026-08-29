@@ -28,6 +28,13 @@ android {
         }
     }
 
+    // Google Play App Bundle: Play menghasilkan APK per perangkat/ABI, bukan APK universal 100+ MB.
+    bundle {
+        abi { enableSplit = true }
+        density { enableSplit = true }
+        language { enableSplit = true }
+    }
+
     buildTypes {
         debug {
             debuggable true
