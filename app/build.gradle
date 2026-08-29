@@ -14,8 +14,8 @@ android {
         applicationId 'com.transiva.driver'
         minSdk 23
         targetSdk 36
-        versionCode 21
-        versionName '2.8.21'
+        versionCode 22
+        versionName '2.8.22'
     }
 
     signingConfigs {
