@@ -99,7 +99,17 @@ public class DriverGlobalChatActivity extends Activity {
     private void render(JSONArray arr){if(arr==null)return;messages.removeAllViews();refs.clear();for(int i=0;i<arr.length();i++){JSONObject m=arr.optJSONObject(i);if(m==null)continue;int id=m.optInt("id");boolean mine=m.optBoolean("mine");boolean mention=m.optBoolean("mentions_me");String user=m.optString("display_name",m.optString("username","Driver"));String username=m.optString("username","");String text=m.optString("message","");String time=m.optString("created_at","");
             LinearLayout row=new LinearLayout(this);row.setGravity(mine?Gravity.END:Gravity.START);row.setPadding(0,dp(4),0,dp(4));
             LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);card.setPadding(dp(13),dp(10),dp(13),dp(9));card.setBackground(round(mention?"#FFF5D6":(mine?"#DCEEFF":"#FFFFFF"),17));
-            TextView name=t(shortDisplayName(user),12,mention?"#A66300":"#0B5FB8",true);name.setSingleLine(true);name.setMaxEms(10);name.setEllipsize(android.text.TextUtils.TruncateAt.END);name.setMinEms(10);name.setOnClickListener(v->{if(!username.isEmpty())insertMention(username);});card.addView(name);
+            // Nama sudah dipotong manual menjadi maksimal 10 karakter oleh shortDisplayName().
+            // Jangan biarkan lebar bubble mengikuti pesan yang sangat pendek karena itu akan
+            // memaksa nama terpotong untuk kedua kalinya (contoh: "WIRLAN ..." -> "WI...").
+            // Area nama dibuat selebar standar 10 karakter; bubble tetap boleh melebar bila
+            // isi pesan lebih panjang.
+            TextView name=t(shortDisplayName(user),12,mention?"#A66300":"#0B5FB8",true);
+            name.setSingleLine(true);
+            name.setEllipsize(null);
+            name.setMinWidth(dp(112));
+            name.setOnClickListener(v->{if(!username.isEmpty())insertMention(username);});
+            card.addView(name,new LinearLayout.LayoutParams(dp(112),-2));
             TextView body=tSpan(text,14,"#14263A");LinearLayout.LayoutParams blp=new LinearLayout.LayoutParams(-2,-2);blp.topMargin=dp(3);card.addView(body,blp);
             TextView ts=t(shortTime(time),10,"#8493A4",false);LinearLayout.LayoutParams tlp=new LinearLayout.LayoutParams(-2,-2);tlp.topMargin=dp(4);card.addView(ts,tlp);
             row.addView(card,new LinearLayout.LayoutParams(-2,-2));messages.addView(row,new LinearLayout.LayoutParams(-1,-2));refs.add(new MessageRef(id,mention,row));}
