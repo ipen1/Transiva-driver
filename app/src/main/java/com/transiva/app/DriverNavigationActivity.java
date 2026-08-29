@@ -222,48 +222,9 @@ public class DriverNavigationActivity extends Activity {
     private int visualRouteSegmentIndex = 0;
     private double lastRenderedRouteProgressMeters = Double.NaN;
 
-    // Route loading progress. OSRM itself does not expose byte-level route progress,
-    // so this is a staged UI progress that advances while connect/compute/parse/draw run.
-    private int routeLoadingPercent = 0;
-    private long routeLoadingStartedAt = 0L;
+    private NavigationRouteScheduler routeScheduler;
 
-    private final Runnable routeLoadingTick = new Runnable() {
-        @Override public void run() {
-            if (!routeInFlight || isFinishing()) return;
-            long elapsed = Math.max(0L, SystemClock.elapsedRealtime() - routeLoadingStartedAt);
-            int target;
-            if (elapsed < 500L) target = 18;
-            else if (elapsed < 1200L) target = 38;
-            else if (elapsed < 2500L) target = 58;
-            else if (elapsed < 4500L) target = 74;
-            else target = 88;
-
-            if (routeLoadingPercent < target) routeLoadingPercent++;
-            showRouteLoading(routeLoadingPercent);
-            main.postDelayed(this, 90L);
-        }
-    };
-
-    private final Runnable routeRetryTick = new Runnable() {
-        @Override public void run() {
-            if (!isFinishing()) {
-                if (routePoints.size() < 2) {
-                    requestRoute(true);
-                }
-                main.postDelayed(this, routePoints.size() < 2 ? 2200L : 15000L);
-            }
-        }
-    };
-
-    private final Runnable animationTick = new Runnable() {
-        @Override public void run() {
-            animateTowardLatestFix();
-            // Align the visual loop to Android VSYNC when the map view is available.
-            // This prevents Handler drift and uneven 16/32 ms frame pacing.
-            if (mapView != null) mapView.postOnAnimation(this);
-            else main.postDelayed(this, navProfile != null ? navProfile.visualFrameMs : VISUAL_FRAME_MS);
-        }
-    };
+    private NavigationFrameController frameController;
 
     private double explicitTargetLat;
     private double explicitTargetLng;
@@ -297,6 +258,14 @@ public class DriverNavigationActivity extends Activity {
         applyNavigationResourceConfig();
         navProfile = NavigationCompatibilityProfile.resolve(this, navConfig != null ? navConfig.profile : "auto");
         NavigationDiagnostics.event(this, "NAV_PROFILE_" + navProfile.mode.name(), null);
+        frameController = new NavigationFrameController(main, navProfile.visualFrameMs, this::animateTowardLatestFix);
+        routeScheduler = new NavigationRouteScheduler(main, new NavigationRouteScheduler.Callback() {
+            @Override public boolean isFinishing() { return DriverNavigationActivity.this.isFinishing(); }
+            @Override public boolean isRouteInFlight() { return routeInFlight; }
+            @Override public boolean hasRoute() { return routePoints.size() >= 2; }
+            @Override public void requestRoute(boolean force) { DriverNavigationActivity.this.requestRoute(force); }
+            @Override public void showRouteLoading(int percent) { DriverNavigationActivity.this.showRouteLoading(percent); }
+        });
         locationController = new NavigationLocationController(this, smoothLocation, new NavigationLocationController.Callback() {
             @Override public void onSmoothFix(Location raw, SmoothLocationEngine.Fix fix) { handleNavigationLocationFix(raw, fix); }
             @Override public void onPermissionRequired() {
@@ -329,8 +298,8 @@ public class DriverNavigationActivity extends Activity {
         // Route/GPS do not depend on map rendering and can safely warm in parallel.
         requestRoute(true);
         startLocationWatch();
-        main.post(animationTick);
-        main.postDelayed(routeRetryTick, 2200L);
+        frameController.start();
+        routeScheduler.start();
     }
 
     private void readOrder() {
@@ -483,6 +452,7 @@ public class DriverNavigationActivity extends Activity {
                         if (isFinishing()) return;
                         map = m;
                         mapView = mapController.view();
+                        if (frameController != null) frameController.attachMapView(mapView);
                         NavigationDiagnostics.event(DriverNavigationActivity.this, "NAV_MAP_READY", null);
                         NavigationHealthTelemetry.mark(DriverNavigationActivity.this, "map");
                     }
@@ -501,6 +471,7 @@ public class DriverNavigationActivity extends Activity {
         if (activityResumed) mapController.onResume();
         mapController.create(state);
         mapView = mapController.view();
+        if (frameController != null) frameController.attachMapView(mapView);
     }
 
     private void failNativeMap(String stage, Throwable t) {
@@ -809,21 +780,14 @@ public class DriverNavigationActivity extends Activity {
 
         routeInFlight = true;
         lastRouteRequestAt = now;
-        routeLoadingPercent = 4;
-        routeLoadingStartedAt = SystemClock.elapsedRealtime();
-        showRouteLoading(routeLoadingPercent);
-        main.removeCallbacks(routeLoadingTick);
-        main.post(routeLoadingTick);
+        if (routeScheduler != null) routeScheduler.beginLoading(4);
 
         final double fromLat = driverLat, fromLng = driverLng;
 
         routeExecutor.execute(() -> {
             try {
                 StableRouteEngine.Result r = StableRouteEngine.fetch(fromLat, fromLng, toLat, toLng);
-                main.post(() -> {
-                    routeLoadingPercent = Math.max(routeLoadingPercent, 72);
-                    showRouteLoading(routeLoadingPercent);
-                });
+                main.post(() -> { if (routeScheduler != null) routeScheduler.updateProgress(72); });
 
                 pendingRouteGeoJson = routeGeoJson(r.pointsJson());
                 setRoutePoints(r.latLngPoints);
@@ -843,8 +807,7 @@ public class DriverNavigationActivity extends Activity {
                 lastRouteLocation = rl;
 
                 main.post(() -> {
-                    routeLoadingPercent = 90;
-                    showRouteLoading(routeLoadingPercent);
+                    if (routeScheduler != null) routeScheduler.updateProgress(90);
 
                     // Match first, then cut the route line from the matched progress.
                     // This avoids drawing the old segment behind/under the vehicle.
@@ -858,8 +821,7 @@ public class DriverNavigationActivity extends Activity {
                     }
                     updateRemainingRouteLine(true);
 
-                    routeLoadingPercent = 100;
-                    showRouteLoading(100);
+                    if (routeScheduler != null) routeScheduler.updateProgress(100);
                     final int mins = Math.max(1, (int) Math.ceil(pendingRouteSeconds / 60d));
                     main.postDelayed(() -> {
                         if (!isFinishing() && routePoints.size() >= 2) {
@@ -881,7 +843,7 @@ public class DriverNavigationActivity extends Activity {
                 });
             } finally {
                 routeInFlight = false;
-                main.post(() -> main.removeCallbacks(routeLoadingTick));
+                main.post(() -> { if (routeScheduler != null) routeScheduler.endLoading(); });
             }
         });
     }
@@ -1578,9 +1540,8 @@ public class DriverNavigationActivity extends Activity {
 
     @Override protected void onDestroy() {
         stopLocationWatch();
-        main.removeCallbacks(animationTick);
-        if (mapView != null) mapView.removeCallbacks(animationTick);
-        main.removeCallbacks(routeRetryTick);
+        if (frameController != null) frameController.stop();
+        if (routeScheduler != null) routeScheduler.stop();
         main.removeCallbacksAndMessages(null);
         routeExecutor.shutdownNow();
         if (communicationController != null) communicationController.onStop();

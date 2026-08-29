@@ -14,6 +14,7 @@ import java.util.concurrent.Executors;
 /** Remote image loader with bounded memory/cache and sampled decoding for low-end devices. */
 public final class RemoteImageLoader {
     private static volatile ExecutorService executor;
+    private static volatile int executorWorkers = -1;
     private static final int CACHE_KB = Math.max(2048, Math.min(12288, (int)(Runtime.getRuntime().maxMemory()/1024L/12L)));
     private static final LruCache<String,Bitmap> CACHE=new LruCache<String,Bitmap>(CACHE_KB){
         @Override protected int sizeOf(String k,Bitmap b){return Math.max(1,b.getByteCount()/1024);}
@@ -21,9 +22,14 @@ public final class RemoteImageLoader {
     private RemoteImageLoader(){}
 
     private static ExecutorService pool(ImageView v){
-        ExecutorService e=executor;if(e!=null)return e;
+        int wanted=Math.max(1,DevicePerformanceProfile.get(v.getContext()).imageWorkerCount);
+        ExecutorService e=executor;if(e!=null&&!e.isShutdown()&&executorWorkers==wanted)return e;
         synchronized(RemoteImageLoader.class){
-            if(executor==null){int n=DevicePerformanceProfile.get(v.getContext()).imageWorkerCount;executor=Executors.newFixedThreadPool(Math.max(1,n));}
+            e=executor;
+            if(e==null||e.isShutdown()||executorWorkers!=wanted){
+                if(e!=null) try{e.shutdownNow();}catch(Throwable ignored){}
+                executor=Executors.newFixedThreadPool(wanted); executorWorkers=wanted;
+            }
             return executor;
         }
     }
@@ -51,4 +57,11 @@ public final class RemoteImageLoader {
     }
 
     public static void clearMemory(){CACHE.evictAll();}
+    public static void onPerformanceModeChanged(){
+        synchronized(RemoteImageLoader.class){
+            ExecutorService e=executor; executor=null; executorWorkers=-1;
+            if(e!=null) try{e.shutdownNow();}catch(Throwable ignored){}
+        }
+        clearMemory();
+    }
 }

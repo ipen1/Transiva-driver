@@ -87,6 +87,7 @@ public class DriverTripActivity extends Activity {
     private TripCancellationController cancellationController;
     private TripCommunicationController communicationController;
     private TripLocationController tripLocationController;
+    private TripOrderSnapshotStore tripSnapshotStore;
     private JSONObject order;
     private String driverUsername = "";
     private String driverType = "motor";
@@ -143,6 +144,7 @@ public class DriverTripActivity extends Activity {
             }
         });
         loadSession();
+        tripSnapshotStore = new TripOrderSnapshotStore(this);
         loadOrder();
         buildBase();
         if(order == null){ renderEmpty(); return; }
@@ -1087,8 +1089,8 @@ public class DriverTripActivity extends Activity {
         return result.body;
     }
 
-    private void saveActiveOrder(){ if(order==null)return; getSharedPreferences(PREF_NAME,MODE_PRIVATE).edit().putString("driver_active_order_json", order.toString()).putString("driver_active_order_id", orderId()).putString("driver_active_order_kind", orderKind).putString("driver_active_order_status", status()).putString("driver_active_pickup_address", pickupAddress()).putString("driver_active_delivery_address", deliveryAddress()).putString("driver_active_pickup_lat", String.valueOf(coord("pickup_lat","user_lat"))).putString("driver_active_pickup_lng", String.valueOf(coord("pickup_lng","user_lng"))).putString("driver_active_delivery_lat", String.valueOf(coord("delivery_lat","destination_lat"))).putString("driver_active_delivery_lng", String.valueOf(coord("delivery_lng","destination_lng"))).putString("driver_active_price", String.valueOf(optDouble("price","fare","total"))).putString("driver_type", resolveDriverTypeFromOrder()).putString("active_driver_type", resolveDriverTypeFromOrder()).apply(); }
-    private void clearActiveOrder(){ getSharedPreferences(PREF_NAME,MODE_PRIVATE).edit().remove("driver_active_order_json").remove("driver_active_order_id").remove("driver_active_order_kind").remove("driver_active_order_status").apply(); }
+    private void saveActiveOrder(){ if(tripSnapshotStore!=null) tripSnapshotStore.save(order, orderKind, resolveDriverTypeFromOrder()); }
+    private void clearActiveOrder(){ if(tripSnapshotStore!=null) tripSnapshotStore.clear(); }
     private String orderId(){ return first(order.optString("order_id"), order.optString("id"), "-"); } private String internalId(){ return first(order.optString("id"), order.optString("order_id"), ""); } private String status(){ return normalizeStatus(first(order.optString("status"), "taken")); }
     private String normalizeStatus(String raw){
         String s = first(raw, "taken").toLowerCase(Locale.US).trim().replace('-', '_').replace(' ', '_');

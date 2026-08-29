@@ -113,12 +113,8 @@ public class DriverDashboardActivity extends Activity
     private ProgressBar loading;
     private boolean suppressSwitch;
 
-    private final Map<String, Long> offerDeadlines = new HashMap<>();
-    private final Map<String, TextView> countdownViews = new HashMap<>();
-    private final Map<String, Button> offerButtons = new HashMap<>();
-    private final Map<String, Integer> lastVibratedSecond = new HashMap<>();
-    private final Set<String> expiredRefreshRequested = new HashSet<>();
-    private Vibrator vibrator;
+    private DashboardOfferCountdownController offerCountdownController;
+    private DashboardCancellationController cancellationController;
 
     private boolean realtimeReceiverRegistered = false;
     private final BroadcastReceiver realtimeReceiver = new BroadcastReceiver() {
@@ -148,7 +144,7 @@ public class DriverDashboardActivity extends Activity
 
     private final Runnable countdownRunnable = new Runnable() {
         @Override public void run() {
-            updateAllCountdowns();
+            if (offerCountdownController != null) offerCountdownController.tick();
             handler.postDelayed(this, COUNTDOWN_TICK_MS);
         }
     };
@@ -160,8 +156,16 @@ public class DriverDashboardActivity extends Activity
         session = new SessionManager(this);
         requestGpsAfterLogin = getIntent() != null
                 && getIntent().getBooleanExtra("request_gps_after_login", false);
-        vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
         if (!validSession()) return;
+        offerCountdownController = new DashboardOfferCountdownController(this, () -> {
+            if (presenter != null) handler.postDelayed(() -> presenter.load(false), 350L);
+        });
+        cancellationController = new DashboardCancellationController(this, new DashboardCancellationController.Listener() {
+            @Override public void onCancelConfirmed(DriverOrder order, String reason) {
+                if (presenter != null) presenter.cancelOrder(order.id, clean(order.source), clean(order.status), reason);
+            }
+            @Override public void onMessage(String message) { showMessage(message); }
+        });
 
         presenter = new DriverDashboardPresenter(
                 new DriverDashboardRepositoryImpl(session),
@@ -820,8 +824,7 @@ public class DriverDashboardActivity extends Activity
         }
 
         offerBox.removeAllViews();
-        countdownViews.clear();
-        offerButtons.clear();
+        if (offerCountdownController != null) offerCountdownController.beginSnapshot();
         if (!state.online) {
             // Panel prioritas tetap ringkas; status offline sudah terlihat di atas.
         } else if (state.offers.isEmpty()) {
@@ -830,20 +833,18 @@ public class DriverDashboardActivity extends Activity
             Set<String> activeOfferKeys = new HashSet<>();
             boolean hasFreshOffer = false;
             for (DriverOrder offer : state.offers) {
-                String freshKey = offerKey(offer);
+                String freshKey = offerCountdownController.key(offer);
                 if (!seenOfferKeys.contains(freshKey)) hasFreshOffer = true;
             }
             if (!firstOfferSnapshot && hasFreshOffer) playIncomingOrderEffect();
             for (DriverOrder offer : state.offers) {
-                String key = offerKey(offer);
+                String key = offerCountdownController.key(offer);
                 activeOfferKeys.add(key);
-                syncOfferDeadline(offer);
+                offerCountdownController.syncDeadline(offer);
                 offerBox.addView(orderCard(offer, false));
             }
-            offerDeadlines.keySet().retainAll(activeOfferKeys);
-            lastVibratedSecond.keySet().retainAll(activeOfferKeys);
-            expiredRefreshRequested.retainAll(activeOfferKeys);
-            updateAllCountdowns();
+            offerCountdownController.retain(activeOfferKeys);
+            offerCountdownController.tick();
             seenOfferKeys.clear();
             seenOfferKeys.addAll(activeOfferKeys);
             firstOfferSnapshot = false;
@@ -1182,7 +1183,7 @@ public class DriverDashboardActivity extends Activity
         }
 
         if (!active && order.remainingSeconds >= 0) {
-            String key = offerKey(order);
+            String key = offerCountdownController.key(order);
             TextView countdown = text("Menghitung…", 14, "#16A34A", true);
             countdown.setGravity(Gravity.CENTER);
             countdown.setMinWidth(dp(112));
@@ -1192,7 +1193,7 @@ public class DriverDashboardActivity extends Activity
             countdownRow.setGravity(Gravity.END);
             countdownRow.addView(countdown, new LinearLayout.LayoutParams(-2, -2));
             add(card, countdownRow, 0, dp(10), 0, 0);
-            countdownViews.put(key, countdown);
+            offerCountdownController.bindCountdown(key, countdown);
         }
 
         boolean capacityReached = !active
@@ -1209,7 +1210,7 @@ public class DriverDashboardActivity extends Activity
 
             if (canDriverCancel(order.status)) {
                 Button cancel = dangerOutlineButton("Batalkan Order");
-                cancel.setOnClickListener(v -> showCancelOrderDialog(order));
+                cancel.setOnClickListener(v -> { if (cancellationController != null) cancellationController.show(order); });
                 add(card, cancel, 0, dp(9), 0, 0);
             }
         } else if (queued) {
@@ -1224,10 +1225,10 @@ public class DriverDashboardActivity extends Activity
                     "#FFF7E6", "#F59E0B", dp(14), 1));
             add(card, capacityNotice, 0, dp(12), 0, 0);
         } else {
-            String key = offerKey(order);
-            offerButtons.put(key, action);
+            String key = offerCountdownController.key(order);
+            offerCountdownController.bindButton(key, action);
             action.setOnClickListener(v -> {
-                if (remainingMillis(key) <= 0L) {
+                if (offerCountdownController.remainingMillis(key) <= 0L) {
                     action.setEnabled(false);
                     action.setText("Tawaran berakhir");
                     showMessage("Tawaran order sudah berakhir.");
@@ -1244,129 +1245,8 @@ public class DriverDashboardActivity extends Activity
         return card;
     }
 
-    private String normalizeOrderStatus(String status) {
-        if (status == null) {
-            return "";
-        }
-
-        return status.trim()
-                .toLowerCase(Locale.US)
-                .replace('-', '_')
-                .replace(' ', '_');
-    }
-
     private boolean canDriverCancel(String status) {
         return DriverOrderCancellationPolicy.canCancel(status);
-    }
-
-    private void showCancelOrderDialog(DriverOrder order) {
-        if (order == null || !canDriverCancel(order.status)) {
-            showMessage(
-                    "Order tidak dapat dibatalkan pada status "
-                            + normalizeOrderStatus(order == null ? "" : order.status)
-            );
-            return;
-        }
-
-        final String[] reasons = DriverOrderCancellationPolicy.reasons();
-
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Batalkan order #" + order.id)
-                .setSingleChoiceItems(reasons, -1, null)
-                .setNegativeButton("Kembali", null)
-                .setPositiveButton("Lanjutkan", null)
-                .create();
-
-        dialog.setOnShowListener(ignored -> {
-            Button continueButton = dialog.getButton(
-                    AlertDialog.BUTTON_POSITIVE
-            );
-
-            continueButton.setOnClickListener(view -> {
-                int selectedPosition = dialog.getListView()
-                        .getCheckedItemPosition();
-
-                if (selectedPosition < 0) {
-                    Toast.makeText(
-                            this,
-                            "Silakan pilih alasan pembatalan.",
-                            Toast.LENGTH_SHORT
-                    ).show();
-                    return;
-                }
-
-                dialog.dismiss();
-
-                if (selectedPosition == reasons.length - 1) {
-                    showCustomCancelReasonDialog(order);
-                    return;
-                }
-
-                confirmCancelOrder(order, reasons[selectedPosition]);
-            });
-        });
-
-        dialog.show();
-    }
-
-    private void showCustomCancelReasonDialog(DriverOrder order) {
-        final EditText reasonInput = new EditText(this);
-        reasonInput.setHint("Tuliskan alasan pembatalan");
-        reasonInput.setSingleLine(false);
-        reasonInput.setMinLines(3);
-        reasonInput.setMaxLines(5);
-        reasonInput.setPadding(
-                dp(16),
-                dp(12),
-                dp(16),
-                dp(12)
-        );
-
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Alasan lainnya")
-                .setMessage("Jelaskan alasan pembatalan order.")
-                .setView(reasonInput)
-                .setNegativeButton("Kembali", null)
-                .setPositiveButton("Lanjutkan", null)
-                .create();
-
-        dialog.setOnShowListener(ignored -> {
-            Button continueButton = dialog.getButton(
-                    AlertDialog.BUTTON_POSITIVE
-            );
-
-            continueButton.setOnClickListener(view -> {
-                String reason = reasonInput.getText()
-                        .toString()
-                        .trim();
-
-                if (reason.length() < 5) {
-                    reasonInput.setError("Alasan minimal 5 karakter");
-                    reasonInput.requestFocus();
-                    return;
-                }
-
-                dialog.dismiss();
-                confirmCancelOrder(order, reason);
-            });
-        });
-
-        dialog.show();
-    }
-
-    private void confirmCancelOrder(DriverOrder order, String reason) {
-        new AlertDialog.Builder(this)
-                .setTitle("Konfirmasi pembatalan")
-                .setMessage("Order akan dilepas dan ditawarkan kepada driver lain.\n\nAlasan: " + reason)
-                .setNegativeButton("Tidak", null)
-                .setPositiveButton("Ya, Batalkan", (dialog, which) ->
-                        presenter.cancelOrder(
-                                order.id,
-                                clean(order.source),
-                                clean(order.status),
-                                reason
-                        ))
-                .show();
     }
 
     private Button dangerOutlineButton(String label) {
@@ -1379,167 +1259,6 @@ public class DriverDashboardActivity extends Activity
         button.setBackground(roundStroke(
                 "#FFF7F7", "#EF4444", dp(15), 1));
         return button;
-    }
-
-    private String offerKey(DriverOrder order) {
-        String cycle = "";
-        if (order != null && order.raw != null) {
-            cycle = firstNonEmpty(
-                    order.raw.optString("offer_cycle_key", ""),
-                    order.raw.optString("offer_action_token", ""),
-                    order.raw.optString("offer_expired_at", "")
-            );
-        }
-        return clean(order == null ? "" : order.source) + ":"
-                + clean(order == null ? "" : order.id) + ":" + clean(cycle);
-    }
-
-    private void syncOfferDeadline(DriverOrder order) {
-        if (order == null || order.remainingSeconds < 0) return;
-
-        String key = offerKey(order);
-        long now = SystemClock.elapsedRealtime();
-        long candidate = now + order.remainingSeconds * 1000L;
-        Long current = offerDeadlines.get(key);
-
-        if (current == null) {
-            offerDeadlines.put(key, candidate);
-            expiredRefreshRequested.remove(key);
-            return;
-        }
-
-        long currentRemaining = current - now;
-        long candidateRemaining = candidate - now;
-
-        /*
-         * Backend adalah sumber waktu tawaran. Ketika order dengan ID yang sama
-         * di-redispatch, offer_expired_at dan token siklus dibuat ulang +15 detik. Versi lama
-         * hanya mengizinkan deadline memendek sehingga order yang sudah pernah
-         * habis tetap terkunci pada "Tawaran berakhir".
-         *
-         * Reset deadline bila:
-         * 1. deadline lokal sudah habis tetapi server memberi waktu baru; atau
-         * 2. deadline server lebih panjang secara nyata (siklus redispatch baru).
-         * Selisih kecil tetap diabaikan agar polling biasa tidak menambah waktu.
-         */
-        boolean revivedByServer = currentRemaining <= 0L
-                && candidateRemaining > 0L;
-        boolean newerOfferWindow = candidate > current
-                + Math.max(SERVER_DRIFT_TOLERANCE_MS, 3000L);
-
-        if (revivedByServer || newerOfferWindow) {
-            offerDeadlines.put(key, candidate);
-            expiredRefreshRequested.remove(key);
-            return;
-        }
-
-        // Jika server memperpendek waktu, ikuti deadline server.
-        if (candidate < current - SERVER_DRIFT_TOLERANCE_MS) {
-            offerDeadlines.put(key, candidate);
-        }
-    }
-
-    private long remainingMillis(String key) {
-        Long deadline = offerDeadlines.get(key);
-        return deadline == null
-                ? 0L
-                : Math.max(0L, deadline - SystemClock.elapsedRealtime());
-    }
-
-    private void updateAllCountdowns() {
-        if (countdownViews.isEmpty()) return;
-        Set<String> keys = new HashSet<>(countdownViews.keySet());
-
-        for (String key : keys) {
-            TextView view = countdownViews.get(key);
-            if (view == null) continue;
-
-            long remainingMs = remainingMillis(key);
-            int seconds = remainingMs <= 0L
-                    ? 0
-                    : (int) Math.ceil(remainingMs / 1000.0);
-
-            renderCountdown(view, seconds);
-            Button button = offerButtons.get(key);
-
-            if (seconds <= 0) {
-                if (button != null) {
-                    button.setEnabled(false);
-                    button.setText("Tawaran berakhir");
-                }
-                if (expiredRefreshRequested.add(key) && presenter != null) {
-                    handler.postDelayed(() -> presenter.load(false), 350L);
-                }
-            } else {
-                if (button != null) {
-                    button.setEnabled(true);
-                    button.setText("Ambil Order");
-                }
-                maybeVibrateCountdown(key, seconds);
-            }
-        }
-    }
-
-    private void renderCountdown(TextView view, int seconds) {
-        int borderColor = countdownColor(seconds);
-        int fillColor = mixWithWhite(borderColor, 0.90f);
-        view.setText(seconds > 0 ? "⏱ " + seconds + " detik" : "Waktu habis");
-        view.setTextColor(borderColor);
-        view.setBackground(roundStrokeColor(
-                fillColor, borderColor, dp(999), seconds <= 6 ? 2 : 1));
-
-        if (seconds > 0 && seconds <= 6) {
-            view.animate().cancel();
-            view.setScaleX(1.08f);
-            view.setScaleY(1.08f);
-            view.animate().scaleX(1f).scaleY(1f).setDuration(180L).start();
-        } else {
-            view.setScaleX(1f);
-            view.setScaleY(1f);
-        }
-    }
-
-    private int countdownColor(int seconds) {
-        if (seconds <= 0) return Color.parseColor("#991B1B");
-        float normalized = Math.max(0f, Math.min(1f, (seconds - 1f) / 14f));
-        float hue = 120f * normalized;
-        return Color.HSVToColor(new float[]{hue, 0.88f, 0.82f});
-    }
-
-    private int mixWithWhite(int color, float whiteRatio) {
-        float ratio = Math.max(0f, Math.min(1f, whiteRatio));
-        int red = Math.round(Color.red(color) * (1f - ratio) + 255f * ratio);
-        int green = Math.round(Color.green(color) * (1f - ratio) + 255f * ratio);
-        int blue = Math.round(Color.blue(color) * (1f - ratio) + 255f * ratio);
-        return Color.rgb(red, green, blue);
-    }
-
-    private GradientDrawable roundStrokeColor(
-            int fillColor, int strokeColor, int radius, int width) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(fillColor);
-        drawable.setCornerRadius(radius);
-        drawable.setStroke(dp(width), strokeColor);
-        return drawable;
-    }
-
-    private void maybeVibrateCountdown(String key, int seconds) {
-        if (seconds < 1 || seconds > 9) return;
-        Integer last = lastVibratedSecond.get(key);
-        if (last != null && last == seconds) return;
-        lastVibratedSecond.put(key, seconds);
-
-        try {
-            if (vibrator == null || !vibrator.hasVibrator()) return;
-            long duration = seconds <= 2 ? 120L : 70L;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(
-                        duration, VibrationEffect.DEFAULT_AMPLITUDE));
-            } else {
-                vibrator.vibrate(duration);
-            }
-        } catch (SecurityException ignored) {
-        } catch (Exception ignored) {}
     }
 
     private boolean ensureLocationReady() {

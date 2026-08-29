@@ -1,10 +1,9 @@
 package com.transiva.app;
 
-import android.app.ActivityManager;
 import android.content.Context;
-import android.os.Build;
 import java.util.Locale;
 
+/** Map/navigation rendering profile. Explicit account performance mode has priority. */
 public final class NavigationCompatibilityProfile {
     public enum Mode { NORMAL, STABLE, ULTRA }
     public final Mode mode;
@@ -19,18 +18,25 @@ public final class NavigationCompatibilityProfile {
         this.mode=mode; this.visualFrameMs=frame; this.positionEaseAlpha=pos; this.bearingEaseAlpha=bearing; this.cameraBearingAlpha=camera; this.cameraTilt=tilt; this.allowPip=pip;
     }
     public static NavigationCompatibilityProfile resolve(Context c, String requested){
+        DevicePerformanceProfile perf = DevicePerformanceProfile.get(c);
+        DevicePerformanceProfile.UserMode selected = DevicePerformanceProfile.getSelectedMode(c);
+        if (selected == DevicePerformanceProfile.UserMode.HIGH) return normal();
+        if (selected == DevicePerformanceProfile.UserMode.NORMAL) return stable();
+        if (selected == DevicePerformanceProfile.UserMode.LOW) return low(perf.visualFrameMs);
+
         String r = requested == null ? "" : requested.trim().toLowerCase(Locale.US);
         if (r.contains("ultra")) return ultra();
         if (r.contains("normal")) return normal();
         if (r.contains("stable")) return stable();
         try {
-            DevicePerformanceProfile perf=DevicePerformanceProfile.get(c);
-            if(perf.tier==DevicePerformanceProfile.Tier.VERY_LOW) return ultra();
-            if(perf.tier==DevicePerformanceProfile.Tier.LOW) return stable();
+            if (perf.tier==DevicePerformanceProfile.Tier.VERY_LOW) return low(perf.visualFrameMs);
+            if (perf.tier==DevicePerformanceProfile.Tier.LOW) return ultra();
+            if (perf.tier==DevicePerformanceProfile.Tier.NORMAL) return stable();
         } catch(Throwable t){ TransivaDiagnostics.error(c,"navigation","PROFILE_DETECT_FAILED",t); }
         return normal();
     }
     public static NavigationCompatibilityProfile normal(){ return new NavigationCompatibilityProfile(Mode.NORMAL,16L,.16f,.10f,.075f,42d,true); }
     public static NavigationCompatibilityProfile stable(){ return new NavigationCompatibilityProfile(Mode.STABLE,33L,.20f,.13f,.10f,30d,true); }
     public static NavigationCompatibilityProfile ultra(){ return new NavigationCompatibilityProfile(Mode.ULTRA,50L,.25f,.18f,.14f,0d,false); }
+    private static NavigationCompatibilityProfile low(long frame){ return new NavigationCompatibilityProfile(Mode.ULTRA,Math.max(50L,frame),.27f,.19f,.15f,0d,false); }
 }

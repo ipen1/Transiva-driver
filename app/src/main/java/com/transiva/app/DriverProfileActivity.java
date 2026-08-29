@@ -62,6 +62,12 @@ public class DriverProfileActivity extends Activity {
     private TextView ratingStarsValue;
     private TextView bpjsStatusValue;
     private TextView bpjsSummaryValue;
+    private TextView performanceModeValue;
+    private TextView performanceRecommendedValue;
+    private Button performanceAutoButton;
+    private Button performanceLowButton;
+    private Button performanceNormalButton;
+    private Button performanceHighButton;
     private JSONObject latestProfile;
 
     @Override
@@ -130,6 +136,7 @@ public class DriverProfileActivity extends Activity {
 
         content.addView(buildHeader());
         content.addView(buildIdentityCard(), sectionLp());
+        content.addView(buildPerformanceCard(), sectionLp());
         content.addView(buildRatingCard(), sectionLp());
         content.addView(buildDriverInfoCard(), sectionLp());
         content.addView(buildStatusCard(), sectionLp());
@@ -222,6 +229,106 @@ public class DriverProfileActivity extends Activity {
         typeLp.setMargins(dp(7), 0, 0, 0);
         badges.addView(driverTypeBadge, typeLp);
         return card;
+    }
+
+    private View buildPerformanceCard() {
+        LinearLayout card = whiteCard();
+        card.addView(sectionTitle("Performa Aplikasi", "Auto detect menyesuaikan rendering, GPS, FPS, gambar, dan polling dengan kemampuan perangkat"));
+
+        performanceModeValue = text("Mendeteksi perangkat…", 14, "#0B3A78", true);
+        card.addView(performanceModeValue);
+        performanceRecommendedValue = text("", 10, "#64748B", false);
+        LinearLayout.LayoutParams recLp = new LinearLayout.LayoutParams(-1, -2);
+        recLp.setMargins(0, dp(4), 0, dp(11));
+        card.addView(performanceRecommendedValue, recLp);
+
+        LinearLayout row1 = new LinearLayout(this);
+        row1.setGravity(Gravity.CENTER_VERTICAL);
+        performanceAutoButton = performanceButton("Auto");
+        performanceLowButton = performanceButton("Low · Hemat baterai");
+        row1.addView(performanceAutoButton, new LinearLayout.LayoutParams(0, dp(46), 1));
+        LinearLayout.LayoutParams lowLp = new LinearLayout.LayoutParams(0, dp(46), 1);
+        lowLp.setMargins(dp(8), 0, 0, 0);
+        row1.addView(performanceLowButton, lowLp);
+        card.addView(row1);
+
+        LinearLayout row2 = new LinearLayout(this);
+        row2.setGravity(Gravity.CENTER_VERTICAL);
+        performanceNormalButton = performanceButton("Normal");
+        performanceHighButton = performanceButton("High");
+        row2.addView(performanceNormalButton, new LinearLayout.LayoutParams(0, dp(46), 1));
+        LinearLayout.LayoutParams highLp = new LinearLayout.LayoutParams(0, dp(46), 1);
+        highLp.setMargins(dp(8), 0, 0, 0);
+        row2.addView(performanceHighButton, highLp);
+        LinearLayout.LayoutParams row2Lp = new LinearLayout.LayoutParams(-1, -2);
+        row2Lp.setMargins(0, dp(8), 0, 0);
+        card.addView(row2, row2Lp);
+
+        performanceAutoButton.setOnClickListener(v -> selectPerformanceMode(DevicePerformanceProfile.UserMode.AUTO));
+        performanceLowButton.setOnClickListener(v -> selectPerformanceMode(DevicePerformanceProfile.UserMode.LOW));
+        performanceNormalButton.setOnClickListener(v -> selectPerformanceMode(DevicePerformanceProfile.UserMode.NORMAL));
+        performanceHighButton.setOnClickListener(v -> selectPerformanceMode(DevicePerformanceProfile.UserMode.HIGH));
+        updatePerformanceCard();
+        return card;
+    }
+
+    private Button performanceButton(String label) {
+        Button b = new Button(this);
+        b.setText(label);
+        b.setAllCaps(false);
+        b.setTextSize(10);
+        b.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        b.setPadding(dp(5), 0, dp(5), 0);
+        return b;
+    }
+
+    private void selectPerformanceMode(DevicePerformanceProfile.UserMode mode) {
+        if (mode != DevicePerformanceProfile.UserMode.AUTO
+                && DevicePerformanceProfile.isAboveRecommended(this, mode)) {
+            DevicePerformanceProfile.UserMode recommended = DevicePerformanceProfile.getRecommendedMode(this);
+            new AlertDialog.Builder(this)
+                    .setTitle("Mode di atas rekomendasi perangkat")
+                    .setMessage("Perangkat ini direkomendasikan menggunakan "
+                            + DevicePerformanceProfile.title(recommended)
+                            + ". Memakai " + DevicePerformanceProfile.title(mode)
+                            + " dapat membuat perangkat lebih panas, baterai lebih boros, dan aplikasi kurang stabil saat navigasi lama. Tetap gunakan mode ini?")
+                    .setNegativeButton("Batal", null)
+                    .setPositiveButton("Tetap gunakan", (d, w) -> applyPerformanceMode(mode))
+                    .show();
+            return;
+        }
+        applyPerformanceMode(mode);
+    }
+
+    private void applyPerformanceMode(DevicePerformanceProfile.UserMode mode) {
+        DevicePerformanceProfile.setSelectedMode(this, mode);
+        RemoteImageLoader.onPerformanceModeChanged();
+        updatePerformanceCard();
+    }
+
+    private void updatePerformanceCard() {
+        if (performanceModeValue == null) return;
+        DevicePerformanceProfile.UserMode selected = DevicePerformanceProfile.getSelectedMode(this);
+        DevicePerformanceProfile.UserMode recommended = DevicePerformanceProfile.getRecommendedMode(this);
+        DevicePerformanceProfile effective = DevicePerformanceProfile.get(this);
+        String activeLabel = selected == DevicePerformanceProfile.UserMode.AUTO
+                ? "Auto → " + DevicePerformanceProfile.title(recommended)
+                : DevicePerformanceProfile.title(selected);
+        performanceModeValue.setText("Aktif: " + activeLabel);
+        performanceRecommendedValue.setText("Rekomendasi perangkat: " + DevicePerformanceProfile.title(recommended)
+                + " · target " + effective.targetFps + " FPS · GPS " + effective.navigationGpsMs + " ms");
+        stylePerformanceButton(performanceAutoButton, selected == DevicePerformanceProfile.UserMode.AUTO);
+        stylePerformanceButton(performanceLowButton, selected == DevicePerformanceProfile.UserMode.LOW);
+        stylePerformanceButton(performanceNormalButton, selected == DevicePerformanceProfile.UserMode.NORMAL);
+        stylePerformanceButton(performanceHighButton, selected == DevicePerformanceProfile.UserMode.HIGH);
+    }
+
+    private void stylePerformanceButton(Button button, boolean active) {
+        if (button == null) return;
+        button.setTextColor(Color.parseColor(active ? "#FFFFFF" : "#0B3A78"));
+        button.setBackground(active
+                ? gradient("#0B7CFF", "#2EA2FF", 13)
+                : roundStroke("#F8FBFF", "#D7E6F8", 13, 1));
     }
 
     private View buildRatingCard() {
