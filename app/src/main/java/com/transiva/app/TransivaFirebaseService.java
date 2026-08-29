@@ -244,6 +244,8 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
             }
         }
 
+        publishBubbleEvent(type, title, body, orderId, roomId, data);
+
         showNotification(
                 type,
                 title,
@@ -253,6 +255,34 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                 url,
                 data
         );
+    }
+
+    private void publishBubbleEvent(String type, String title, String body, String orderId, String roomId, Map<String, String> data) {
+        try {
+            if (!DriverBubbleController.enabled(this) || !DriverBubbleController.canOverlay(this)) return;
+            boolean newOrder = isNewIncomingOrder(type, data);
+            boolean mention = "driver_global_mention".equalsIgnoreCase(first(type, ""));
+            boolean customerChat = isChat(type) && !isMerchantDriverChat(type, data) && !mention;
+            if (!newOrder && !mention && !customerChat) return;
+
+            long mentionId = 0L;
+            if (mention) {
+                try { mentionId = Long.parseLong(data != null ? first(data.get("message_id"), "0") : "0"); } catch (Throwable ignored) {}
+            }
+
+            String text;
+            if (newOrder) {
+                text = "Orderan baru diterima";
+            } else if (mention) {
+                String sender = data != null ? first(data.get("sender_name"), data.get("name"), "") : "";
+                text = sender.isEmpty() ? first(body, "Nama kamu disebut di chat driver") : sender + " menyebut nama kamu";
+            } else {
+                String sender = data != null ? first(data.get("sender_name"), data.get("customer_name"), data.get("name"), "Customer") : "Customer";
+                String msg = first(body, data != null ? first(data.get("message"), "Pesan baru") : "Pesan baru");
+                text = sender + ": " + msg;
+            }
+            DriverBubbleOverlayService.publish(this, first(type, "general").toLowerCase(), text, orderId, roomId, mentionId, newOrder);
+        } catch (Throwable ignored) {}
     }
 
     private void sendCallState(String callId, String status) {

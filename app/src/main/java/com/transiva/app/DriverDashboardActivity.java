@@ -160,6 +160,7 @@ public class DriverDashboardActivity extends Activity
         requestGpsAfterLogin = getIntent() != null
                 && getIntent().getBooleanExtra("request_gps_after_login", false);
         if (!validSession()) return;
+        DriverBubbleController.requestOnce(this);
         offerCountdownController = new DashboardOfferCountdownController(this, () -> {
             if (presenter != null) handler.postDelayed(() -> presenter.load(false), 350L);
         });

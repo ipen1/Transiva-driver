@@ -44,7 +44,10 @@ public class TransivaDriverApplication extends Application implements Applicatio
             RootSecurityGuard.enforce(activity);
         }
         AppUpdateRuntimeGate.onActivityResumed(activity);
-        DriverGlobalChatBubble.attach(activity);
+        DriverBubbleController.onActivityResumed(activity);
+        // Fallback bubble lama hanya dipakai bila izin overlay belum tersedia.
+        if (!DriverBubbleController.canOverlay(activity)) DriverGlobalChatBubble.attach(activity);
+        else DriverGlobalChatBubble.detach(activity);
     }
 
     /**

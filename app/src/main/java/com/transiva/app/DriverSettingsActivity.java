@@ -11,11 +11,13 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
+import android.view.View;
 import android.widget.CompoundButton;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import org.json.JSONObject;
 
@@ -118,6 +120,32 @@ public class DriverSettingsActivity extends Activity {
         overlayRow.addView(text("›", 30, "#0B7CFF", true));
         overlayRow.setOnClickListener(v -> explainAndOpenOverlaySettings());
         callCard.addView(overlayRow);
+
+        View bubbleDivider = new View(this);
+        bubbleDivider.setBackgroundColor(Color.parseColor("#EEF2F7"));
+        LinearLayout.LayoutParams bubbleDividerLp = new LinearLayout.LayoutParams(-1, dp(1));
+        bubbleDividerLp.setMargins(0, dp(12), 0, dp(12));
+        callCard.addView(bubbleDivider, bubbleDividerLp);
+
+        LinearLayout bubbleRow = new LinearLayout(this);
+        bubbleRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout bubbleLabels = new LinearLayout(this);
+        bubbleLabels.setOrientation(LinearLayout.VERTICAL);
+        bubbleLabels.addView(text("Bubble Transiva", 15, "#0B3A78", true));
+        String bubbleState = DriverBubbleController.enabled(this) ? "Aktif • order, pesan customer, dan mention" : "Nonaktif • ketuk untuk mengaktifkan kembali";
+        bubbleLabels.addView(text(bubbleState, 11, "#64748B", false));
+        bubbleRow.addView(bubbleLabels, new LinearLayout.LayoutParams(0, -2, 1));
+        bubbleRow.addView(text("›", 30, "#0B7CFF", true));
+        bubbleRow.setOnClickListener(v -> {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+                explainAndOpenOverlaySettings();
+            } else {
+                DriverBubbleController.enable(this);
+                Toast.makeText(this, "Bubble Transiva diaktifkan", Toast.LENGTH_SHORT).show();
+                recreate();
+            }
+        });
+        callCard.addView(bubbleRow);
         root.addView(callCard);
 
         TextView deviceSection = text("Keamanan Perangkat", 13, "#0B3A78", true);
