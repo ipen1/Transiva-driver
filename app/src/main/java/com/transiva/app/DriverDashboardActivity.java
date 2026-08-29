@@ -140,10 +140,10 @@ public class DriverDashboardActivity extends Activity
     private long adaptiveRefreshMs() {
         DriverDashboardState state = currentState;
         if (state != null) {
-            if (state.offers != null && !state.offers.isEmpty()) return OFFER_REFRESH_MS;
-            if (state.activeOrders != null && !state.activeOrders.isEmpty()) return ACTIVE_REFRESH_MS;
+            if (state.offers != null && !state.offers.isEmpty()) return DriverPollingCoordinator.interval(this, OFFER_REFRESH_MS);
+            if (state.activeOrders != null && !state.activeOrders.isEmpty()) return DriverPollingCoordinator.interval(this, ACTIVE_REFRESH_MS);
         }
-        return IDLE_REFRESH_MS;
+        return DriverPollingCoordinator.interval(this, IDLE_REFRESH_MS);
     }
 
     private final Runnable countdownRunnable = new Runnable() {

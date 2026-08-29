@@ -43,7 +43,7 @@ public class DriverEarningsActivity extends Activity {
         public void run() {
             if (!screenVisible) return;
             loadRealtimeWallet();
-            realtimeHandler.postDelayed(this, WaveLoadGuard.jitter(REFRESH_INTERVAL_MS));
+            realtimeHandler.postDelayed(this, WaveLoadGuard.jitter(DriverPollingCoordinator.interval(DriverEarningsActivity.this, REFRESH_INTERVAL_MS)));
         }
     };
 

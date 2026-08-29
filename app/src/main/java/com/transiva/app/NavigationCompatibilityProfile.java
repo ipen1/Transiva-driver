@@ -24,13 +24,9 @@ public final class NavigationCompatibilityProfile {
         if (r.contains("normal")) return normal();
         if (r.contains("stable")) return stable();
         try {
-            ActivityManager am=(ActivityManager)c.getSystemService(Context.ACTIVITY_SERVICE);
-            ActivityManager.MemoryInfo mi=new ActivityManager.MemoryInfo();
-            if(am!=null) am.getMemoryInfo(mi);
-            long gb=mi.totalMem > 0 ? mi.totalMem/(1024L*1024L*1024L) : 99L;
-            String m=(Build.MANUFACTURER+" "+Build.MODEL).toLowerCase(Locale.US);
-            if (gb <= 3 || Build.VERSION.SDK_INT <= 27) return ultra();
-            if (gb <= 5 || m.contains("infinix") || m.contains("tecno") || m.contains("itel") || m.contains("vivo") || m.contains("oppo") || m.contains("realme")) return stable();
+            DevicePerformanceProfile perf=DevicePerformanceProfile.get(c);
+            if(perf.tier==DevicePerformanceProfile.Tier.VERY_LOW) return ultra();
+            if(perf.tier==DevicePerformanceProfile.Tier.LOW) return stable();
         } catch(Throwable t){ TransivaDiagnostics.error(c,"navigation","PROFILE_DETECT_FAILED",t); }
         return normal();
     }

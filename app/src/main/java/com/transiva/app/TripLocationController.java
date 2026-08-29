@@ -49,9 +49,10 @@ public final class TripLocationController {
             };
             Location last = bestLastKnown();
             if (last != null && fresh(last) && callback != null) callback.onLocation(last);
-            try { manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 900L, 0f, listener, Looper.getMainLooper()); }
+            DevicePerformanceProfile perf = DevicePerformanceProfile.get(activity);
+            try { manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, perf.tripGpsMs, perf.tripMinDistanceM, listener, Looper.getMainLooper()); }
             catch (Throwable t) { TransivaDiagnostics.error(activity, "order", "TRIP_GPS_PROVIDER_START_FAILED", t); }
-            try { manager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1400L, 0f, listener, Looper.getMainLooper()); }
+            try { manager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, perf.tripNetworkMs, perf.tripMinDistanceM, listener, Looper.getMainLooper()); }
             catch (Throwable t) { TransivaDiagnostics.error(activity, "order", "TRIP_NETWORK_PROVIDER_START_FAILED", t); }
         } catch (Throwable t) { TransivaDiagnostics.error(activity, "order", "TRIP_LOCATION_START_FAILED", t); }
     }

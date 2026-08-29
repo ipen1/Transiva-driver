@@ -38,13 +38,13 @@ public class DriverGlobalChatActivity extends Activity {
     private LinearLayout messages,suggestions; private ScrollView scroll; private EditText input; private TextView mentionPill,status;
     private ProgressBar loading; private boolean busy=false; private long jumpId=0; private String myUsername="";
     private int suggestSeq=0;
-    private final Runnable refresh=new Runnable(){public void run(){if(!isFinishing()){load(false);main.postDelayed(this,12000L);}}};
+    private final Runnable refresh=new Runnable(){public void run(){if(!isFinishing()){load(false);main.postDelayed(this,DriverPollingCoordinator.interval(DriverGlobalChatActivity.this,12000L));}}};
 
     @Override protected void onCreate(Bundle b){
         super.onCreate(b);
         getWindow().setStatusBarColor(Color.parseColor("#071426")); getWindow().setNavigationBarColor(Color.parseColor("#071426"));
         myUsername=new SessionManager(this).getUsername(); jumpId=getIntent().getLongExtra("jump_message_id",0L);
-        setContentView(build()); DriverGlobalChatBubble.detach(this); DriverAppSettings.apply(this); load(true); main.postDelayed(refresh,12000L);
+        setContentView(build()); DriverGlobalChatBubble.detach(this); DriverAppSettings.apply(this); load(true); main.postDelayed(refresh,DriverPollingCoordinator.interval(this,12000L));
     }
     @Override protected void onResume(){super.onResume();DriverGlobalChatBubble.detach(this);}
     @Override protected void onNewIntent(android.content.Intent intent){super.onNewIntent(intent);setIntent(intent);jumpId=intent.getLongExtra("jump_message_id",0L);load(false);}

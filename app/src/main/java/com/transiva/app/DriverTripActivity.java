@@ -730,7 +730,8 @@ public class DriverTripActivity extends Activity {
     private com.google.android.gms.maps.model.BitmapDescriptor driverVehicleIcon(){
         String name = "car".equals(resolveDriverTypeFromOrder()) ? "map_car_top" : "map_motor_top";
         try{
-            Bitmap raw = ResourceUpdateManager.loadBitmapOverride(this, "images/" + name + ".png");
+            Bitmap raw = ResourceUpdateManager.loadBitmapOverride(this, "images/" + name + ".webp");
+            if(raw == null) raw = ResourceUpdateManager.loadBitmapOverride(this, "images/" + name + ".png");
             if(raw == null){
                 int id = getResources().getIdentifier(name, "drawable", getPackageName());
                 if(id > 0) raw = BitmapFactory.decodeResource(getResources(), id);

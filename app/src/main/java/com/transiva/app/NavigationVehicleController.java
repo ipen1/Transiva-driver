@@ -66,7 +66,8 @@ public final class NavigationVehicleController {
 
     private void addImage(String imageName, String drawableName, int fallback) {
         try {
-            Bitmap raw = ResourceUpdateManager.loadBitmapOverride(activity, "images/" + drawableName + ".png");
+            Bitmap raw = ResourceUpdateManager.loadBitmapOverride(activity, "images/" + drawableName + ".webp");
+            if (raw == null) raw = ResourceUpdateManager.loadBitmapOverride(activity, "images/" + drawableName + ".png");
             if (raw == null) {
                 int id = activity.getResources().getIdentifier(drawableName, "drawable", activity.getPackageName());
                 if (id <= 0) id = fallback;

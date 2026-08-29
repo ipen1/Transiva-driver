@@ -80,4 +80,16 @@ public class TransivaDriverApplication extends Application implements Applicatio
     public void onActivityStopped(Activity a) {}
     public void onActivitySaveInstanceState(Activity a, Bundle b) {}
     public void onActivityDestroyed(Activity a) {}
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level >= TRIM_MEMORY_RUNNING_LOW) RemoteImageLoader.clearMemory();
+    }
+
+    @Override
+    public void onLowMemory() {
+        super.onLowMemory();
+        RemoteImageLoader.clearMemory();
+    }
+
 }

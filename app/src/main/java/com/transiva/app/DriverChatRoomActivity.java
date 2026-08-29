@@ -127,7 +127,7 @@ public class DriverChatRoomActivity extends Activity {
         public void run() {
             if (!destroyed && !readOnly && chatVisible && hasWindowFocus()) {
                 loadMessages(false);
-                main.postDelayed(this, WaveLoadGuard.jitter(REFRESH_MS));
+                main.postDelayed(this, WaveLoadGuard.jitter(DriverPollingCoordinator.interval(DriverChatRoomActivity.this, REFRESH_MS)));
             }
         }
     };
@@ -159,7 +159,7 @@ public class DriverChatRoomActivity extends Activity {
         loadMessages(true);
 
         if (!readOnly) {
-            main.postDelayed(refreshRunnable, WaveLoadGuard.jitter(REFRESH_MS));
+            main.postDelayed(refreshRunnable, WaveLoadGuard.jitter(DriverPollingCoordinator.interval(DriverChatRoomActivity.this, REFRESH_MS)));
         }
     }
 
@@ -1387,7 +1387,7 @@ public class DriverChatRoomActivity extends Activity {
             if (lastId > 0) {
                 scheduleMessagesReadThrough(lastId);
             }
-            main.postDelayed(refreshRunnable, WaveLoadGuard.jitter(REFRESH_MS));
+            main.postDelayed(refreshRunnable, WaveLoadGuard.jitter(DriverPollingCoordinator.interval(DriverChatRoomActivity.this, REFRESH_MS)));
         }
     }
 

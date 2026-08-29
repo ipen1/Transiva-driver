@@ -63,9 +63,10 @@ public final class NavigationLocationController {
                 @Override public void onProviderEnabled(String provider) {}
                 @Override public void onProviderDisabled(String provider) {}
             };
-            try { manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 700L, 0f, listener, Looper.getMainLooper()); }
+            DevicePerformanceProfile perf = DevicePerformanceProfile.get(activity);
+            try { manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, perf.navigationGpsMs, perf.navigationMinDistanceM, listener, Looper.getMainLooper()); }
             catch (Throwable t) { TransivaDiagnostics.error(activity, "navigation", "NAV_GPS_PROVIDER_START_FAILED", t); }
-            try { manager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1300L, 0f, listener, Looper.getMainLooper()); }
+            try { manager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, perf.navigationNetworkMs, perf.navigationMinDistanceM, listener, Looper.getMainLooper()); }
             catch (Throwable t) { TransivaDiagnostics.error(activity, "navigation", "NAV_NETWORK_PROVIDER_START_FAILED", t); }
         } catch (Throwable t) {
             TransivaDiagnostics.error(activity, "navigation", "NAV_LOCATION_START_FAILED", t);
