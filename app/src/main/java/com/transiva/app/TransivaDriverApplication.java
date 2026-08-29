@@ -45,9 +45,10 @@ public class TransivaDriverApplication extends Application implements Applicatio
         }
         AppUpdateRuntimeGate.onActivityResumed(activity);
         DriverBubbleController.onActivityResumed(activity);
-        // Fallback bubble lama hanya dipakai bila izin overlay belum tersedia.
-        if (!DriverBubbleController.canOverlay(activity)) DriverGlobalChatBubble.attach(activity);
-        else DriverGlobalChatBubble.detach(activity);
+        // Tombol Driver Lounge (chat global) adalah kontrol UI terpisah dari Messenger-style overlay.
+        // Jangan sembunyikan tombol kiri hanya karena izin overlay aktif. DriverGlobalChatBubble.attach()
+        // sendiri akan mengecualikan Splash/Login/PIN/halaman chat global.
+        DriverGlobalChatBubble.attach(activity);
     }
 
     /**
