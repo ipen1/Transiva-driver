@@ -1486,11 +1486,20 @@ public class DriverNavigationActivity extends Activity {
      */
     @Override public void onUserLeaveHint() {
         super.onUserLeaveHint();
-        enterNavigationPictureInPicture();
+        // OEM-SAFE P0 FIX: never auto-enter PiP from this lifecycle callback.
+        // Several Android skins dispatch onUserLeaveHint() during transient system UI,
+        // permission panels, calls/chats and launcher transitions. Entering PiP here while
+        // MapLibre owns a GL surface can cause the navigation Activity to be stopped or
+        // recreated unexpectedly. Navigation must remain full-screen unless PiP is invoked
+        // explicitly by a future user action.
+        NavigationDiagnostics.event(this, "NAV_USER_LEAVE_HINT_IGNORED", null);
     }
 
 
-    private void enterNavigationPictureInPicture() { if (pipController != null) pipController.enter(); }
+    private void enterNavigationPictureInPicture() {
+        // Kept only for an explicit future PiP button. Automatic lifecycle entry is disabled.
+        if (pipController != null) pipController.enter();
+    }
 
     @Override public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode,
                                                          android.content.res.Configuration newConfig) {
@@ -1540,6 +1549,22 @@ public class DriverNavigationActivity extends Activity {
     @Override protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
         if (mapController != null) mapController.onSaveInstanceState(outState);
+    }
+
+    @Override public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        // Do not finish navigation under memory pressure. Let MapLibre release caches and
+        // reduce visual work; GPS/route guidance remains alive even if map rendering degrades.
+        if (mapController != null && level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+            mapController.onLowMemory();
+        }
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
+            if (frameController != null) {
+                frameController.stop();
+                if (activityResumed || inPictureInPicture) frameController.start();
+            }
+            NavigationDiagnostics.event(this, "NAV_MEMORY_PRESSURE_" + level, null);
+        }
     }
 
     @Override public void onLowMemory() {

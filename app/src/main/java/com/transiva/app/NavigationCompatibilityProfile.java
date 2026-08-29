@@ -35,8 +35,8 @@ public final class NavigationCompatibilityProfile {
         } catch(Throwable t){ TransivaDiagnostics.error(c,"navigation","PROFILE_DETECT_FAILED",t); }
         return normal();
     }
-    public static NavigationCompatibilityProfile normal(){ return new NavigationCompatibilityProfile(Mode.NORMAL,16L,.16f,.10f,.075f,42d,true); }
-    public static NavigationCompatibilityProfile stable(){ return new NavigationCompatibilityProfile(Mode.STABLE,33L,.20f,.13f,.10f,30d,true); }
+    public static NavigationCompatibilityProfile normal(){ return new NavigationCompatibilityProfile(Mode.NORMAL,16L,.16f,.10f,.075f,42d,false); }
+    public static NavigationCompatibilityProfile stable(){ return new NavigationCompatibilityProfile(Mode.STABLE,33L,.20f,.13f,.10f,30d,false); }
     public static NavigationCompatibilityProfile ultra(){ return new NavigationCompatibilityProfile(Mode.ULTRA,50L,.25f,.18f,.14f,0d,false); }
     private static NavigationCompatibilityProfile low(long frame){ return new NavigationCompatibilityProfile(Mode.ULTRA,Math.max(50L,frame),.27f,.19f,.15f,0d,false); }
 }
