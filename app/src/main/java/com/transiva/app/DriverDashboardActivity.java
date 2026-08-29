@@ -65,6 +65,7 @@ public class DriverDashboardActivity extends Activity
     private static final long SERVER_DRIFT_TOLERANCE_MS = 2500L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private Vibrator vibrator;
 
     private SessionManager session;
     private DriverDashboardPresenter presenter;
@@ -154,6 +155,7 @@ public class DriverDashboardActivity extends Activity
         TransivaNotificationPermission.ask(this);
 
         session = new SessionManager(this);
+        vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
         requestGpsAfterLogin = getIntent() != null
                 && getIntent().getBooleanExtra("request_gps_after_login", false);
         if (!validSession()) return;
@@ -882,8 +884,10 @@ public class DriverDashboardActivity extends Activity
             set.setDuration(650);
             set.setInterpolator(new OvershootInterpolator());
             set.start();
-            if (Build.VERSION.SDK_INT >= 26) vibrator.vibrate(VibrationEffect.createWaveform(new long[]{0,180,90,180,90,320}, -1));
-            else vibrator.vibrate(new long[]{0,180,90,180,90,320}, -1);
+            if (vibrator != null && vibrator.hasVibrator()) {
+                if (Build.VERSION.SDK_INT >= 26) vibrator.vibrate(VibrationEffect.createWaveform(new long[]{0,180,90,180,90,320}, -1));
+                else vibrator.vibrate(new long[]{0,180,90,180,90,320}, -1);
+            }
             Toast.makeText(this, "🔥 ORDER BARU MASUK! Tetap semangat dan utamakan keselamatan.", Toast.LENGTH_LONG).show();
         } catch (Throwable ignored) { }
     }
@@ -1431,6 +1435,23 @@ public class DriverDashboardActivity extends Activity
         GradientDrawable shape = round(fill, radius);
         shape.setStroke(dp(width), Color.parseColor(stroke));
         return shape;
+    }
+
+    private int mixWithWhite(int color, float whiteRatio) {
+        float ratio = Math.max(0f, Math.min(1f, whiteRatio));
+        int red = Math.round(Color.red(color) * (1f - ratio) + 255f * ratio);
+        int green = Math.round(Color.green(color) * (1f - ratio) + 255f * ratio);
+        int blue = Math.round(Color.blue(color) * (1f - ratio) + 255f * ratio);
+        return Color.rgb(red, green, blue);
+    }
+
+    private GradientDrawable roundStrokeColor(
+            int fillColor, int strokeColor, int radius, int width) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(fillColor);
+        drawable.setCornerRadius(radius);
+        drawable.setStroke(dp(width), strokeColor);
+        return drawable;
     }
 
     private GradientDrawable gradient(
