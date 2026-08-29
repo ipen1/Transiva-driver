@@ -34,6 +34,7 @@ public class DriverProfileActivity extends Activity {
     private DriverApiClient api;
     private ProgressBar loading;
     private boolean loadingData;
+    private boolean loggingOut;
 
     private ImageView avatarView;
     private ImageView ktpView;
@@ -623,16 +624,37 @@ public class DriverProfileActivity extends Activity {
     }
 
     private void confirmLogout() {
+        if (loggingOut) return;
         new AlertDialog.Builder(this)
                 .setTitle("Keluar Akun")
-                .setMessage("Yakin ingin keluar dari akun driver Transiva?")
+                .setMessage("Keluar akan melepas akun dari perangkat ini seperti Reset Perangkat. Setelah berhasil, akun dapat langsung login di HP lain.")
                 .setNegativeButton("Batal", null)
-                .setPositiveButton("Keluar", (dialog, which) -> {
-                    DriverServiceController.stop(this);
-                    try { session.logout(); } catch (Exception ignored) {}
-                    redirectLogin();
-                })
+                .setPositiveButton("Keluar", (dialog, which) -> logoutAndReleaseDevice())
                 .show();
+    }
+
+    private void logoutAndReleaseDevice() {
+        if (loggingOut) return;
+        loggingOut = true;
+        DriverDeviceDisconnectClient.disconnect(this, new DriverDeviceDisconnectClient.Callback() {
+            @Override public void onSuccess() {
+                DriverServiceController.stop(DriverProfileActivity.this);
+                try { new SessionManager(DriverProfileActivity.this).forceLogout("driver_profile_logout_device_reset"); }
+                catch (Exception ignored) {}
+                loggingOut = false;
+                redirectLogin();
+            }
+
+            @Override public void onError(String message) {
+                loggingOut = false;
+                if (isFinishing()) return;
+                new AlertDialog.Builder(DriverProfileActivity.this)
+                        .setTitle("Gagal keluar akun")
+                        .setMessage(message + "\n\nAkun belum dilepas dari perangkat. Coba lagi saat koneksi stabil agar akun tetap dapat dipindahkan dengan aman.")
+                        .setPositiveButton("OK", null)
+                        .show();
+            }
+        });
     }
 
     private LinearLayout whiteCard() {

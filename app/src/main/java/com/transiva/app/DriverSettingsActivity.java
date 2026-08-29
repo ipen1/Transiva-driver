@@ -328,35 +328,28 @@ public class DriverSettingsActivity extends Activity {
     }
 
     private void resetDevice() {
+        if (resettingDevice) return;
         resettingDevice = true;
         setDeviceUi("Mereset perangkat…", "Mohon tunggu, sesi dan FCM perangkat sedang dilepas.", false);
-        DriverNetworkExecutor.execute(() -> {
-            try {
-                JSONObject body = new JSONObject();
-                body.put("action", "disconnect_device");
-                JSONObject response = requestDevice("POST", body);
-                if (!response.optBoolean("success", false)) {
-                    throw new Exception(response.optString("message", "Reset perangkat gagal."));
-                }
-                runOnUiThread(() -> {
-                    new SessionManager(this).forceLogout("driver_device_reset");
-                    Intent intent = new Intent(this, LoginActivity.class);
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                    startActivity(intent);
-                    finish();
-                });
-            } catch (Exception e) {
+        DriverDeviceDisconnectClient.disconnect(this, new DriverDeviceDisconnectClient.Callback() {
+            @Override public void onSuccess() {
+                DriverServiceController.stop(DriverSettingsActivity.this);
+                new SessionManager(DriverSettingsActivity.this).forceLogout("driver_device_reset");
+                Intent intent = new Intent(DriverSettingsActivity.this, LoginActivity.class);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                startActivity(intent);
+                finish();
+            }
+
+            @Override public void onError(String msg) {
                 resettingDevice = false;
-                final String msg = e.getMessage() == null ? "Reset perangkat gagal." : e.getMessage();
-                runOnUiThread(() -> {
-                    setDeviceUi(Build.MANUFACTURER + " " + Build.MODEL,
-                            "Reset gagal • " + msg, true);
-                    new AlertDialog.Builder(this)
-                            .setTitle("Reset perangkat gagal")
-                            .setMessage(msg)
-                            .setPositiveButton("OK", null)
-                            .show();
-                });
+                if (isFinishing()) return;
+                setDeviceUi(Build.MANUFACTURER + " " + Build.MODEL, "Reset gagal • " + msg, true);
+                new AlertDialog.Builder(DriverSettingsActivity.this)
+                        .setTitle("Reset perangkat gagal")
+                        .setMessage(msg)
+                        .setPositiveButton("OK", null)
+                        .show();
             }
         });
     }
