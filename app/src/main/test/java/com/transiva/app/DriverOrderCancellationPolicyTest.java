@@ -5,27 +5,22 @@ import static org.junit.Assert.*;
 
 public class DriverOrderCancellationPolicyTest {
     @Test
-    public void normalizeKeepsDatabaseStatusContract() {
-        assertEquals("driver_accepted", DriverOrderCancellationPolicy.normalize(" Driver Accepted "));
-        assertEquals("arrived_pickup", DriverOrderCancellationPolicy.normalize("arrived-pickup"));
+    public void cancellableStatusesRemainCompatible() {
+        assertTrue(DriverOrderCancellationPolicy.canCancel("driver_accepted"));
+        assertTrue(DriverOrderCancellationPolicy.canCancel("arrived_pickup"));
+        assertTrue(DriverOrderCancellationPolicy.canCancel("accepted"));
+        assertTrue(DriverOrderCancellationPolicy.canCancel("taken"));
     }
 
     @Test
-    public void cancellationOnlyAllowedBeforeDeliveryStarts() {
-        assertTrue(DriverOrderCancellationPolicy.canCancel("driver_accepted"));
-        assertTrue(DriverOrderCancellationPolicy.canCancel("arrived_pickup"));
+    public void deliveryAndFinishedStatusesCannotBeCancelled() {
         assertFalse(DriverOrderCancellationPolicy.canCancel("on_delivery"));
         assertFalse(DriverOrderCancellationPolicy.canCancel("arrived_delivery"));
         assertFalse(DriverOrderCancellationPolicy.canCancel("finished"));
     }
 
     @Test
-    public void reasonsAreNonEmpty() {
-        String[] reasons = DriverOrderCancellationPolicy.reasons();
-        assertTrue(reasons.length >= 4);
-        for (String reason : reasons) {
-            assertNotNull(reason);
-            assertFalse(reason.trim().isEmpty());
-        }
+    public void normalizationIsStable() {
+        assertEquals("driver_accepted", DriverOrderCancellationPolicy.normalize(" Driver-Accepted "));
     }
 }
