@@ -100,7 +100,7 @@ public class DriverSettingsActivity extends Activity {
         ));
         root.addView(card);
 
-        TextView callSection = text("Panggilan Masuk", 13, "#0B3A78", true);
+        TextView callSection = text("Bubble & Overlay Opsional", 13, "#0B3A78", true);
         LinearLayout.LayoutParams callSectionLp = new LinearLayout.LayoutParams(-1, -2);
         callSectionLp.setMargins(0, dp(18), 0, dp(8));
         root.addView(callSection, callSectionLp);
@@ -114,7 +114,7 @@ public class DriverSettingsActivity extends Activity {
         overlayRow.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout overlayLabels = new LinearLayout(this);
         overlayLabels.setOrientation(LinearLayout.VERTICAL);
-        overlayLabels.addView(text("Tampil di Atas Aplikasi Lain", 15, "#0B3A78", true));
+        overlayLabels.addView(text("Izin Tampil di Atas Aplikasi Lain", 15, "#0B3A78", true));
         overlayLabels.addView(text(overlayStatusText(), 11, "#64748B", false));
         overlayRow.addView(overlayLabels, new LinearLayout.LayoutParams(0, -2, 1));
         overlayRow.addView(text("›", 30, "#0B7CFF", true));
@@ -137,6 +137,12 @@ public class DriverSettingsActivity extends Activity {
         bubbleRow.addView(bubbleLabels, new LinearLayout.LayoutParams(0, -2, 1));
         bubbleRow.addView(text("›", 30, "#0B7CFF", true));
         bubbleRow.setOnClickListener(v -> {
+            if (DriverBubbleController.enabled(this)) {
+                DriverBubbleController.disable(this);
+                Toast.makeText(this, "Bubble Transiva dinonaktifkan", Toast.LENGTH_SHORT).show();
+                recreate();
+                return;
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
                 explainAndOpenOverlaySettings();
             } else {
@@ -199,6 +205,34 @@ public class DriverSettingsActivity extends Activity {
                 startActivity(new Intent(this, ChangePinActivity.class))));
         root.addView(accountCard);
 
+        TextView privacySection = text("Privasi & Data", 13, "#0B3A78", true);
+        LinearLayout.LayoutParams privacySectionLp = new LinearLayout.LayoutParams(-1, -2);
+        privacySectionLp.setMargins(0, dp(18), 0, dp(8));
+        root.addView(privacySection, privacySectionLp);
+
+        LinearLayout privacyCard = new LinearLayout(this);
+        privacyCard.setOrientation(LinearLayout.VERTICAL);
+        privacyCard.setPadding(dp(16), dp(16), dp(16), dp(16));
+        privacyCard.setBackground(round("#FFFFFF", 20));
+        privacyCard.setElevation(dp(2));
+        LinearLayout privacyRow = new LinearLayout(this);
+        privacyRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout privacyLabels = new LinearLayout(this);
+        privacyLabels.setOrientation(LinearLayout.VERTICAL);
+        privacyLabels.addView(text("Kebijakan Privasi Transiva Driver", 15, "#0B3A78", true));
+        privacyLabels.addView(text("Lokasi, notifikasi, chat/media, diagnostik, keamanan perangkat, dan hak penghapusan data", 11, "#64748B", false));
+        privacyRow.addView(privacyLabels, new LinearLayout.LayoutParams(0, -2, 1));
+        privacyRow.addView(text("›", 30, "#0B7CFF", true));
+        privacyRow.setOnClickListener(v -> {
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://transiva.my.id/server/privacy.html")));
+            } catch (Exception ignored) {
+                Toast.makeText(this, "Kebijakan privasi tidak dapat dibuka", Toast.LENGTH_SHORT).show();
+            }
+        });
+        privacyCard.addView(privacyRow);
+        root.addView(privacyCard);
+
         TextView updateSection = text("Pembaruan", 13, "#0B3A78", true);
         LinearLayout.LayoutParams updateSectionLp = new LinearLayout.LayoutParams(-1, -2);
         updateSectionLp.setMargins(0, dp(18), 0, dp(8));
@@ -241,9 +275,9 @@ public class DriverSettingsActivity extends Activity {
 
     private String overlayStatusText() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
-            return "Aktif • layar panggilan dapat tampil saat aplikasi di latar belakang";
+            return "Izin Android aktif • Bubble tetap dapat dinonaktifkan kapan saja";
         }
-        return "Opsional • aktifkan hanya untuk membantu layar panggilan masuk";
+        return "Opsional • hanya diperlukan jika Anda ingin memakai Bubble Transiva";
     }
 
     private void explainAndOpenOverlaySettings() {
@@ -251,14 +285,14 @@ public class DriverSettingsActivity extends Activity {
         if (Settings.canDrawOverlays(this)) {
             new AlertDialog.Builder(this)
                     .setTitle("Izin sudah aktif")
-                    .setMessage("Transiva Driver sudah diizinkan tampil di atas aplikasi lain. Izin ini membantu layar panggilan masuk tampil ketika aplikasi berada di latar belakang.")
+                    .setMessage("Izin Android untuk tampil di atas aplikasi lain sudah aktif. Izin ini dipakai hanya bila Anda memilih mengaktifkan Bubble Transiva. Panggilan tetap menggunakan notifikasi panggilan Android.")
                     .setPositiveButton("Tutup", null)
                     .show();
             return;
         }
         new AlertDialog.Builder(this)
                 .setTitle("Aktifkan secara opsional")
-                .setMessage("Izin ini tidak wajib untuk memakai aplikasi. Aktifkan hanya bila Anda ingin layar panggilan Transiva tampil di atas aplikasi lain saat sedang online atau menjalankan perjalanan.")
+                .setMessage("Izin ini tidak wajib untuk memakai aplikasi atau menerima order. Aktifkan hanya bila Anda ingin menggunakan Bubble Transiva untuk menampilkan order, pesan customer, dan mention di atas aplikasi lain. Bubble dapat dinonaktifkan kapan saja dari halaman ini.")
                 .setNegativeButton("Nanti", null)
                 .setPositiveButton("Buka Pengaturan", (dialog, which) -> {
                     try {

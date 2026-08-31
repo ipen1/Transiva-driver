@@ -1,8 +1,12 @@
 package com.transiva.app;
 
+import android.Manifest;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.content.Intent;
 import android.os.Build;
+
+import androidx.core.content.ContextCompat;
 
 /** Single orchestration point for all long-running driver services. */
 public final class DriverServiceController {
@@ -20,7 +24,7 @@ public final class DriverServiceController {
         if (context == null) return;
         Context app = context.getApplicationContext();
         SessionManager session = new SessionManager(app);
-        if (!session.canRunDriverLocation()) {
+        if (!session.canRunDriverLocation() || !hasOperationalLocationPermission(app)) {
             stopAll(app);
             return;
         }
@@ -39,6 +43,17 @@ public final class DriverServiceController {
         // LocationService adalah satu-satunya foreground/background loop utama.
         // BackgroundSyncService tidak dijalankan terus-menerus agar tidak ada
         // duplicate GPS upload + notifikasi foreground kedua.
+    }
+
+    private static boolean hasOperationalLocationPermission(Context context) {
+        boolean foreground = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+                == PackageManager.PERMISSION_GRANTED
+                || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
+                == PackageManager.PERMISSION_GRANTED;
+        if (!foreground) return false;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true;
+        return ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                == PackageManager.PERMISSION_GRANTED;
     }
 
     public static synchronized void stop(Context context) {

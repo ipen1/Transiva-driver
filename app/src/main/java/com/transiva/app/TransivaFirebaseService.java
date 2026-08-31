@@ -12,7 +12,6 @@ import android.media.AudioAttributes;
 import android.net.Uri;
 import android.os.Build;
 import android.os.PowerManager;
-import android.provider.Settings;
 import android.text.TextUtils;
 
 import androidx.core.app.NotificationCompat;
@@ -413,8 +412,13 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                     .setAutoCancel(false)
                     .setOnlyAlertOnce(true)
                     .setSilent(true)
-                    .setTimeoutAfter(50_000L)
-                    .setFullScreenIntent(pendingIntent, true);
+                    .setTimeoutAfter(50_000L);
+            // Android 14+ exposes USE_FULL_SCREEN_INTENT as special app access.
+            // Only attach FSI for a genuine incoming voice/video call and only
+            // when Android reports that this app may use it.
+            if (canUseFullScreenIntent()) {
+                builder.setFullScreenIntent(pendingIntent, true);
+            }
         } else {
             if (newIncomingOrder) {
                 // Android 8+ mengambil suara dari NotificationChannel.
@@ -434,9 +438,10 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                 );
             }
             if (merchantDriverChatNotification) {
+                // Chat may be high priority, but it must remain a normal heads-up
+                // notification. Full-screen intent is reserved for incoming calls.
                 builder.setCategory(NotificationCompat.CATEGORY_MESSAGE)
-                        .setPriority(NotificationCompat.PRIORITY_MAX)
-                        .setFullScreenIntent(pendingIntent, true);
+                        .setPriority(NotificationCompat.PRIORITY_HIGH);
             }
         }
 
@@ -459,10 +464,19 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                 .from(this)
                 .notify(requestCode, builder.build());
 
-        if ("webrtc_call".equals(type)
-                && data != null
-                && "incoming_call".equalsIgnoreCase(first(data.get("event"), ""))) {
-            openIncomingCallScreen(intent);
+        // Do not start an Activity directly from background FCM. Android's call
+        // notification/FSI is the sole entry point while backgrounded. If FSI
+        // special access is unavailable, the user still receives a heads-up call
+        // notification that can be tapped normally.
+    }
+
+    private boolean canUseFullScreenIntent() {
+        if (Build.VERSION.SDK_INT < 34) return true;
+        try {
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            return nm != null && nm.canUseFullScreenIntent();
+        } catch (Throwable ignored) {
+            return false;
         }
     }
 
@@ -498,25 +512,6 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
             );
             wakeLock.acquire(timeoutMs);
         } catch (Throwable ignored) {
-        }
-    }
-
-    private void openIncomingCallScreen(Intent intent) {
-        if (intent == null) return;
-        String dbgCall = first(intent.getStringExtra("call_id"), "");
-        boolean overlay = Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(this);
-        try {
-            Intent callIntent = new Intent(intent);
-            callIntent.addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK
-                            | Intent.FLAG_ACTIVITY_CLEAR_TOP
-                            | Intent.FLAG_ACTIVITY_SINGLE_TOP
-                            | Intent.FLAG_ACTIVITY_NO_USER_ACTION
-            );
-            startActivity(callIntent);
-        } catch (Throwable ignored) {
-            // Android 10+ may block a direct background Activity start. In that
-            // case the high-priority full-screen call notification above opens it.
         }
     }
 

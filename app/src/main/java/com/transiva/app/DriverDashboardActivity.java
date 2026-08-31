@@ -58,6 +58,7 @@ public class DriverDashboardActivity extends Activity
         implements DriverDashboardContract.View {
 
     private static final int REQ_LOCATION = 8702;
+    private static final int REQ_BACKGROUND_LOCATION = 8703;
     private static final long IDLE_REFRESH_MS = 60000L;
     private static final long ACTIVE_REFRESH_MS = 15000L;
     private static final long OFFER_REFRESH_MS = 8000L;
@@ -110,6 +111,7 @@ public class DriverDashboardActivity extends Activity
 
     private Switch onlineSwitch;
     private boolean pendingOnlineAfterGps = false;
+    private boolean pendingBackgroundLocationSettings = false;
     private boolean requestGpsAfterLogin = false;
     private boolean gpsPromptShown = false;
     private ProgressBar loading;
@@ -160,7 +162,6 @@ public class DriverDashboardActivity extends Activity
         requestGpsAfterLogin = getIntent() != null
                 && getIntent().getBooleanExtra("request_gps_after_login", false);
         if (!validSession()) return;
-        DriverBubbleController.requestOnce(this);
         offerCountdownController = new DashboardOfferCountdownController(this, () -> {
             if (presenter != null) handler.postDelayed(() -> presenter.load(false), 350L);
         });
@@ -250,6 +251,16 @@ public class DriverDashboardActivity extends Activity
 
     @Override protected void onResume() {
         super.onResume();
+        if (pendingBackgroundLocationSettings) {
+            if (hasBackgroundLocationPermission()) {
+                continueOnlineAfterPermissions();
+            } else {
+                pendingBackgroundLocationSettings = false;
+                pendingOnlineAfterGps = false;
+                setSwitch(false);
+                showMessage("Izin lokasi latar belakang belum aktif. Driver tetap OFFLINE.");
+            }
+        }
         DriverAppSettings.apply(this);
         if (!validSession()) return;
         handler.removeCallbacks(refreshRunnable);
@@ -259,7 +270,7 @@ public class DriverDashboardActivity extends Activity
         if (presenter != null) presenter.load(false);
 
         // Kembali dari halaman pengaturan GPS tanpa perlu menutup/membuka ulang APK.
-        if (pendingOnlineAfterGps && hasLocationPermission() && isLocationProviderEnabled()) {
+        if (pendingOnlineAfterGps && hasLocationPermission() && hasBackgroundLocationPermission() && isLocationProviderEnabled()) {
             pendingOnlineAfterGps = false;
             setSwitch(true);
             if (presenter != null) {
@@ -789,7 +800,7 @@ public class DriverDashboardActivity extends Activity
         // driver login kembali saat GPS/lokasi sedang mati. Driver tetap boleh
         // masuk ke dashboard; tracking baru dijalankan setelah izin + provider
         // lokasi benar-benar tersedia. Status ONLINE server tetap dipertahankan.
-        boolean locationReady = hasLocationPermission() && isLocationProviderEnabled();
+        boolean locationReady = hasLocationPermission() && hasBackgroundLocationPermission() && isLocationProviderEnabled();
         if (state.online && locationReady) {
             DriverServiceController.start(this);
         } else {
@@ -1281,13 +1292,13 @@ public class DriverDashboardActivity extends Activity
     private boolean ensureLocationReady() {
         if (!hasLocationPermission()) {
             pendingOnlineAfterGps = true;
-            if (Build.VERSION.SDK_INT >= 23) {
-                requestPermissions(new String[]{
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.ACCESS_COARSE_LOCATION
-                }, REQ_LOCATION);
-            }
-            showMessage("Izinkan lokasi agar driver dapat online.");
+            showLocationDisclosureAndRequestForeground();
+            return false;
+        }
+
+        if (!hasBackgroundLocationPermission()) {
+            pendingOnlineAfterGps = true;
+            showBackgroundLocationDisclosureAndRequest();
             return false;
         }
 
@@ -1298,6 +1309,92 @@ public class DriverDashboardActivity extends Activity
         }
         pendingOnlineAfterGps = false;
         return true;
+    }
+
+    /**
+     * Google Play prominent disclosure. It is intentionally shown in the normal
+     * ONLINE flow immediately before Android's location permission prompt.
+     */
+    private void showLocationDisclosureAndRequestForeground() {
+        new AlertDialog.Builder(this)
+                .setTitle("Lokasi untuk Driver ONLINE")
+                .setMessage("Transiva Driver mengumpulkan data lokasi untuk menampilkan posisi driver, mencari order di sekitar, mengirim posisi perjalanan kepada customer, dan membantu navigasi. Saat Driver memilih ONLINE atau sedang menjalankan perjalanan, lokasi juga digunakan di latar belakang, termasuk saat aplikasi ditutup atau tidak sedang digunakan. Data lokasi tidak digunakan untuk iklan.")
+                .setNegativeButton("Tetap Offline", (d, w) -> {
+                    pendingOnlineAfterGps = false;
+                    setSwitch(false);
+                })
+                .setPositiveButton("Lanjut", (d, w) -> {
+                    if (Build.VERSION.SDK_INT >= 23) {
+                        requestPermissions(new String[]{
+                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                Manifest.permission.ACCESS_COARSE_LOCATION
+                        }, REQ_LOCATION);
+                    }
+                })
+                .show();
+    }
+
+    private boolean hasBackgroundLocationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true;
+        return checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void showBackgroundLocationDisclosureAndRequest() {
+        new AlertDialog.Builder(this)
+                .setTitle("Izinkan lokasi di latar belakang")
+                .setMessage("Agar status ONLINE tetap akurat dan customer dapat menerima posisi perjalanan ketika Transiva Driver tidak sedang tampil di layar, aplikasi memerlukan akses lokasi di latar belakang. Izin ini hanya digunakan saat Anda memilih ONLINE atau memiliki perjalanan aktif, dan tidak digunakan untuk iklan.")
+                .setNegativeButton("Tetap Offline", (d, w) -> {
+                    pendingOnlineAfterGps = false;
+                    pendingBackgroundLocationSettings = false;
+                    setSwitch(false);
+                })
+                .setPositiveButton("Lanjut", (d, w) -> requestBackgroundLocationPermission())
+                .show();
+    }
+
+    private void requestBackgroundLocationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            continueOnlineAfterPermissions();
+            return;
+        }
+        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+            requestPermissions(new String[]{Manifest.permission.ACCESS_BACKGROUND_LOCATION}, REQ_BACKGROUND_LOCATION);
+            return;
+        }
+
+        // Android 11+: "Allow all the time" is granted from the app's Location
+        // permission settings. We send the driver there only after the disclosure.
+        pendingBackgroundLocationSettings = true;
+        try {
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            intent.setData(android.net.Uri.parse("package:" + getPackageName()));
+            startActivity(intent);
+            showMessage("Buka Izin > Lokasi lalu pilih Izinkan sepanjang waktu, kemudian kembali ke Transiva.");
+        } catch (Exception e) {
+            pendingBackgroundLocationSettings = false;
+            showMessage("Tidak dapat membuka pengaturan izin lokasi.");
+        }
+    }
+
+    private void continueOnlineAfterPermissions() {
+        if (!hasLocationPermission() || !hasBackgroundLocationPermission()) {
+            setSwitch(false);
+            return;
+        }
+        if (!isLocationProviderEnabled()) {
+            showGpsEnableDialog(true);
+            return;
+        }
+        if (pendingOnlineAfterGps) {
+            pendingOnlineAfterGps = false;
+            pendingBackgroundLocationSettings = false;
+            setSwitch(true);
+            if (presenter != null) {
+                presenter.setOnline(true, normalizeDriverType(session.getDriverType()));
+            }
+            showMessage("Lokasi siap. Driver sedang diaktifkan ONLINE.");
+        }
     }
 
     private boolean isLocationProviderEnabled() {
@@ -1341,21 +1438,25 @@ public class DriverDashboardActivity extends Activity
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQ_LOCATION) {
             if (hasLocationPermission()) {
-                if (!isLocationProviderEnabled()) {
-                    showGpsEnableDialog(pendingOnlineAfterGps);
-                } else if (pendingOnlineAfterGps) {
-                    pendingOnlineAfterGps = false;
-                    setSwitch(true);
-                    if (presenter != null) {
-                        presenter.setOnline(true, normalizeDriverType(session.getDriverType()));
-                    }
-                    showMessage("Izin lokasi diberikan. Driver sedang diaktifkan ONLINE.");
+                if (!hasBackgroundLocationPermission()) {
+                    showBackgroundLocationDisclosureAndRequest();
                 } else {
-                    showMessage("Izin lokasi diberikan.");
+                    continueOnlineAfterPermissions();
                 }
             } else {
+                pendingOnlineAfterGps = false;
                 setSwitch(false);
                 showMessage("Driver tidak dapat online tanpa izin lokasi.");
+            }
+            return;
+        }
+        if (requestCode == REQ_BACKGROUND_LOCATION) {
+            if (hasBackgroundLocationPermission()) {
+                continueOnlineAfterPermissions();
+            } else {
+                pendingOnlineAfterGps = false;
+                setSwitch(false);
+                showMessage("Lokasi latar belakang belum diberikan. Driver tetap OFFLINE.");
             }
         }
     }

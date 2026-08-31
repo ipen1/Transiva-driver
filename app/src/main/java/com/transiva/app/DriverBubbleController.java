@@ -18,7 +18,7 @@ public final class DriverBubbleController {
     }
 
     public static boolean enabled(Context c) {
-        return c.getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean("enabled", true);
+        return c.getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean("enabled", false);
     }
 
     public static void onActivityResumed(Activity a) {
@@ -54,5 +54,13 @@ public final class DriverBubbleController {
     public static void enable(Context c) {
         c.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putBoolean("enabled", true).apply();
         start(c);
+    }
+
+    public static void disable(Context c) {
+        c.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putBoolean("enabled", false).apply();
+        try {
+            Intent i = new Intent(c, DriverBubbleOverlayService.class).setAction(DriverBubbleOverlayService.ACTION_STOP);
+            c.startService(i);
+        } catch (Throwable ignored) {}
     }
 }
