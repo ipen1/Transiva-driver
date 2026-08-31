@@ -1,5 +1,6 @@
 package com.transiva.app;
 
+import androidx.core.content.ContextCompat;
 import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -37,8 +38,7 @@ public final class TripCommunicationController {
         if (registered) { refreshUnread(); return; }
         try {
             IntentFilter f = new IntentFilter(TransivaFirebaseService.ACTION_DRIVER_DATA_CHANGED);
-            if (Build.VERSION.SDK_INT >= 33) host.registerReceiver(receiver, f, Context.RECEIVER_NOT_EXPORTED);
-            else host.registerReceiver(receiver, f);
+            ContextCompat.registerReceiver(host, receiver, f, ContextCompat.RECEIVER_NOT_EXPORTED);
             registered = true;
         } catch (Throwable t) {
             TransivaDiagnostics.error(host, "message", "TRIP_UNREAD_RECEIVER_REGISTER_FAILED", t);

@@ -5,6 +5,8 @@ import android.app.PictureInPictureParams;
 import android.os.Build;
 import android.util.Rational;
 
+import androidx.annotation.RequiresApi;
+
 /** Small, OEM-safe Picture-in-Picture policy separated from navigation engine. */
 public final class NavigationPipController {
     private final Activity activity;
@@ -20,13 +22,13 @@ public final class NavigationPipController {
     }
 
     public void configure() {
-        if (!allowed()) return;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !allowed()) return;
         try { activity.setPictureInPictureParams(params()); }
         catch (Throwable t) { TransivaDiagnostics.error(activity, "navigation", "PIP_CONFIG_FAILED", t); }
     }
 
     public void enter() {
-        if (!allowed() || activity.isFinishing()) return;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !allowed() || activity.isFinishing()) return;
         try {
             if (activity.isInPictureInPictureMode()) return;
             activity.enterPictureInPictureMode(params());
@@ -34,9 +36,10 @@ public final class NavigationPipController {
     }
 
     public boolean isActive() {
-        return allowed() && activity.isInPictureInPictureMode();
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && allowed() && activity.isInPictureInPictureMode();
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     private PictureInPictureParams params() {
         PictureInPictureParams.Builder b = new PictureInPictureParams.Builder().setAspectRatio(new Rational(3, 4));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

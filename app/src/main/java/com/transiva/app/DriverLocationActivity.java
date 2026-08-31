@@ -47,6 +47,7 @@ public class DriverLocationActivity extends FragmentActivity implements OnMapRea
     private static final int REQ_LOCATION = 9231;
     private static final long REFRESH_MS = 15000L;
     private static final String BASE = "https://transiva.my.id/server/";
+    private int mapHostId;
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private GoogleMap map;
@@ -74,10 +75,11 @@ public class DriverLocationActivity extends FragmentActivity implements OnMapRea
         session = new SessionManager(this);
         if (!session.isLoggedIn()) { finish(); return; }
         locationClient = LocationServices.getFusedLocationProviderClient(this);
+        mapHostId = View.generateViewId();
         setContentView(buildScreen());
 
         SupportMapFragment fragment = SupportMapFragment.newInstance();
-        getSupportFragmentManager().beginTransaction().replace(10021, fragment).commitNow();
+        getSupportFragmentManager().beginTransaction().replace(mapHostId, fragment).commitNow();
         fragment.getMapAsync(this);
     }
 
@@ -86,7 +88,7 @@ public class DriverLocationActivity extends FragmentActivity implements OnMapRea
         root.setBackgroundColor(Color.WHITE);
 
         FrameLayout mapHost = new FrameLayout(this);
-        mapHost.setId(10021);
+        mapHost.setId(mapHostId);
         root.addView(mapHost, new FrameLayout.LayoutParams(-1, -1));
 
         LinearLayout top = new LinearLayout(this);

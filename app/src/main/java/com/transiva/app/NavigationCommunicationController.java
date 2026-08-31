@@ -1,5 +1,6 @@
 package com.transiva.app;
 
+import androidx.core.content.ContextCompat;
 import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -98,8 +99,7 @@ public final class NavigationCommunicationController {
         if (registered) return;
         try {
             IntentFilter filter = new IntentFilter(TransivaFirebaseService.ACTION_DRIVER_DATA_CHANGED);
-            if (Build.VERSION.SDK_INT >= 33) activity.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED);
-            else activity.registerReceiver(receiver, filter);
+            ContextCompat.registerReceiver(activity, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
             registered = true;
         } catch (Throwable t) {
             TransivaDiagnostics.error(activity, "navigation", "NAV_CHAT_RECEIVER_REGISTER_FAILED", t);

@@ -1,5 +1,6 @@
 package com.transiva.app;
 
+import androidx.core.content.ContextCompat;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -228,11 +229,7 @@ public class DriverDashboardActivity extends Activity
         if (!realtimeReceiverRegistered) {
             try {
                 IntentFilter filter = new IntentFilter(TransivaFirebaseService.ACTION_DRIVER_DATA_CHANGED);
-                if (android.os.Build.VERSION.SDK_INT >= 33) {
-                    registerReceiver(realtimeReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-                } else {
-                    registerReceiver(realtimeReceiver, filter);
-                }
+                ContextCompat.registerReceiver(this, realtimeReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
                 realtimeReceiverRegistered = true;
             } catch (Throwable error) {
                 TransivaDriverCrashReporter.nonFatal("dashboard_realtime_receiver", error);

@@ -10,8 +10,13 @@ public final class DriverRequestGate {
 
     public static boolean enter(String key) {
         String safe = key == null ? "" : key;
-        return GATES.computeIfAbsent(safe, k -> new AtomicBoolean(false))
-                .compareAndSet(false, true);
+        AtomicBoolean gate = GATES.get(safe);
+        if (gate == null) {
+            AtomicBoolean fresh = new AtomicBoolean(false);
+            AtomicBoolean existing = GATES.putIfAbsent(safe, fresh);
+            gate = existing != null ? existing : fresh;
+        }
+        return gate.compareAndSet(false, true);
     }
 
     public static void leave(String key) {
