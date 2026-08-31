@@ -23,10 +23,14 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Setup Gradle 8.11.1
+      - name: Setup Gradle cache
         uses: gradle/actions/setup-gradle@v6
-        with:
-          gradle-version: "8.11.1"
+
+      - name: Verify Play Store source policy gate
+        run: |
+          chmod +x gradlew tools/playstore_release_gate.py
+          ./gradlew --transiva-wrapper-check
+          python3 tools/playstore_release_gate.py
 
       - name: Decode release keystore
         shell: bash
@@ -36,15 +40,21 @@ jobs:
           printf "%s" "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > app/transiva-release.jks
           test -s app/transiva-release.jks
 
-      - name: Run Driver Regression Tests
-        run: gradle clean testDebugUnitTest
+      - name: Unit tests and release lint
+        run: ./gradlew clean testDebugUnitTest lintRelease
 
       - name: Build signed release APK and AAB
-        run: gradle assembleRelease bundleRelease
+        run: ./gradlew assembleRelease bundleRelease
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+      - name: Validate final merged manifest and AAB
+        run: |
+          python3 tools/playstore_release_gate.py
+          unzip -t app/build/outputs/bundle/release/*.aab >/dev/null
+          test -s app/build/outputs/bundle/release/*.aab
 
       - name: Upload Driver APK
         uses: actions/upload-artifact@v6
