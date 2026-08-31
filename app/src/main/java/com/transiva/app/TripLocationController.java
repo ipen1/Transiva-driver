@@ -1,5 +1,6 @@
 package com.transiva.app;
 
+import android.annotation.SuppressLint;
 import android.Manifest;
 import android.app.Activity;
 import android.content.pm.PackageManager;
@@ -27,6 +28,7 @@ public final class TripLocationController {
         this.activity = activity; this.callback = callback;
     }
 
+    @SuppressLint("MissingPermission")
     public void start() {
         if (Build.VERSION.SDK_INT >= 23 && activity.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             if (callback != null) callback.onPermissionRequired();
@@ -63,6 +65,7 @@ public final class TripLocationController {
         listener = null;
     }
 
+    @SuppressLint("MissingPermission")
     private Location bestLastKnown() {
         if (manager == null) return null;
         Location gps = null, net = null;

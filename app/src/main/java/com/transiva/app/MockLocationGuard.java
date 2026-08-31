@@ -1,5 +1,6 @@
 package com.transiva.app;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.AppOpsManager;
@@ -215,6 +216,11 @@ public final class MockLocationGuard {
     }
 
     private static boolean hasFreshMockLocation(Context context) {
+        if (Build.VERSION.SDK_INT >= 23
+                && context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                && context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return false;
+        }
         LocationManager manager = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
         if (manager == null) return false;
         long now = System.currentTimeMillis();

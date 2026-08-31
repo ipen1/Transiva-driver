@@ -1,5 +1,6 @@
 package com.transiva.app;
 
+import android.annotation.SuppressLint;
 import android.Manifest;
 import android.app.Activity;
 import android.content.pm.PackageManager;
@@ -38,6 +39,7 @@ public final class NavigationLocationController {
                 activity.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
     }
 
+    @SuppressLint("MissingPermission")
     public void start() {
         if (!hasPermission()) {
             if (callback != null) callback.onPermissionRequired();
@@ -79,6 +81,7 @@ public final class NavigationLocationController {
         listener = null;
     }
 
+    @SuppressLint("MissingPermission")
     public Location bestLastKnown() {
         if (!hasPermission()) return null;
         try {

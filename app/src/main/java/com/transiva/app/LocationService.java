@@ -1,5 +1,7 @@
 package com.transiva.app;
 
+import androidx.core.content.ContextCompat;
+import android.annotation.SuppressLint;
 import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -133,6 +135,7 @@ public class LocationService extends Service {
         }
     }
 
+    @SuppressLint("MissingPermission")
     private void requestUpdates() {
         if (locationManager == null || !hasPermission()) {
             stopTracking();
@@ -322,6 +325,9 @@ public class LocationService extends Service {
     }
 
     private void updateNotification(String text) {
+        if (Build.VERSION.SDK_INT >= 33
+                && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) return;
         NotificationManager manager =
                 (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (manager != null) manager.notify(NOTIFICATION_ID, notification(text));

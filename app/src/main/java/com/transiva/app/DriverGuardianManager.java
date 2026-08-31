@@ -1,5 +1,8 @@
 package com.transiva.app;
 
+import androidx.core.content.ContextCompat;
+import android.content.pm.PackageManager;
+import android.Manifest;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -44,6 +47,9 @@ public final class DriverGuardianManager {
         } catch(Exception ignored) {}
     }
     private void notify(Context c,String reason){
+        if (Build.VERSION.SDK_INT >= 33
+                && ContextCompat.checkSelfPermission(c, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) return;
         NotificationManager nm=(NotificationManager)c.getSystemService(Context.NOTIFICATION_SERVICE);
         if(Build.VERSION.SDK_INT>=26) nm.createNotificationChannel(new NotificationChannel(CH,"Transiva Guardian",NotificationManager.IMPORTANCE_HIGH));
         Intent i=new Intent(c,DriverDashboardActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP);

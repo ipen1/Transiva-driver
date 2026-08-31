@@ -1,5 +1,6 @@
 package com.transiva.app;
 
+import android.annotation.SuppressLint;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -145,6 +146,7 @@ public class DriverLocationActivity extends FragmentActivity implements OnMapRea
         updateMyLocationAndDrivers();
     }
 
+    @SuppressLint("MissingPermission")
     private void updateMyLocationAndDrivers() {
         if (requestInFlight || ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return;
         try {

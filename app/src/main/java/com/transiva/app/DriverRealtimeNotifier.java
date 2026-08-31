@@ -1,5 +1,8 @@
 package com.transiva.app;
 
+import androidx.core.content.ContextCompat;
+import android.content.pm.PackageManager;
+import android.Manifest;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -14,6 +17,9 @@ public class DriverRealtimeNotifier {
     private static final String CHANNEL_ID = "transiva_driver_wallet";
 
     public static void showWalletNotif(Context context, String title, String message) {
+        if (Build.VERSION.SDK_INT >= 33
+                && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) return;
         try {
             NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm == null) return;

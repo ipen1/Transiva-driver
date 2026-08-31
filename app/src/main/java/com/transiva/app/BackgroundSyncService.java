@@ -1,5 +1,6 @@
 package com.transiva.app;
 
+import android.annotation.SuppressLint;
 import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -482,6 +483,7 @@ public class BackgroundSyncService extends Service {
         }
     }
 
+    @SuppressLint("MissingPermission")
     private Location getQuickLastKnownLocation() {
         try {
             if (!hasLocationPermission()) {
