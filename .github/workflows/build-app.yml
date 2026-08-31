@@ -23,24 +23,51 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Restore verified official Gradle Wrapper
+      # The previous repository contained a non-official/custom wrapper JAR.
+      # setup-gradle validates every committed wrapper JAR before Gradle runs,
+      # therefore remove it first and regenerate an official wrapper below.
+      - name: Remove legacy Gradle Wrapper JAR
         shell: bash
         run: |
           set -euo pipefail
-          WRAPPER_URL="https://services.gradle.org/distributions/gradle-8.11.1-wrapper.jar"
-          EXPECTED_SHA256="2db75c40782f5e8ba1fc278a5574bab070adccb2d21ca5a6e5ed840888448046"
-          mkdir -p gradle/wrapper
-          curl --fail --location --retry 3 --retry-all-errors \
-            "$WRAPPER_URL" \
-            --output gradle/wrapper/gradle-wrapper.jar
-          echo "${EXPECTED_SHA256}  gradle/wrapper/gradle-wrapper.jar" | sha256sum --check --strict
+          rm -f gradle/wrapper/gradle-wrapper.jar
+          test ! -e gradle/wrapper/gradle-wrapper.jar
 
-      - name: Setup Gradle cache
+      - name: Setup official Gradle 8.11.1
         uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Generate and verify official Gradle Wrapper
+        shell: bash
+        run: |
+          set -euo pipefail
+          OFFICIAL_WRAPPER_SHA256="2db75c40782f5e8ba1fc278a5574bab070adccb2d21ca5a6e5ed840888448046"
+          DIST_SHA256="f397b287023acdba1e9f6fc5ea72d22dd63669d59ed4a289a29b1a76eee151c6"
+
+          gradle wrapper --gradle-version 8.11.1 --distribution-type bin
+
+          test -s gradle/wrapper/gradle-wrapper.jar
+          echo "${OFFICIAL_WRAPPER_SHA256}  gradle/wrapper/gradle-wrapper.jar" | sha256sum --check --strict
+
+          # Pin the Gradle distribution itself as well.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('gradle/wrapper/gradle-wrapper.properties')
+          text = p.read_text(encoding='utf-8')
+          lines = [line for line in text.splitlines() if not line.startswith('distributionSha256Sum=')]
+          lines.append('distributionSha256Sum=f397b287023acdba1e9f6fc5ea72d22dd63669d59ed4a289a29b1a76eee151c6')
+          p.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          PY
+
+          grep -F 'distributionUrl=https\://services.gradle.org/distributions/gradle-8.11.1-bin.zip' gradle/wrapper/gradle-wrapper.properties
+          grep -F "distributionSha256Sum=${DIST_SHA256}" gradle/wrapper/gradle-wrapper.properties
+          chmod +x gradlew
+          ./gradlew --version
 
       - name: Verify Play Store source policy gate
         run: |
-          chmod +x gradlew tools/playstore_release_gate.py
+          chmod +x tools/playstore_release_gate.py
           python3 tools/playstore_release_gate.py
 
       - name: Decode release keystore
@@ -64,8 +91,16 @@ jobs:
       - name: Validate final merged manifest and AAB
         run: |
           python3 tools/playstore_release_gate.py
-          unzip -t app/build/outputs/bundle/release/*.aab >/dev/null
-          test -s app/build/outputs/bundle/release/*.aab
+          shopt -s nullglob
+          aabs=(app/build/outputs/bundle/release/*.aab)
+          if [ ${#aabs[@]} -eq 0 ]; then
+            echo "Release AAB not found"
+            exit 1
+          fi
+          for aab in "${aabs[@]}"; do
+            unzip -t "$aab" >/dev/null
+            test -s "$aab"
+          done
 
       - name: Upload Driver APK
         uses: actions/upload-artifact@v6
