@@ -1,36 +1,14 @@
-TRANSIVA DRIVER FIX — API 36 + OVERLAY UX + TESTS + MAPLIBRE PRIMARY
+# Play Store final hardening upgrade
 
-File yang diubah/ditambahkan:
-1. build.gradle
-   - Android Gradle Plugin 8.10.1.
-2. app/build.gradle
-   - compileSdk 36, targetSdk 36, minSdk tetap 23.
-   - JUnit 4.13.2.
-3. .github/workflows/build-aab.yml
-   - Gradle 8.11.1.
-   - testDebugUnitTest wajib lulus sebelum release APK/AAB.
-4. app/src/main/java/com/transiva/app/SplashActivity.java
-   - Tidak meminta izin overlay saat startup.
-5. app/src/main/java/com/transiva/app/DriverSettingsActivity.java
-   - Overlay menjadi opsi sadar di Pengaturan Driver > Panggilan Masuk.
-6. app/src/main/java/com/transiva/app/DriverTripActivity.java
-   - Jalur utama navigasi selalu DriverNavigationActivity (MapLibre).
-   - Fallback web Transiva dihapus; Google Navigation hanya fallback darurat bila Activity native gagal.
-7. app/src/main/AndroidManifest.xml
-   - DriverLeafletNavigationActivity tidak lagi didaftarkan sebagai Activity aktif.
-8. app/src/test/java/com/transiva/app/DriverMessageStatusTest.java
-   - Regression tests untuk pending, accepted, trip aktif, completed/cancelled, normalisasi status, TransFood dan TransRide.
+Changes in this package:
 
-Tidak diubah:
-- applicationId
-- minSdk
-- endpoint API
-- signing configuration
-- Firebase/FCM
-- WebRTC signaling
-- foreground/background service
-- logika update status perjalanan
-- layout dan renderer MapLibre DriverNavigationActivity
+1. Removed `USE_FULL_SCREEN_INTENT` and all broad media/storage permissions from the manifest.
+2. Incoming WebRTC calls remain high-priority heads-up notifications. Call channel moved to `transiva_call_channel_v4` and is audible because the full-screen Activity no longer supplies the only alert path.
+3. Photo/file selection remains through `ACTION_OPEN_DOCUMENT`, so removing broad media access does not remove chat/top-up file selection.
+4. Restored a self-contained `gradlew`, `gradlew.bat`, and checksum-pinned wrapper bootstrap JAR. The distribution is pinned to Gradle 8.11.1 SHA-256 `f397b287023acdba1e9f6fc5ea72d22dd63669d59ed4a289a29b1a76eee151c6`.
+5. Added JUnit tests for order cancellation status invariants, retry/backoff behavior, and Play Store policy invariants.
+6. Added `tools/playstore_release_gate.py` and `tools/validate_release.sh`.
+7. Upgraded GitHub Actions to run source policy gate, unit tests, `lintRelease`, signed APK/AAB build, merged-manifest check, and AAB structural validation.
+8. Added `playstore/PLAY_CONSOLE_DECLARATIONS_FINAL.md` with the remaining manual Play Console declarations.
 
-Cara pakai:
-Ekstrak ZIP ini ke root repository Transiva Driver dan izinkan replace file.
+Important: Play Console declarations cannot be encoded into the APK. They still must be submitted in the developer's Play Console account. The included document is the exact checklist/template for this source candidate.
