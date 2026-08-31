@@ -48,7 +48,7 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
     private static final String CH_CHAT =
             "transiva_chat_channel_v2";
     private static final String CH_CALL =
-            "transiva_call_channel_v3";
+            "transiva_call_channel_v4";
     private static final String CH_PROMO =
             "transiva_promo_channel";
     private static final String CH_BROADCAST =
@@ -404,21 +404,15 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
         boolean merchantDriverChatNotification = isMerchantDriverChat(type, data);
 
         if (incomingCallNotification) {
-            // Full-screen is reserved strictly for a new incoming call. Accepted,
-            // SDP and ICE events must never relaunch the active call Activity.
+            // Play-safe incoming call notification: keep it urgent and visible,
+            // but never take over the screen with a full-screen intent. The user
+            // opens WebRtcCallActivity by tapping this heads-up notification.
             builder.setCategory(NotificationCompat.CATEGORY_CALL)
                     .setPriority(NotificationCompat.PRIORITY_MAX)
                     .setOngoing(true)
                     .setAutoCancel(false)
                     .setOnlyAlertOnce(true)
-                    .setSilent(true)
                     .setTimeoutAfter(50_000L);
-            // Android 14+ exposes USE_FULL_SCREEN_INTENT as special app access.
-            // Only attach FSI for a genuine incoming voice/video call and only
-            // when Android reports that this app may use it.
-            if (canUseFullScreenIntent()) {
-                builder.setFullScreenIntent(pendingIntent, true);
-            }
         } else {
             if (newIncomingOrder) {
                 // Android 8+ mengambil suara dari NotificationChannel.
@@ -464,20 +458,9 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                 .from(this)
                 .notify(requestCode, builder.build());
 
-        // Do not start an Activity directly from background FCM. Android's call
-        // notification/FSI is the sole entry point while backgrounded. If FSI
-        // special access is unavailable, the user still receives a heads-up call
-        // notification that can be tapped normally.
-    }
-
-    private boolean canUseFullScreenIntent() {
-        if (Build.VERSION.SDK_INT < 34) return true;
-        try {
-            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-            return nm != null && nm.canUseFullScreenIntent();
-        } catch (Throwable ignored) {
-            return false;
-        }
+        // Do not start an Activity directly from background FCM. The notification
+        // is the sole entry point while backgrounded, so calls stay compliant with
+        // Android background-start and Google Play full-screen-intent restrictions.
     }
 
     private void wakeScreenForPriority(String type, boolean incomingCall) {
@@ -761,9 +744,16 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
         channel.enableLights(true);
 
         if (CH_CALL.equals(id)) {
-            // Silent channel; the full-screen Activity plays exactly one ringtone.
-            channel.setSound(null, null);
-            channel.enableVibration(false);
+            // No full-screen intent: the notification channel itself must be audible
+            // so an incoming call still produces a normal high-priority heads-up alert.
+            channel.setSound(
+                    android.provider.Settings.System.DEFAULT_RINGTONE_URI,
+                    new AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+            );
+            channel.enableVibration(DriverAppSettings.isVibrationEnabled(this));
         } else {
             channel.setSound(
                     android.provider.Settings.System.DEFAULT_NOTIFICATION_URI,
