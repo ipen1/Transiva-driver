@@ -1,5 +1,7 @@
 package com.transiva.app;
 
+import android.annotation.SuppressLint;
+
 import android.Manifest;
 import android.app.Activity;
 import android.app.NotificationManager;
@@ -833,6 +835,7 @@ public class WebRtcCallActivity extends Activity {
     }
 
     @Override
+    @SuppressLint("MissingSuperCall")
     public void onBackPressed() {
         finishCall(
                 callId.isEmpty() ? "" : (incoming && !accepted ? "reject" : "end"),

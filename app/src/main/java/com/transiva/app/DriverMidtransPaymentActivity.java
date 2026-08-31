@@ -1,5 +1,7 @@
 package com.transiva.app;
 
+import android.annotation.SuppressLint;
+
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
@@ -54,7 +56,8 @@ public class DriverMidtransPaymentActivity extends Activity {
     }
     private boolean isFinish(String u){ return u!=null&&u.startsWith("https://transiva.my.id/server/midtrans_driver_finish.php"); }
     private void closeToDeposit(){ setResult(RESULT_CANCELED); finish(); }
-    @Override public void onBackPressed(){ closeToDeposit(); }
+    @Override @SuppressLint("MissingSuperCall")
+    public void onBackPressed(){ closeToDeposit(); }
     @Override protected void onDestroy(){ if(web!=null){web.stopLoading();web.loadUrl("about:blank");web.clearHistory();web.removeAllViews();web.destroy();web=null;}super.onDestroy(); }
     private int dp(int v){return(int)(v*getResources().getDisplayMetrics().density+.5f);}
 }

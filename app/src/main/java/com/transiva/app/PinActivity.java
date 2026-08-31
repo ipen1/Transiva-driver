@@ -1,5 +1,7 @@
 package com.transiva.app;
 
+import android.annotation.SuppressLint;
+
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
@@ -96,6 +98,7 @@ public class PinActivity extends FragmentActivity {
     }
 
     @Override
+    @SuppressLint("MissingSuperCall")
     public void onBackPressed() {
         // PIN gate tidak boleh dilewati dengan tombol Back.
         // Pengguna tetap bisa keluar akun melalui tombol "Keluar akun".
