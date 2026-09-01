@@ -121,6 +121,23 @@ public class DriverSettingsActivity extends Activity {
         overlayRow.setOnClickListener(v -> explainAndOpenOverlaySettings());
         callCard.addView(overlayRow);
 
+        View callDivider = new View(this);
+        callDivider.setBackgroundColor(Color.parseColor("#EEF2F7"));
+        LinearLayout.LayoutParams callDividerLp = new LinearLayout.LayoutParams(-1, dp(1));
+        callDividerLp.setMargins(0, dp(12), 0, dp(12));
+        callCard.addView(callDivider, callDividerLp);
+
+        LinearLayout fullCallRow = new LinearLayout(this);
+        fullCallRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout fullCallLabels = new LinearLayout(this);
+        fullCallLabels.setOrientation(LinearLayout.VERTICAL);
+        fullCallLabels.addView(text("Layar Panggilan Masuk", 15, "#0B3A78", true));
+        fullCallLabels.addView(text(fullScreenCallStatusText(), 11, "#64748B", false));
+        fullCallRow.addView(fullCallLabels, new LinearLayout.LayoutParams(0, -2, 1));
+        fullCallRow.addView(text("›", 30, "#0B7CFF", true));
+        fullCallRow.setOnClickListener(v -> openFullScreenCallSettings());
+        callCard.addView(fullCallRow);
+
         View bubbleDivider = new View(this);
         bubbleDivider.setBackgroundColor(Color.parseColor("#EEF2F7"));
         LinearLayout.LayoutParams bubbleDividerLp = new LinearLayout.LayoutParams(-1, dp(1));
@@ -271,6 +288,41 @@ public class DriverSettingsActivity extends Activity {
         root.addView(note, noteLp);
 
         return shell;
+    }
+
+    private String fullScreenCallStatusText() {
+        if (Build.VERSION.SDK_INT < 34) {
+            return "Aktif • panggilan masuk dapat tampil di atas layar";
+        }
+        try {
+            android.app.NotificationManager nm =
+                    (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (nm != null && nm.canUseFullScreenIntent()) {
+                return "Aktif • khusus panggilan customer ↔ driver";
+            }
+        } catch (Throwable ignored) {}
+        return "Perlu izin • jika ditolak tetap memakai notifikasi heads-up";
+    }
+
+    private void openFullScreenCallSettings() {
+        if (Build.VERSION.SDK_INT < 34) {
+            Toast.makeText(this, "Layar panggilan masuk sudah didukung di perangkat ini", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Layar panggilan masuk")
+                .setMessage("Izin ini hanya digunakan saat ada panggilan suara customer ↔ driver. Order, chat, promo, dan notifikasi lain tidak pernah mengambil alih layar. Jika izin tidak diberikan, panggilan tetap muncul sebagai notifikasi prioritas tinggi.")
+                .setNegativeButton("Batal", null)
+                .setPositiveButton("Buka Pengaturan", (d, w) -> {
+                    try {
+                        Intent i = new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT);
+                        i.setData(Uri.parse("package:" + getPackageName()));
+                        startActivity(i);
+                    } catch (Throwable e) {
+                        Toast.makeText(this, "Pengaturan izin tidak tersedia di perangkat ini", Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .show();
     }
 
     private String overlayStatusText() {

@@ -404,15 +404,19 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
         boolean merchantDriverChatNotification = isMerchantDriverChat(type, data);
 
         if (incomingCallNotification) {
-            // Play-safe incoming call notification: keep it urgent and visible,
-            // but never take over the screen with a full-screen intent. The user
-            // opens WebRtcCallActivity by tapping this heads-up notification.
+            // Full-screen intent is reserved EXCLUSIVELY for a real incoming WebRTC call.
+            // Android 14+ treats it as special app access. If unavailable, we gracefully
+            // fall back to the same high-priority heads-up call notification.
             builder.setCategory(NotificationCompat.CATEGORY_CALL)
                     .setPriority(NotificationCompat.PRIORITY_MAX)
                     .setOngoing(true)
                     .setAutoCancel(false)
                     .setOnlyAlertOnce(true)
                     .setTimeoutAfter(50_000L);
+
+            if (canUseFullScreenCallIntent()) {
+                builder.setFullScreenIntent(pendingIntent, true);
+            }
         } else {
             if (newIncomingOrder) {
                 // Android 8+ mengambil suara dari NotificationChannel.
@@ -461,6 +465,22 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
         // Do not start an Activity directly from background FCM. The notification
         // is the sole entry point while backgrounded, so calls stay compliant with
         // Android background-start and Google Play full-screen-intent restrictions.
+    }
+
+
+    /**
+     * Android 14+ special-access gate. Pre-14 the manifest permission is sufficient.
+     * Never use this helper for orders, chat, promos, wallet events, or broadcasts.
+     */
+    private boolean canUseFullScreenCallIntent() {
+        if (Build.VERSION.SDK_INT < 34) return true;
+        try {
+            NotificationManager manager =
+                    (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            return manager != null && manager.canUseFullScreenIntent();
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private void wakeScreenForPriority(String type, boolean incomingCall) {
