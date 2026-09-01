@@ -35,13 +35,13 @@ public final class TripCancellationController {
                 .setNegativeButton("Kembali", null)
                 .setPositiveButton("Lanjutkan", null)
                 .create();
-        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+        dialog.setOnShowListener(ignored -> { PremiumDialogs.applyPremiumStyle(dialog); dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             int selected = dialog.getListView().getCheckedItemPosition();
             if (selected < 0) { host.tripInfo("Pembatalan", "Silakan pilih alasan pembatalan."); return; }
             dialog.dismiss();
             if (selected == reasons.length - 1) showCustomReason();
             else confirm(reasons[selected]);
-        }));
+        }); });
         dialog.show();
     }
 
@@ -59,12 +59,12 @@ public final class TripCancellationController {
                 .setNegativeButton("Kembali", null)
                 .setPositiveButton("Lanjutkan", null)
                 .create();
-        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+        dialog.setOnShowListener(ignored -> { PremiumDialogs.applyPremiumStyle(dialog); dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             String reason = input.getText().toString().trim();
             if (reason.length() < 5) { input.setError("Alasan minimal 5 karakter"); input.requestFocus(); return; }
             dialog.dismiss();
             confirm(reason);
-        }));
+        }); });
         dialog.show();
     }
 

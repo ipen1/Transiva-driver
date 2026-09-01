@@ -127,12 +127,12 @@ public class DriverTransferActivity extends FragmentActivity {
                 .setNegativeButton("Batal",null)
                 .setPositiveButton("Verifikasi",null)
                 .create();
-        dlg.setOnShowListener(x->dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+        dlg.setOnShowListener(x->{ PremiumDialogs.applyPremiumStyle(dlg); dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
             String value=pin.getText().toString().trim();
             if(!value.matches("\\d{6}")){ pin.setError("PIN harus 6 digit"); return; }
             dlg.dismiss();
             verifyPinAndExecute(value,q,to,val,requestId);
-        }));
+        }); });
         dlg.show();
     }
 

@@ -906,13 +906,13 @@ public class DriverTripActivity extends Activity {
                 .setNegativeButton("Batal", null)
                 .setPositiveButton("Verifikasi & Selesaikan", null)
                 .create();
-        ad.setOnShowListener(dialog -> ad.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+        ad.setOnShowListener(dialog -> { PremiumDialogs.applyPremiumStyle(ad); ad.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             String otp = input.getText().toString().replaceAll("[^0-9]", "");
             if (otp.length() < 4) { input.setError("OTP belum lengkap"); return; }
             pendingFinishOtp = otp;
             ad.dismiss();
             updateStatus("completed");
-        }));
+        }); });
         ad.show();
     }
 

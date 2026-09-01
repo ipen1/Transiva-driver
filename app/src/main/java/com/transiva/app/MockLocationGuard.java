@@ -269,6 +269,7 @@ public final class MockLocationGuard {
                         .setNegativeButton("Tutup aplikasi", null)
                         .create();
                 dialog.setOnShowListener(ignored -> {
+            PremiumDialogs.applyPremiumStyle(dialog);
                     dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
                         try {
                             activity.startActivity(new Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS));

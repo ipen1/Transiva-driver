@@ -36,6 +36,7 @@ public final class DashboardCancellationController {
                 .setPositiveButton("Lanjutkan", null)
                 .create();
         dialog.setOnShowListener(ignored -> {
+            PremiumDialogs.applyPremiumStyle(dialog);
             Button next = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
             next.setOnClickListener(v -> {
                 int selected = dialog.getListView().getCheckedItemPosition();
@@ -63,11 +64,11 @@ public final class DashboardCancellationController {
                 .setNegativeButton("Kembali", null)
                 .setPositiveButton("Lanjutkan", null)
                 .create();
-        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+        dialog.setOnShowListener(ignored -> { PremiumDialogs.applyPremiumStyle(dialog); dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             String reason = input.getText().toString().trim();
             if (reason.length() < 5) { input.setError("Alasan minimal 5 karakter"); input.requestFocus(); return; }
             dialog.dismiss(); confirm(order, reason);
-        }));
+        }); });
         dialog.show();
     }
 
