@@ -1315,7 +1315,7 @@ public class DriverDashboardActivity extends Activity
     private void showLocationDisclosureAndRequestForeground() {
         new AlertDialog.Builder(this)
                 .setTitle("Lokasi untuk Driver ONLINE")
-                .setMessage("Transiva Driver mengumpulkan data lokasi untuk menampilkan posisi driver, mencari order di sekitar, mengirim posisi perjalanan kepada customer, dan membantu navigasi. Saat Driver memilih ONLINE atau sedang menjalankan perjalanan, lokasi juga digunakan di latar belakang, termasuk saat aplikasi ditutup atau tidak sedang digunakan. Data lokasi tidak digunakan untuk iklan.")
+                .setMessage("Transiva Driver mengumpulkan data lokasi presisi untuk menjalankan fitur Driver ONLINE dan perjalanan aktif. Lokasi digunakan untuk menentukan posisi driver, menghubungkan order di sekitar, menampilkan posisi perjalanan kepada customer, dan navigasi. Saat Anda memilih ONLINE atau memiliki perjalanan aktif, lokasi dapat tetap dikumpulkan di latar belakang, termasuk ketika aplikasi ditutup atau tidak sedang digunakan. Lokasi tidak digunakan untuk iklan dan layanan lokasi berhenti ketika Driver OFFLINE dan tidak memiliki perjalanan aktif.")
                 .setNegativeButton("Tetap Offline", (d, w) -> {
                     pendingOnlineAfterGps = false;
                     setSwitch(false);
@@ -1340,7 +1340,7 @@ public class DriverDashboardActivity extends Activity
     private void showBackgroundLocationDisclosureAndRequest() {
         new AlertDialog.Builder(this)
                 .setTitle("Izinkan lokasi di latar belakang")
-                .setMessage("Agar status ONLINE tetap akurat dan customer dapat menerima posisi perjalanan ketika Transiva Driver tidak sedang tampil di layar, aplikasi memerlukan akses lokasi di latar belakang. Izin ini hanya digunakan saat Anda memilih ONLINE atau memiliki perjalanan aktif, dan tidak digunakan untuk iklan.")
+                .setMessage("Transiva Driver memerlukan lokasi di latar belakang agar fitur Driver ONLINE dan perjalanan aktif tetap berjalan ketika aplikasi tidak sedang tampil di layar. Lokasi digunakan untuk posisi driver, pencocokan order di sekitar, progres perjalanan kepada customer, dan navigasi. Akses ini hanya berjalan saat Anda ONLINE atau memiliki perjalanan aktif, berhenti saat OFFLINE tanpa perjalanan aktif, dan tidak digunakan untuk iklan.")
                 .setNegativeButton("Tetap Offline", (d, w) -> {
                     pendingOnlineAfterGps = false;
                     pendingBackgroundLocationSettings = false;
