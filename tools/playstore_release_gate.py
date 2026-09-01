@@ -40,7 +40,10 @@ if 'incomingCallNotification' not in firebase or 'canUseFullScreenCallIntent()' 
     errors += fail('full-screen intent is not guarded by incoming-call + Android 14 special-access checks')
 if '"incoming_call".equalsIgnoreCase' not in firebase:
     errors += fail('incoming-call event guard missing')
-if 'transiva_call_channel_v4' not in firebase: errors += fail('call channel was not migrated to audible v4')
+if 'transiva_call_channel_v5' not in firebase: errors += fail('call channel was not migrated to managed-ringing v5')
+if 'IncomingCallAlertManager.start(this, callNotificationId)' not in firebase: errors += fail('incoming call does not start immediate ringtone/vibration manager')
+if 'IncomingCallActionReceiver.ACTION_REJECT' not in firebase: errors += fail('incoming call notification reject action missing')
+if 'acceptIntent.putExtra("auto_accept", true)' not in firebase: errors += fail('incoming call notification accept action missing')
 for rel in ['app/src/main/java/com/transiva/app/DriverChatRoomActivity.java', 'app/src/main/java/com/transiva/app/DriverTopUpActivity.java']:
     if 'ACTION_OPEN_DOCUMENT' not in read(ROOT / rel): errors += fail(f'{rel} is not using the system document picker')
 
