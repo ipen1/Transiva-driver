@@ -1,81 +1,93 @@
 # Transiva Driver — Play Console declarations (release candidate)
 
-Use this as a submission checklist. The answers must match the exact production binary and public privacy policy.
+Package: `com.transiva.driver`  
+Target SDK: 36  
+Privacy policy URL: `https://transiva.my.id/server/privacy.html`
 
-## 1. Full-screen intent
+> IMPORTANT: The text below is designed to match the current production source. Do not change the declared use cases unless the binary changes.
 
-**Release binary:** does **not** request `USE_FULL_SCREEN_INTENT`.
+## 1) Background location declaration
 
-- Do not request Full-screen intent special access in the Play Console for this release.
-- Incoming WebRTC calls use a high-importance `CATEGORY_CALL` heads-up notification and open the call screen only after user interaction with the notification.
+### Main purpose of the app
+Transiva Driver is the driver-side application for accepting and completing transportation/delivery orders. Drivers intentionally switch ONLINE to receive nearby work and use the app during an active trip.
 
-## 2. Photos and videos permissions
+### One background-location feature to declare
+**Driver ONLINE and active-trip location tracking.**
 
-**Release binary:** does **not** request `READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO`, `READ_EXTERNAL_STORAGE`, or `WRITE_EXTERNAL_STORAGE`.
+### Paste-ready explanation
+Transiva Driver uses precise location while a driver has intentionally enabled ONLINE mode or is completing an active trip. Background location is required so the app can keep the driver's operational position current when the app is minimized or not in use, allowing nearby-order matching, trip progress/location sharing to the customer, and navigation continuity. The app shows a prominent disclosure before requesting location permission. Background location is not used for advertising. The location foreground service is not started when the driver is OFFLINE and has no active trip.
 
-- Do not declare broad Photos/Videos access for this release.
-- Chat attachment and top-up proof selection use Android's system document picker (`ACTION_OPEN_DOCUMENT`) and only receive access to the file chosen by the user.
+### Prominent disclosure implemented in app
+The normal ONLINE flow displays an in-app dialog before the Android location permission prompt. It explicitly contains the terms **location**, **background**, and **when the app is closed/not in use**, explains the visible driver features that require it, and states that it is not used for ads.
 
-## 3. Background location declaration
+### Review video
+Use the recording script in `BACKGROUND_LOCATION_VIDEO_SCRIPT.md`. Record the real Android build; do not submit a slideshow or mockup.
 
-Background location remains required because location tracking is a core operational function while a driver is ONLINE / handling a trip.
+## 2) Foreground Service declaration
 
-Suggested short explanation for the declaration form:
+### Manifest scope for this release
+Only one active FGS type is declared: `location`.
 
-> Transiva Driver uses precise location while a driver is ONLINE or completing an active trip so customers can receive current driver position and trip progress. Location may continue to be collected in the background when the driver has intentionally enabled ONLINE mode or has an active trip. Before requesting background location, the app shows a prominent in-app disclosure explaining this use. If background location is denied, the background driver-location service is not started.
+Permissions:
+- `android.permission.FOREGROUND_SERVICE`
+- `android.permission.FOREGROUND_SERVICE_LOCATION`
 
-Review-video flow to record:
-1. Open Transiva Driver and sign in.
-2. Tap to change driver status from OFFLINE to ONLINE.
-3. Show the prominent background-location disclosure completely.
-4. Continue to the Android permission screen and show the requested location permission.
-5. Return to the app and show ONLINE status / active driver operation.
+Service:
+- `.LocationService` with `android:foregroundServiceType="location"`
 
-Public privacy URL configured by the app:
+Legacy disabled services no longer declare a `dataSync` FGS type, and the release manifest no longer requests `FOREGROUND_SERVICE_DATA_SYNC`.
+
+### Use case to select
+**Location → Background Location Updates / Navigation / ride tracking / vehicle activity tracking** (select the closest wording shown by Play Console).
+
+### Paste-ready functionality description
+When a driver intentionally switches ONLINE or has an active trip, Transiva Driver runs a visible location foreground service. It keeps the driver's operational position current for nearby-order matching, customer trip progress, and driving navigation while the app is minimized. A persistent foreground-service notification makes the task user-perceptible.
+
+### User impact if deferred/interrupted
+If the service is delayed or interrupted, the driver's position can become stale, nearby orders may be matched incorrectly or late, customer trip tracking can stop updating, and active-trip navigation/location continuity can be degraded. The service therefore runs only during the user-visible operational state (ONLINE or active trip) and stops when the driver is OFFLINE without an active trip.
+
+### FGS video
+The same real-device video can demonstrate: driver turns ONLINE → disclosure/permission → persistent location foreground notification → app is sent to background → ONLINE operation remains active. If Play Console requests a separate URL, upload the same recording or a trimmed FGS-specific version.
+
+## 3) Full-Screen Intent declaration
+
+The release binary requests `USE_FULL_SCREEN_INTENT` only for genuine incoming WebRTC calls between a customer and driver.
+
+### Recommended declaration position
+Transiva Driver **has an incoming VoIP calling feature**, but its overall main purpose is driver transport/delivery operations. Do not describe Transiva as a general phone/dialer app. If Play Console asks whether full-screen calling is the app's core/main purpose, answer accurately based on the UI wording presented. The app is already designed to work when automatic full-screen access is not granted.
+
+### Paste-ready usage description
+Transiva Driver uses full-screen intent only for an incoming customer-to-driver WebRTC voice call that requires immediate driver attention. The notification uses the call category and provides Accept/Reject actions. On Android versions that require special access, the app checks whether full-screen intent is allowed. If access is unavailable, it gracefully falls back to a high-importance incoming-call notification with ringtone/vibration and Accept/Reject actions. Full-screen intent is not used for orders, chat, promotions, wallet events, or other notifications.
+
+### Reviewer test
+1. Sign into the supplied driver review account.
+2. Ensure notification permission is granted.
+3. In Settings, open the incoming-call/full-screen setting if Android 14+ requires user-granted special access.
+4. Trigger a customer-to-driver WebRTC call using the supplied reviewer test account/process.
+5. Verify Accept/Reject actions and fallback notification behavior.
+
+## 4) Data Safety
+
+Use `DATA_SAFETY_FORM.md` as the source-derived checklist. It covers precise/approximate location, personal/account data, user IDs, chat/media/audio, financial/transaction data, app activity, crash diagnostics, and device/app identifiers from Firebase. Confirm server retention, deletion, and any third-party sharing before pressing Submit.
+
+## 5) Privacy Policy URL
+
+Store listing and App content privacy policy URL:
+
 `https://transiva.my.id/server/privacy.html`
 
-## 4. Overlay / display over other apps
+The app links to the same URL from Login and Driver Settings. A release-ready HTML template matching this app is included at `playstore/privacy.html`. Upload/replace it at the URL above before Play review, then verify the URL works without login, redirects, or download prompts.
 
-`SYSTEM_ALERT_WINDOW` remains only for the optional driver bubble.
+## 6) App access for reviewers
 
-- Bubble is OFF by default for a fresh install.
-- Do not present overlay as required for using Transiva Driver.
-- Permission is requested only after the driver explicitly enables Bubble in app settings.
-- Denial must not block orders, chat, navigation, ONLINE mode, or trips.
+Use `APP_ACCESS_REVIEWER.md`. Create a dedicated, persistent review account. Do not use a personal driver account and do not require OTP/SMS/device binding that blocks the reviewer. If a PIN is required after login, include the PIN in Play Console instructions.
 
-## 5. Data Safety form — source-derived checklist
+## 7) Release checks
 
-Verify each item against actual server retention and SDK configuration before submitting.
-
-### Data collected/processed by core app flows
-- Approximate location — app functionality.
-- Precise location, including background use while ONLINE/active trip — app functionality.
-- Name / account identifiers — account management and app functionality.
-- Phone number and email when present on the driver account — account management / communication.
-- User IDs / driver IDs — account and order operation.
-- In-app messages — chat functionality.
-- Photos/files selected by the driver — chat attachment and transaction-proof functionality; selected through the system picker, not broad gallery access.
-- Audio when the driver intentionally uses voice/call features — communication functionality.
-- Order/trip information — app functionality.
-- Transaction / wallet / deposit / withdrawal information where those features are used — app functionality / fraud prevention.
-
-### SDK / operational data to verify
-- Firebase Cloud Messaging device token / app instance identifiers — notifications.
-- Firebase Crashlytics crash logs / diagnostics — app stability.
-- Firebase Analytics app interactions / diagnostics according to production Analytics configuration.
-
-### Security and disclosure checks
-- Use HTTPS for production API communication.
-- Ensure the public Privacy Policy describes background location, account/contact information, chat/media/audio, identifiers, Firebase/analytics/crash data, financial/transaction data, retention, security, and deletion/contact process.
-- The Data Safety form must match actual production behavior, including third-party SDK behavior.
-
-## 6. Before Production
-
-A candidate is accepted by the project release gate only when:
-- `python3 tools/playstore_release_gate.py` passes.
-- `./gradlew testDebugUnitTest` passes.
-- `./gradlew lintRelease` passes.
-- signed `assembleRelease` and `bundleRelease` pass.
-- the release merged manifest contains no forbidden full-screen/media permissions.
-- the `.aab` passes ZIP/structure validation.
-- Play Console Background Location and Data Safety forms are completed from this release's actual behavior.
+Before production submission:
+- Run `python3 tools/playstore_release_gate.py`.
+- Run `./gradlew testDebugUnitTest lintRelease bundleRelease`.
+- Verify the merged release manifest has only `foregroundServiceType="location"`.
+- Verify the public privacy-policy URL loads without authentication.
+- Upload real-device background-location/FGS demonstration video.
+- Complete Background Location, FGS, Full-Screen Intent, Data Safety, and App Access forms with the text above.
