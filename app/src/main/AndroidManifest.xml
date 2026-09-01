@@ -66,6 +66,11 @@
             android:enabled="true"
             android:exported="false" />
 
+        <receiver
+            android:name=".IncomingCallActionReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
         <!-- Legacy compatibility only. LocationService is the single long-running owner. -->
         <service
             android:name=".TransivaDriverForegroundService"
