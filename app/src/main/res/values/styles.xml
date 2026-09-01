@@ -6,5 +6,34 @@
         <item name="android:navigationBarColor">@color/transiva_dark</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:alertDialogTheme">@style/TransivaPremiumDialogTheme</item>
     </style>
+
+
+    <style name="TransivaPremiumDialogTheme" parent="android:style/Theme.Material.Light.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/bg_transiva_premium_dialog</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowNoTitle">false</item>
+        <item name="android:windowMinWidthMajor">88%</item>
+        <item name="android:windowMinWidthMinor">88%</item>
+        <item name="android:colorAccent">@color/transiva_blue</item>
+        <item name="android:textColorPrimary">@color/transiva_dialog_title</item>
+        <item name="android:textColorSecondary">@color/transiva_dialog_text</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowElevation">16dp</item>
+    </style>
+
+    <style name="TransivaPremiumDialogTheme.Dark" parent="android:style/Theme.Material.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/bg_transiva_premium_dialog</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowNoTitle">false</item>
+        <item name="android:windowMinWidthMajor">88%</item>
+        <item name="android:windowMinWidthMinor">88%</item>
+        <item name="android:colorAccent">@color/transiva_blue_light</item>
+        <item name="android:textColorPrimary">@color/transiva_dialog_title</item>
+        <item name="android:textColorSecondary">@color/transiva_dialog_text</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowElevation">16dp</item>
+    </style>
+
 </resources>

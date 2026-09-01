@@ -33,4 +33,12 @@
     <color name="warning">#F59E0B</color>
     <color name="error">#EF4444</color>
     <color name="info">#2196F3</color>
+
+    <!-- Premium dialog palette -->
+    <color name="transiva_dialog_surface">#FFFFFFFF</color>
+    <color name="transiva_dialog_title">#0B2F66</color>
+    <color name="transiva_dialog_text">#56657A</color>
+    <color name="transiva_dialog_border">#DCE8F7</color>
+    <color name="transiva_dialog_button_secondary">#34506F</color>
+
 </resources>
