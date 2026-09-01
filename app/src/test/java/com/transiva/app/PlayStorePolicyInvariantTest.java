@@ -13,7 +13,6 @@ public class PlayStorePolicyInvariantTest {
 
     private File repositoryRoot() {
         File dir = new File(System.getProperty("user.dir")).getAbsoluteFile();
-        // Gradle :app tests normally use <repo>/app as user.dir.
         if ("app".equals(dir.getName()) && dir.getParentFile() != null) {
             return dir.getParentFile();
         }
@@ -27,17 +26,23 @@ public class PlayStorePolicyInvariantTest {
     }
 
     @Test
-    public void manifestDoesNotDeclareBroadMediaOrFullScreenPermissions() throws Exception {
+    public void manifestAllowsFullScreenOnlyForCallingAndAvoidsBroadMediaPermissions() throws Exception {
         String manifest = readFromRepo("app/src/main/AndroidManifest.xml");
-        String[] forbidden = {
-                "android.permission.USE_FULL_SCREEN_INTENT",
+
+        // Incoming WebRTC calls are the sole legitimate full-screen use case.
+        assertTrue(manifest.contains("android.permission.USE_FULL_SCREEN_INTENT"));
+        assertTrue(manifest.contains("android:name=\".WebRtcCallActivity\""));
+        assertTrue(manifest.contains("android:showWhenLocked=\"true\""));
+        assertTrue(manifest.contains("android:turnScreenOn=\"true\""));
+
+        String[] forbiddenMedia = {
                 "android.permission.READ_MEDIA_IMAGES",
                 "android.permission.READ_MEDIA_VIDEO",
                 "android.permission.READ_EXTERNAL_STORAGE",
                 "android.permission.WRITE_EXTERNAL_STORAGE"
         };
-        for (String permission : forbidden) {
-            assertFalse("Forbidden Play Store permission present: " + permission,
+        for (String permission : forbiddenMedia) {
+            assertFalse("Broad media/storage permission present: " + permission,
                     manifest.contains(permission));
         }
     }
@@ -51,11 +56,20 @@ public class PlayStorePolicyInvariantTest {
     }
 
     @Test
-    public void firebaseServiceDoesNotUseFullScreenIntent() throws Exception {
+    public void firebaseServiceUsesGuardedFullScreenIntentOnlyForIncomingWebRtcCalls() throws Exception {
         String source = readFromRepo(
                 "app/src/main/java/com/transiva/app/TransivaFirebaseService.java");
-        assertFalse(source.contains("setFullScreenIntent("));
+
         assertTrue(source.contains("transiva_call_channel_v4"));
+        assertTrue(source.contains("incomingCallNotification"));
+        assertTrue(source.contains("\"webrtc_call\".equals(type)"));
+        assertTrue(source.contains("\"incoming_call\".equalsIgnoreCase"));
+        assertTrue(source.contains("canUseFullScreenCallIntent()"));
+        assertTrue(source.contains("manager.canUseFullScreenIntent()"));
+        assertTrue(source.contains("builder.setFullScreenIntent(pendingIntent, true)"));
+
+        // Keep the full-screen call surface narrow: exactly one builder call site.
+        assertEquals(1, occurrences(source, "setFullScreenIntent("));
     }
 
     @Test
@@ -66,5 +80,16 @@ public class PlayStorePolicyInvariantTest {
                 "app/src/main/java/com/transiva/app/DriverTopUpActivity.java");
         assertTrue(chat.contains("ACTION_OPEN_DOCUMENT"));
         assertTrue(topUp.contains("ACTION_OPEN_DOCUMENT"));
+    }
+
+    private static int occurrences(String text, String needle) {
+        int count = 0;
+        int from = 0;
+        while (true) {
+            int at = text.indexOf(needle, from);
+            if (at < 0) return count;
+            count++;
+            from = at + needle.length();
+        }
     }
 }
