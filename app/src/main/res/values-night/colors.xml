@@ -1,1 +1,8 @@
-
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="transiva_dialog_surface">#121E2E</color>
+    <color name="transiva_dialog_title">#F4F8FF</color>
+    <color name="transiva_dialog_text">#B8C5D6</color>
+    <color name="transiva_dialog_border">#29405C</color>
+    <color name="transiva_dialog_button_secondary">#BFD4EE</color>
+</resources>
