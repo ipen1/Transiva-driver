@@ -29,6 +29,17 @@ for p in FORBIDDEN:
     if p in text: errors += fail(f'forbidden permission remains in source manifest: {p}')
 for p in REQUIRED:
     if p not in text: errors += fail(f'required driver location permission missing: {p}')
+if 'android.permission.FOREGROUND_SERVICE_DATA_SYNC' in text:
+    errors += fail('unused FOREGROUND_SERVICE_DATA_SYNC remains; Play release should declare only active location FGS')
+if text.count('android:foregroundServiceType=') != 1 or 'android:foregroundServiceType="location"' not in text:
+    errors += fail('release manifest must expose exactly one foregroundServiceType: location')
+
+dashboard = read(ROOT / 'app/src/main/java/com/transiva/app/DriverDashboardActivity.java')
+for phrase in ['data lokasi presisi', 'latar belakang', 'aplikasi ditutup atau tidak sedang digunakan', 'tidak digunakan untuk iklan']:
+    if phrase not in dashboard:
+        errors += fail(f'background-location prominent disclosure missing required concept: {phrase}')
+for rel in ['playstore/PLAY_CONSOLE_DECLARATIONS_FINAL.md','playstore/BACKGROUND_LOCATION_VIDEO_SCRIPT.md','playstore/DATA_SAFETY_FORM.md','playstore/APP_ACCESS_REVIEWER.md','playstore/privacy.html']:
+    if not (ROOT/rel).exists(): errors += fail(f'missing Play submission artifact: {rel}')
 
 firebase = read(ROOT / 'app/src/main/java/com/transiva/app/TransivaFirebaseService.java')
 # Full-screen intent is allowed only for the genuine WebRTC incoming-call path.
