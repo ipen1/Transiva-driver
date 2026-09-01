@@ -15,6 +15,7 @@ import android.os.PowerManager;
 import android.text.TextUtils;
 
 import androidx.core.app.NotificationCompat;
+import androidx.core.app.Person;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
 
@@ -48,7 +49,7 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
     private static final String CH_CHAT =
             "transiva_chat_channel_v2";
     private static final String CH_CALL =
-            "transiva_call_channel_v5";
+            "transiva_call_channel_v6";
     private static final String CH_PROMO =
             "transiva_promo_channel";
     private static final String CH_BROADCAST =
@@ -438,11 +439,29 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                     this, requestCode + 2, rejectIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
-            builder.addAction(0, "Tolak", rejectPendingIntent)
-                    .addAction(0, "Terima", acceptPendingIntent);
+            // Android 12+ gives CallStyle incoming-call notifications the highest
+            // call-specific ranking and renders prominent Answer/Decline actions.
+            // This is also the closest platform-native behavior to WhatsApp/Phone.
+            Person caller = new Person.Builder()
+                    .setName(data != null ? first(data.get("caller_name"), "Customer") : "Customer")
+                    .setImportant(true)
+                    .build();
+            builder.setStyle(NotificationCompat.CallStyle.forIncomingCall(
+                            caller, rejectPendingIntent, acceptPendingIntent))
+                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
 
             if (canUseFullScreenCallIntent()) {
-                builder.setFullScreenIntent(pendingIntent, true);
+                // Use a dedicated immutable Activity PendingIntent for the lock-screen
+                // full-screen surface. Android 13+ intentionally keeps this as an
+                // expanded heads-up notification while the device is actively in use.
+                Intent fullScreenIntent = buildOpenIntent(type, orderId, roomId, url, data);
+                fullScreenIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                        | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                PendingIntent fullScreenPendingIntent = PendingIntent.getActivity(
+                        this, requestCode + 3, fullScreenIntent,
+                        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+                builder.setFullScreenIntent(fullScreenPendingIntent, true);
             }
         } else {
             if (newIncomingOrder) {
