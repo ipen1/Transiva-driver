@@ -48,7 +48,7 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
     private static final String CH_CHAT =
             "transiva_chat_channel_v2";
     private static final String CH_CALL =
-            "transiva_call_channel_v4";
+            "transiva_call_channel_v5";
     private static final String CH_PROMO =
             "transiva_promo_channel";
     private static final String CH_BROADCAST =
@@ -142,6 +142,7 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
             // All state/signaling events are consumed here so they cannot launch
             // WebRtcCallActivity again through a PendingIntent/full-screen intent.
             if ("call_accepted".equals(event) || "accepted".equals(event)) {
+                IncomingCallAlertManager.stop(callId);
                 sendCallState(callId, "accepted");
                 cancelCallNotification(callId);
                 return;
@@ -157,6 +158,7 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                 if (event.contains("reject")) status = "rejected";
                 else if (event.contains("miss")) status = "missed";
                 else status = "ended";
+                IncomingCallAlertManager.stop(callId);
                 sendCallState(callId, status);
                 cancelCallNotification(callId);
                 return;
@@ -404,6 +406,10 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
         boolean merchantDriverChatNotification = isMerchantDriverChat(type, data);
 
         if (incomingCallNotification) {
+            // Start the audible/vibration alert immediately from the incoming-call push.
+            // This keeps ringing even when Android denies full-screen special access.
+            IncomingCallAlertManager.start(this, callNotificationId);
+
             // Full-screen intent is reserved EXCLUSIVELY for a real incoming WebRTC call.
             // Android 14+ treats it as special app access. If unavailable, we gracefully
             // fall back to the same high-priority heads-up call notification.
@@ -413,6 +419,27 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                     .setAutoCancel(false)
                     .setOnlyAlertOnce(true)
                     .setTimeoutAfter(50_000L);
+
+            // Accept is a user-initiated Activity launch and auto-answers once the call UI opens.
+            Intent acceptIntent = buildOpenIntent(type, orderId, roomId, url, data);
+            acceptIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                    | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            acceptIntent.putExtra("auto_accept", true);
+            PendingIntent acceptPendingIntent = PendingIntent.getActivity(
+                    this, requestCode + 1, acceptIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+            Intent rejectIntent = new Intent(this, IncomingCallActionReceiver.class);
+            rejectIntent.setAction(IncomingCallActionReceiver.ACTION_REJECT);
+            rejectIntent.putExtra("call_id", callNotificationId);
+            rejectIntent.putExtra("notification_id", requestCode);
+            PendingIntent rejectPendingIntent = PendingIntent.getBroadcast(
+                    this, requestCode + 2, rejectIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+            builder.addAction(0, "Tolak", rejectPendingIntent)
+                    .addAction(0, "Terima", acceptPendingIntent);
 
             if (canUseFullScreenCallIntent()) {
                 builder.setFullScreenIntent(pendingIntent, true);
@@ -764,16 +791,10 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
         channel.enableLights(true);
 
         if (CH_CALL.equals(id)) {
-            // No full-screen intent: the notification channel itself must be audible
-            // so an incoming call still produces a normal high-priority heads-up alert.
-            channel.setSound(
-                    android.provider.Settings.System.DEFAULT_RINGTONE_URI,
-                    new AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                            .build()
-            );
-            channel.enableVibration(DriverAppSettings.isVibrationEnabled(this));
+            // Call ringing is owned by IncomingCallAlertManager. Keeping this channel
+            // silent prevents duplicate ringtone/vibration while still allowing heads-up UI.
+            channel.setSound(null, null);
+            channel.enableVibration(false);
         } else {
             channel.setSound(
                     android.provider.Settings.System.DEFAULT_NOTIFICATION_URI,

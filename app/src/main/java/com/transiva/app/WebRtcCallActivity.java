@@ -81,6 +81,7 @@ public class WebRtcCallActivity extends Activity {
     private String peerName = "";
     private boolean incoming;
     private boolean accepted;
+    private boolean autoAccept;
     private boolean ended;
     private boolean peerStarted;
     private boolean offerCreated;
@@ -172,6 +173,7 @@ public class WebRtcCallActivity extends Activity {
         }
 
         debug("Activity onCreate role=" + role + " incoming=" + incoming + " accepted=" + accepted + " call=" + callId);
+        IncomingCallAlertManager.stop(callId);
         cancelOwnCallNotification();
         registerCallStateReceiver();
         setContentView(buildUi());
@@ -186,8 +188,12 @@ public class WebRtcCallActivity extends Activity {
                 ensureMicrophoneThenResume();
             } else {
                 status("Panggilan masuk");
-                startRingtone();
                 main.post(pollTask);
+                if (autoAccept) {
+                    main.post(this::acceptIncoming);
+                } else {
+                    startRingtone();
+                }
             }
         } else if (!callId.isEmpty()) {
             // Existing outgoing call after Android recreated this Activity.
@@ -207,6 +213,7 @@ public class WebRtcCallActivity extends Activity {
         orderSource = first(i.getStringExtra("source"), i.getStringExtra("order_source"), "orders");
         peerName = first(i.getStringExtra("peer_name"), i.getStringExtra("caller_name"), role.equals("driver") ? "Customer" : "Driver");
         incoming = i.getBooleanExtra("incoming", false);
+        autoAccept = i.getBooleanExtra("auto_accept", false);
     }
 
     @Override
@@ -237,6 +244,11 @@ public class WebRtcCallActivity extends Activity {
         // incoming=true after the peer accepted, preventing createOffer().
         if (!hadActiveCall) {
             incoming = intent.getBooleanExtra("incoming", false);
+        }
+        if (intent.getBooleanExtra("auto_accept", false) && incoming && !accepted) {
+            autoAccept = true;
+            IncomingCallAlertManager.stop(callId);
+            main.post(this::acceptIncoming);
         }
 
         if (titleView != null && !peerName.isEmpty()) titleView.setText(peerName);
@@ -763,6 +775,7 @@ public class WebRtcCallActivity extends Activity {
     }
 
     private void stopRingtone() {
+        IncomingCallAlertManager.stop(callId);
         try { if (ringtone != null && ringtone.isPlaying()) ringtone.stop(); } catch (Throwable ignored) {}
         ringtone = null;
     }
