@@ -11,6 +11,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.text.TextUtils;
 import android.view.ContextThemeWrapper;
+import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -51,7 +52,10 @@ public final class PremiumDialogs {
             if (window != null) {
                 WindowManager.LayoutParams lp = window.getAttributes();
                 lp.dimAmount = 0.64f;
-                lp.width = WindowManager.LayoutParams.WRAP_CONTENT;
+                DisplayMetrics dm = context.getResources().getDisplayMetrics();
+                int horizontalMargin = dp(context, dm.widthPixels / Math.max(1f, dm.density) < 360f ? 12 : 18);
+                int maxDialogWidth = dp(context, 560);
+                lp.width = Math.min(dm.widthPixels - (horizontalMargin * 2), maxDialogWidth);
                 window.setAttributes(lp);
                 window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
                 window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
@@ -89,6 +93,7 @@ public final class PremiumDialogs {
             styleAction(context, dialog.getButton(AlertDialog.BUTTON_POSITIVE), Action.PRIMARY);
             styleAction(context, dialog.getButton(AlertDialog.BUTTON_NEGATIVE), Action.SECONDARY);
             styleAction(context, dialog.getButton(AlertDialog.BUTTON_NEUTRAL), Action.GHOST);
+            styleActionPanel(context, dialog);
 
             View decor = window == null ? null : window.getDecorView();
             if (decor != null) {
@@ -220,11 +225,17 @@ public final class PremiumDialogs {
         boolean primary = action == Action.PRIMARY;
 
         button.setAllCaps(false);
-        button.setTextSize(14f);
+        button.setTextSize(13.5f);
         button.setTypeface(Typeface.create("sans", primary ? Typeface.BOLD : Typeface.NORMAL));
-        button.setMinHeight(dp(context, 46));
-        button.setMinimumHeight(dp(context, 46));
-        button.setPadding(dp(context, 17), dp(context, 9), dp(context, 17), dp(context, 9));
+        button.setMinWidth(0);
+        button.setMinimumWidth(0);
+        button.setMinHeight(dp(context, 48));
+        button.setMinimumHeight(dp(context, 48));
+        button.setPadding(dp(context, 12), dp(context, 8), dp(context, 12), dp(context, 8));
+        button.setGravity(Gravity.CENTER);
+        button.setSingleLine(false);
+        button.setMaxLines(2);
+        button.setEllipsize(TextUtils.TruncateAt.END);
         button.setStateListAnimator(null);
 
         GradientDrawable bg = new GradientDrawable();
@@ -248,8 +259,57 @@ public final class PremiumDialogs {
         ViewGroup.LayoutParams raw = button.getLayoutParams();
         if (raw instanceof LinearLayout.LayoutParams) {
             LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) raw;
-            lp.setMargins(dp(context, 4), dp(context, 6), dp(context, 4), dp(context, 10));
+            lp.setMargins(dp(context, 4), dp(context, 5), dp(context, 4), dp(context, 8));
             button.setLayoutParams(lp);
+        }
+    }
+
+    /**
+     * Android's stock AlertDialog button bar gives long labels a fixed/minimum width.
+     * On compact phones this can clip the primary action against the rounded card.
+     * Normalize the panel after show: equal-width actions, safe side padding and up to
+     * two text lines. This keeps existing click listeners untouched.
+     */
+    private static void styleActionPanel(Context context, AlertDialog dialog) {
+        try {
+            int panelId = context.getResources().getIdentifier("buttonPanel", "id", "android");
+            View panelView = panelId == 0 ? null : dialog.findViewById(panelId);
+            if (panelView instanceof LinearLayout) {
+                LinearLayout panel = (LinearLayout) panelView;
+                panel.setPadding(dp(context, 18), dp(context, 2), dp(context, 18), dp(context, 10));
+                panel.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+            }
+
+            Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            Button negative = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+            Button neutral = dialog.getButton(AlertDialog.BUTTON_NEUTRAL);
+            Button[] buttons = new Button[]{neutral, negative, positive};
+            int visible = 0;
+            for (Button b : buttons) if (b != null && b.getVisibility() == View.VISIBLE && !TextUtils.isEmpty(b.getText())) visible++;
+            if (visible == 0) return;
+
+            // Equal width for the common two-action layout. For one action, keep it
+            // compact but never wider than the available panel. Three actions also
+            // share the row to avoid OEM minimum-width clipping.
+            for (Button b : buttons) {
+                if (b == null || b.getVisibility() != View.VISIBLE || TextUtils.isEmpty(b.getText())) continue;
+                ViewGroup.LayoutParams raw = b.getLayoutParams();
+                if (raw instanceof LinearLayout.LayoutParams) {
+                    LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) raw;
+                    if (visible >= 2) {
+                        lp.width = 0;
+                        lp.weight = 1f;
+                    } else {
+                        lp.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+                        lp.weight = 0f;
+                    }
+                    lp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+                    lp.setMargins(dp(context, 4), dp(context, 4), dp(context, 4), dp(context, 4));
+                    b.setLayoutParams(lp);
+                }
+            }
+        } catch (Throwable ignored) {
+            // Never let presentation changes block a security/order action dialog.
         }
     }
 

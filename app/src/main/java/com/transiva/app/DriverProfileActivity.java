@@ -92,6 +92,10 @@ public class DriverProfileActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        // The Profile/Akun page can remain in the back stack while the user changes
+        // theme from DriverSettingsActivity. Re-apply here so DriverAppSettings can
+        // detect the preference change and recreate this page immediately.
+        DriverAppSettings.apply(this);
         if (api != null && !loadingData) loadProfile();
     }
 
