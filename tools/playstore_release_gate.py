@@ -4,7 +4,6 @@ import sys, zipfile, glob
 
 ROOT = Path(__file__).resolve().parents[1]
 FORBIDDEN = [
-    'android.permission.USE_FULL_SCREEN_INTENT',
     'android.permission.READ_MEDIA_IMAGES',
     'android.permission.READ_MEDIA_VIDEO',
     'android.permission.READ_EXTERNAL_STORAGE',
@@ -32,7 +31,15 @@ for p in REQUIRED:
     if p not in text: errors += fail(f'required driver location permission missing: {p}')
 
 firebase = read(ROOT / 'app/src/main/java/com/transiva/app/TransivaFirebaseService.java')
-if 'setFullScreenIntent(' in firebase: errors += fail('setFullScreenIntent() remains in FCM service')
+# Full-screen intent is allowed only for the genuine WebRTC incoming-call path.
+if 'android.permission.USE_FULL_SCREEN_INTENT' not in text:
+    errors += fail('incoming-call permission USE_FULL_SCREEN_INTENT missing')
+if firebase.count('setFullScreenIntent(') != 1:
+    errors += fail('expected exactly one call-scoped setFullScreenIntent() usage')
+if 'incomingCallNotification' not in firebase or 'canUseFullScreenCallIntent()' not in firebase:
+    errors += fail('full-screen intent is not guarded by incoming-call + Android 14 special-access checks')
+if '"incoming_call".equalsIgnoreCase' not in firebase:
+    errors += fail('incoming-call event guard missing')
 if 'transiva_call_channel_v4' not in firebase: errors += fail('call channel was not migrated to audible v4')
 for rel in ['app/src/main/java/com/transiva/app/DriverChatRoomActivity.java', 'app/src/main/java/com/transiva/app/DriverTopUpActivity.java']:
     if 'ACTION_OPEN_DOCUMENT' not in read(ROOT / rel): errors += fail(f'{rel} is not using the system document picker')
