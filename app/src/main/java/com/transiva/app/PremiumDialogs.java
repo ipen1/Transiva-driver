@@ -135,7 +135,6 @@ public final class PremiumDialogs {
         @Override public PremiumBuilder setMessage(int messageId) { super.setMessage(messageId); return this; }
         @Override public PremiumBuilder setCancelable(boolean cancelable) { super.setCancelable(cancelable); return this; }
         @Override public PremiumBuilder setView(View view) { super.setView(view); return this; }
-        @Override public PremiumBuilder setView(View view, int l, int t, int r, int b) { super.setView(view,l,t,r,b); return this; }
         @Override public PremiumBuilder setItems(CharSequence[] items, DialogInterface.OnClickListener listener) { super.setItems(items, listener); return this; }
         @Override public PremiumBuilder setItems(int itemsId, DialogInterface.OnClickListener listener) { super.setItems(itemsId, listener); return this; }
         @Override public PremiumBuilder setSingleChoiceItems(CharSequence[] items, int checkedItem, DialogInterface.OnClickListener listener) { super.setSingleChoiceItems(items, checkedItem, listener); return this; }
