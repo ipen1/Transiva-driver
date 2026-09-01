@@ -287,7 +287,7 @@ public class DriverProfileActivity extends Activity {
         if (mode != DevicePerformanceProfile.UserMode.AUTO
                 && DevicePerformanceProfile.isAboveRecommended(this, mode)) {
             DevicePerformanceProfile.UserMode recommended = DevicePerformanceProfile.getRecommendedMode(this);
-            new AlertDialog.Builder(this)
+            PremiumDialogs.builder(this)
                     .setTitle("Mode di atas rekomendasi perangkat")
                     .setMessage("Perangkat ini direkomendasikan menggunakan "
                             + DevicePerformanceProfile.title(recommended)
@@ -625,7 +625,7 @@ public class DriverProfileActivity extends Activity {
 
     private void confirmLogout() {
         if (loggingOut) return;
-        new AlertDialog.Builder(this)
+        PremiumDialogs.builder(this)
                 .setTitle("Keluar Akun")
                 .setMessage("Keluar akan melepas akun dari perangkat ini seperti Reset Perangkat. Setelah berhasil, akun dapat langsung login di HP lain.")
                 .setNegativeButton("Batal", null)
@@ -648,7 +648,7 @@ public class DriverProfileActivity extends Activity {
             @Override public void onError(String message) {
                 loggingOut = false;
                 if (isFinishing()) return;
-                new AlertDialog.Builder(DriverProfileActivity.this)
+                PremiumDialogs.builder(DriverProfileActivity.this)
                         .setTitle("Gagal keluar akun")
                         .setMessage(message + "\n\nAkun belum dilepas dari perangkat. Coba lagi saat koneksi stabil agar akun tetap dapat dipindahkan dengan aman.")
                         .setPositiveButton("OK", null)
@@ -814,7 +814,7 @@ public class DriverProfileActivity extends Activity {
     }
 
     private void showInfo(String title, String message) {
-        new AlertDialog.Builder(this)
+        PremiumDialogs.builder(this)
                 .setTitle(title)
                 .setMessage(message)
                 .setPositiveButton("OK", null)

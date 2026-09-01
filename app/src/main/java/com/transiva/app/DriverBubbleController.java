@@ -31,7 +31,7 @@ public final class DriverBubbleController {
         boolean asked = a.getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean("permission_asked_v1", false);
         if (asked) return;
         a.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putBoolean("permission_asked_v1", true).apply();
-        new AlertDialog.Builder(a)
+        PremiumDialogs.builder(a)
                 .setTitle("Aktifkan Bubble Transiva")
                 .setMessage("Bubble menampilkan order baru, pesan customer, dan mention di atas aplikasi lain. Bubble bisa digeser ke tanda × untuk ditutup kapan saja.")
                 .setNegativeButton("Nanti", null)

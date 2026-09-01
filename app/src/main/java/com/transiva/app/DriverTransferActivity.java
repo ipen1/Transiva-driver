@@ -61,7 +61,7 @@ public class DriverTransferActivity extends FragmentActivity {
         loading(false); long fee=d.optLong("fee",0), total=d.optLong("total_debit",val+fee); int remain=d.optInt("free_remaining_after",0);
         quotaInfo.setText("Sisa transfer gratis setelah transaksi: "+remain+"x");
         String msg="Penerima: "+d.optString("receiver_username",to)+"\nNominal: "+money(val)+"\nBiaya admin: "+money(fee)+"\nTotal saldo keluar: "+money(total);
-        new AlertDialog.Builder(this).setTitle("Konfirmasi Transfer").setMessage(msg).setNegativeButton("Batal",null).setPositiveButton("Transfer",(x,w)->authenticateTransfer(d,to,val,requestId)).show();
+        PremiumDialogs.builder(this).setTitle("Konfirmasi Transfer").setMessage(msg).setNegativeButton("Batal",null).setPositiveButton("Transfer",(x,w)->authenticateTransfer(d,to,val,requestId)).show();
     }
 
     private void authenticateTransfer(JSONObject q,String to,long val,String requestId){
@@ -120,7 +120,7 @@ public class DriverTransferActivity extends FragmentActivity {
         wrap.setPadding(dp(20),dp(8),dp(20),0);
         wrap.addView(pin,new LinearLayout.LayoutParams(-1,dp(52)));
 
-        AlertDialog dlg=new AlertDialog.Builder(this)
+        AlertDialog dlg=PremiumDialogs.builder(this)
                 .setTitle("Masukkan PIN Transiva")
                 .setMessage("PIN diperlukan sebelum saldo dikirim.")
                 .setView(wrap)
@@ -156,7 +156,7 @@ public class DriverTransferActivity extends FragmentActivity {
             JSONObject req=baseRequest(); req.put("recipient",to); req.put("amount",val); req.put("note",note.getText().toString().trim()); req.put("request_id",requestId); req.put("quote_token",q.optString("quote_token"));
             JSONObject r=post("driver_wallet_transfer.php",req); if(!r.optBoolean("success"))throw new Exception(r.optString("message","Transfer gagal"));
             JSONObject d=r.optJSONObject("data"); if(d==null)d=r; long bal=d.optLong("balance_after",d.optLong("sender_balance",0)); session.put("balance",String.valueOf(bal));
-            main.post(()->{loading(false);balanceInfo.setText("Saldo: "+money(bal)); new AlertDialog.Builder(this).setTitle("Transfer Berhasil").setMessage(r.optString("message","Dana berhasil dikirim")).setPositiveButton("Selesai",(a,b)->finish()).show();});
+            main.post(()->{loading(false);balanceInfo.setText("Saldo: "+money(bal)); PremiumDialogs.builder(this).setTitle("Transfer Berhasil").setMessage(r.optString("message","Dana berhasil dikirim")).setPositiveButton("Selesai",(a,b)->finish()).show();});
         }catch(Exception e){main.post(()->{loading(false);info(e.getMessage());});}}).start();
     }
 
@@ -180,7 +180,7 @@ public class DriverTransferActivity extends FragmentActivity {
         return new JSONObject(response.toString());
     }
     private void loading(boolean x){submit.setEnabled(!x);submit.setText(x?"Memproses...":"Periksa & Transfer");}
-    private void info(String m){new AlertDialog.Builder(this).setTitle("Informasi").setMessage(m==null?"Terjadi kesalahan":m).setPositiveButton("OK",null).show();}
+    private void info(String m){PremiumDialogs.builder(this).setTitle("Informasi").setMessage(m==null?"Terjadi kesalahan":m).setPositiveButton("OK",null).show();}
     private LinearLayout card(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);v.setPadding(dp(16),dp(16),dp(16),dp(16));GradientDrawable g=new GradientDrawable();g.setColor(Color.WHITE);g.setCornerRadius(dp(18));v.setBackground(g);v.setElevation(dp(2));return v;}
     private EditText input(String h,int type){EditText e=new EditText(this);e.setHint(h);e.setTextSize(14);e.setInputType(type);e.setPadding(dp(13),0,dp(13),0);GradientDrawable g=new GradientDrawable();g.setColor(Color.parseColor("#F8FAFC"));g.setStroke(dp(1),Color.parseColor("#DCE6F2"));g.setCornerRadius(dp(12));e.setBackground(g);e.setSingleLine(true);e.setMinHeight(dp(48));return e;}
     private Button button(String s){Button b=new Button(this);b.setText(s);b.setTextColor(Color.WHITE);b.setTextSize(14);b.setAllCaps(false);b.setTypeface(Typeface.DEFAULT_BOLD);GradientDrawable g=new GradientDrawable();g.setColor(Color.parseColor("#0B7CFF"));g.setCornerRadius(dp(14));b.setBackground(g);return b;}

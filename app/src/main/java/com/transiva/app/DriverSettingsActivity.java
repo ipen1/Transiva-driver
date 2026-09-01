@@ -309,7 +309,7 @@ public class DriverSettingsActivity extends Activity {
             Toast.makeText(this, "Layar panggilan masuk sudah didukung di perangkat ini", Toast.LENGTH_SHORT).show();
             return;
         }
-        new AlertDialog.Builder(this)
+        PremiumDialogs.builder(this)
                 .setTitle("Layar panggilan masuk")
                 .setMessage("Izin ini hanya digunakan saat ada panggilan suara customer ↔ driver. Order, chat, promo, dan notifikasi lain tidak pernah mengambil alih layar. Jika izin tidak diberikan, panggilan tetap muncul sebagai notifikasi prioritas tinggi.")
                 .setNegativeButton("Batal", null)
@@ -335,14 +335,14 @@ public class DriverSettingsActivity extends Activity {
     private void explainAndOpenOverlaySettings() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
         if (Settings.canDrawOverlays(this)) {
-            new AlertDialog.Builder(this)
+            PremiumDialogs.builder(this)
                     .setTitle("Izin sudah aktif")
                     .setMessage("Izin Android untuk tampil di atas aplikasi lain sudah aktif. Izin ini dipakai hanya bila Anda memilih mengaktifkan Bubble Transiva. Panggilan tetap menggunakan notifikasi panggilan Android.")
                     .setPositiveButton("Tutup", null)
                     .show();
             return;
         }
-        new AlertDialog.Builder(this)
+        PremiumDialogs.builder(this)
                 .setTitle("Aktifkan secara opsional")
                 .setMessage("Izin ini tidak wajib untuk memakai aplikasi atau menerima order. Aktifkan hanya bila Anda ingin menggunakan Bubble Transiva untuk menampilkan order, pesan customer, dan mention di atas aplikasi lain. Bubble dapat dinonaktifkan kapan saja dari halaman ini.")
                 .setNegativeButton("Nanti", null)
@@ -408,7 +408,7 @@ public class DriverSettingsActivity extends Activity {
 
     private void confirmResetDevice() {
         if (resettingDevice) return;
-        new AlertDialog.Builder(this)
+        PremiumDialogs.builder(this)
                 .setTitle("Reset perangkat Driver?")
                 .setMessage("Akun ini akan dilepas dari HP sekarang, semua sesi Driver dicabut, dan notifikasi ke perangkat ini dihentikan. Setelah itu akun dapat login di HP lain.")
                 .setNegativeButton("Batal", null)
@@ -434,7 +434,7 @@ public class DriverSettingsActivity extends Activity {
                 resettingDevice = false;
                 if (isFinishing()) return;
                 setDeviceUi(Build.MANUFACTURER + " " + Build.MODEL, "Reset gagal • " + msg, true);
-                new AlertDialog.Builder(DriverSettingsActivity.this)
+                PremiumDialogs.builder(DriverSettingsActivity.this)
                         .setTitle("Reset perangkat gagal")
                         .setMessage(msg)
                         .setPositiveButton("OK", null)

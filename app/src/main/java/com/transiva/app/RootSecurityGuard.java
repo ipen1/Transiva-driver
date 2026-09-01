@@ -90,7 +90,7 @@ public final class RootSecurityGuard {
     private static void show(Activity a,String reason){
         try{
             if(ACTIVE_DIALOG != null && ACTIVE_DIALOG.isShowing()) return;
-            AlertDialog d = new AlertDialog.Builder(a)
+            AlertDialog d = PremiumDialogs.builder(a)
                     .setTitle("Perangkat tidak aman")
                     .setMessage(reason+"\n\nDemi keamanan order dan saldo, aplikasi Driver tidak dapat dijalankan pada perangkat yang di-root atau memakai framework hooking.")
                     .setCancelable(false)

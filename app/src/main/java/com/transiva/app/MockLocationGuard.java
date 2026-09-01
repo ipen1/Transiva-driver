@@ -258,7 +258,7 @@ public final class MockLocationGuard {
                 return;
             }
             try {
-                AlertDialog dialog = new AlertDialog.Builder(activity)
+                AlertDialog dialog = PremiumDialogs.builder(activity)
                         .setTitle("Lokasi palsu terdeteksi")
                         .setMessage((TextUtils.isEmpty(reason) ? "Aplikasi lokasi palsu sedang aktif." : reason)
                                 + "\n\nUntuk keamanan order dan customer, aplikasi Driver tidak dapat digunakan. "

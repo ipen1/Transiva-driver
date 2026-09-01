@@ -29,7 +29,7 @@ public final class DashboardCancellationController {
             return;
         }
         final String[] reasons = DriverOrderCancellationPolicy.reasons();
-        AlertDialog dialog = new AlertDialog.Builder(activity)
+        AlertDialog dialog = PremiumDialogs.builder(activity)
                 .setTitle("Batalkan order #" + order.id)
                 .setSingleChoiceItems(reasons, -1, null)
                 .setNegativeButton("Kembali", null)
@@ -56,7 +56,7 @@ public final class DashboardCancellationController {
         input.setHint("Tuliskan alasan pembatalan");
         input.setSingleLine(false); input.setMinLines(3); input.setMaxLines(5);
         int p = dp(16); input.setPadding(p, dp(12), p, dp(12));
-        AlertDialog dialog = new AlertDialog.Builder(activity)
+        AlertDialog dialog = PremiumDialogs.builder(activity)
                 .setTitle("Alasan lainnya")
                 .setMessage("Jelaskan alasan pembatalan order.")
                 .setView(input)
@@ -72,7 +72,7 @@ public final class DashboardCancellationController {
     }
 
     private void confirm(DriverOrder order, String reason) {
-        new AlertDialog.Builder(activity)
+        PremiumDialogs.builder(activity)
                 .setTitle("Konfirmasi pembatalan")
                 .setMessage("Order akan dilepas dan ditawarkan kepada driver lain.\n\nAlasan: " + reason)
                 .setNegativeButton("Tidak", null)

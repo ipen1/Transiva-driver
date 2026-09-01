@@ -899,7 +899,7 @@ public class DriverTripActivity extends Activity {
         input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         input.setSingleLine(true);
         input.setPadding(dp(18), dp(8), dp(18), dp(8));
-        AlertDialog ad = new AlertDialog.Builder(this)
+        AlertDialog ad = PremiumDialogs.builder(this)
                 .setTitle("Verifikasi OTP TransSend")
                 .setMessage("Minta OTP kepada penerima setelah paket benar-benar diterima.")
                 .setView(input)
@@ -916,7 +916,7 @@ public class DriverTripActivity extends Activity {
         ad.show();
     }
 
-    private void confirm(String msg, String next){ if(updatingStatus)return; new AlertDialog.Builder(this).setTitle("Konfirmasi").setMessage(msg).setNegativeButton("Batal",null).setPositiveButton("Ya",(d,w)->updateStatus(next)).show(); }
+    private void confirm(String msg, String next){ if(updatingStatus)return; PremiumDialogs.builder(this).setTitle("Konfirmasi").setMessage(msg).setNegativeButton("Batal",null).setPositiveButton("Ya",(d,w)->updateStatus(next)).show(); }
     private void updateStatus(String next){
         if (updatingStatus) return;
         if (!DriverOrderStateGuard.canTransition(status(), next)) {
@@ -1039,7 +1039,7 @@ public class DriverTripActivity extends Activity {
         final EditText input = new EditText(this); input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER); input.setHint("Total baru"); input.setText(String.valueOf((long)optDouble("price","fare","total")));
         final EditText reason = new EditText(this); reason.setHint("Alasan perubahan, contoh: 1 menu habis");
         LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(dp(20),dp(4),dp(20),0); box.addView(input); box.addView(reason);
-        new AlertDialog.Builder(this).setTitle("Update Total Dibayar").setMessage("Harga turun langsung berlaku. Harga naik wajib disetujui customer.").setView(box).setNegativeButton("Batal",null).setPositiveButton("Kirim",(d,w)->{
+        PremiumDialogs.builder(this).setTitle("Update Total Dibayar").setMessage("Harga turun langsung berlaku. Harga naik wajib disetujui customer.").setView(box).setNegativeButton("Batal",null).setPositiveButton("Kirim",(d,w)->{
             try{
                 double value=Double.parseDouble(input.getText().toString().trim()); String why=reason.getText().toString().trim();
                 if(value<=0||why.isEmpty()){ info("Harga","Harga dan alasan wajib diisi."); return; }
@@ -1132,5 +1132,5 @@ public class DriverTripActivity extends Activity {
     private TextView text(String s,int sp,String color,boolean bold){ TextView t=new TextView(this); t.setText(s); t.setTextSize(sp); t.setTextColor(Color.parseColor(color)); if(bold)t.setTypeface(Typeface.DEFAULT_BOLD); return t; }
     private Button primary(String s){ Button b=new Button(this); b.setText(s); b.setAllCaps(false); b.setTextColor(Color.WHITE); b.setTextSize(14); b.setTypeface(Typeface.DEFAULT_BOLD); b.setBackground(gradient("#086BFF", "#2EA2FF", dp(18))); return b; } private Button green(String s){ Button b=primary(s); b.setBackground(gradient("#10B981", "#059669", dp(18))); return b; } private Button outline(String s){ Button b=new Button(this); b.setText(s); b.setAllCaps(false); b.setTextColor(Color.parseColor("#0B7CFF")); b.setTextSize(14); b.setTypeface(Typeface.DEFAULT_BOLD); b.setBackground(stroke("#FFFFFF", "#9DCAFF", dp(18), 1)); return b; }
     private GradientDrawable round(String color,int radius){ GradientDrawable g=new GradientDrawable(); g.setColor(Color.parseColor(color)); g.setCornerRadius(radius); return g; } private GradientDrawable stroke(String color,String st,int radius,int sw){ GradientDrawable g=round(color,radius); g.setStroke(dp(sw), Color.parseColor(st)); return g; } private GradientDrawable gradient(String c1,String c2,int radius){ GradientDrawable g=new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{Color.parseColor(c1), Color.parseColor(c2)}); g.setCornerRadius(radius); return g; }
-    private void setLoading(boolean b){ if(progressBar!=null) progressBar.setVisibility(b?View.VISIBLE:View.GONE); } private void info(String t,String m){ try{ new AlertDialog.Builder(this).setTitle(t).setMessage(m).setPositiveButton("OK", null).show(); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } }
+    private void setLoading(boolean b){ if(progressBar!=null) progressBar.setVisibility(b?View.VISIBLE:View.GONE); } private void info(String t,String m){ try{ PremiumDialogs.builder(this).setTitle(t).setMessage(m).setPositiveButton("OK", null).show(); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } }
 }

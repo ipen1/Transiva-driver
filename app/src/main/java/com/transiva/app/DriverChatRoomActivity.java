@@ -358,7 +358,7 @@ public class DriverChatRoomActivity extends Activity {
     private void showAttachmentMenu() {
         if (readOnly || uploading) return;
 
-        new AlertDialog.Builder(this)
+        PremiumDialogs.builder(this)
                 .setTitle("Kirim Foto")
                 .setItems(
                         new String[]{"Ambil Foto", "Pilih dari Galeri"},
@@ -1365,7 +1365,7 @@ public class DriverChatRoomActivity extends Activity {
     }
 
     private void showMessage(String title, String message) {
-        new AlertDialog.Builder(this)
+        PremiumDialogs.builder(this)
                 .setTitle(title)
                 .setMessage(message)
                 .setPositiveButton("Tutup", null)

@@ -29,7 +29,7 @@ public final class TripCancellationController {
             return;
         }
         final String[] reasons = DriverOrderCancellationPolicy.reasons();
-        AlertDialog dialog = new AlertDialog.Builder(host)
+        AlertDialog dialog = PremiumDialogs.builder(host)
                 .setTitle("Batalkan order #" + host.tripOrderId())
                 .setSingleChoiceItems(reasons, -1, null)
                 .setNegativeButton("Kembali", null)
@@ -52,7 +52,7 @@ public final class TripCancellationController {
         input.setMinLines(3);
         input.setMaxLines(5);
         input.setPadding(host.tripDp(16), host.tripDp(12), host.tripDp(16), host.tripDp(12));
-        AlertDialog dialog = new AlertDialog.Builder(host)
+        AlertDialog dialog = PremiumDialogs.builder(host)
                 .setTitle("Alasan lainnya")
                 .setMessage("Jelaskan alasan pembatalan order.")
                 .setView(input)
@@ -69,7 +69,7 @@ public final class TripCancellationController {
     }
 
     private void confirm(String reason) {
-        new AlertDialog.Builder(host)
+        PremiumDialogs.builder(host)
                 .setTitle("Konfirmasi pembatalan")
                 .setMessage("Order akan dilepas dan ditawarkan kepada driver lain.\n\nAlasan: " + reason)
                 .setNegativeButton("Tidak", null)
@@ -98,7 +98,7 @@ public final class TripCancellationController {
                     host.tripSetLoading(false);
                     DriverMessageUnreadRepository.clearOrder(host, host.tripOrderId());
                     host.tripClearActiveOrder();
-                    new AlertDialog.Builder(host)
+                    PremiumDialogs.builder(host)
                             .setTitle("Order Dibatalkan")
                             .setMessage(finalMessage)
                             .setCancelable(false)

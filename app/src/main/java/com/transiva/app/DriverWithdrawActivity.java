@@ -392,7 +392,7 @@ public class DriverWithdrawActivity extends Activity {
             return;
         }
 
-        new AlertDialog.Builder(this)
+        PremiumDialogs.builder(this)
                 .setTitle("Ajukan Withdraw")
                 .setMessage("Ajukan WD " + rupiah(amount) + "?\n\nSaldo akan ditahan sampai admin proses.")
                 .setPositiveButton("Ajukan", (d, w) -> submitWithdraw(amount, bank, accNo, accName, note))
@@ -526,6 +526,6 @@ public class DriverWithdrawActivity extends Activity {
     private String statusColor(String s) { if ("approved".equals(s)) return "#059669"; if ("rejected".equals(s)) return "#DC2626"; return "#B45309"; }
     private String statusBg(String s) { if ("approved".equals(s)) return "#ECFDF5"; if ("rejected".equals(s)) return "#FEF2F2"; return "#FFFBEB"; }
     private String statusStroke(String s) { if ("approved".equals(s)) return "#A7F3D0"; if ("rejected".equals(s)) return "#FECACA"; return "#FDE68A"; }
-    private void showInfo(String title, String msg) { try { new AlertDialog.Builder(this).setTitle(title).setMessage(msg).setPositiveButton("OK", null).show(); } catch (Exception ignored) {} }
+    private void showInfo(String title, String msg) { try { PremiumDialogs.builder(this).setTitle(title).setMessage(msg).setPositiveButton("OK", null).show(); } catch (Exception ignored) {} }
     private int dp(int v) { return (int)(v * getResources().getDisplayMetrics().density + 0.5f); }
 }

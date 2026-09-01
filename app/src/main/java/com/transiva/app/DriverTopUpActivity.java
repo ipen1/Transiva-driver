@@ -312,7 +312,7 @@ public class DriverTopUpActivity extends Activity {
 
     private void confirmCancel() {
         if(activeOrderId.isEmpty()) return;
-        new AlertDialog.Builder(this)
+        PremiumDialogs.builder(this)
                 .setTitle("Batalkan Deposit?")
                 .setMessage("Transaksi ini akan dihentikan. Setelah dibatalkan, Anda harus menunggu 1 menit sebelum membuat deposit baru.")
                 .setNegativeButton("Kembali",null)
@@ -359,5 +359,5 @@ public class DriverTopUpActivity extends Activity {
     private GradientDrawable stroke(String c,String s,int r,int w){GradientDrawable g=round(c,r);g.setStroke(dp(w),Color.parseColor(s));return g;}
     private GradientDrawable gradient(String a,String b,int r){GradientDrawable g=new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,new int[]{Color.parseColor(a),Color.parseColor(b)});g.setCornerRadius(dp(r));return g;}
     private int dp(int v){return(int)(v*getResources().getDisplayMetrics().density+.5f);}
-    private void info(String t,String m){try{new AlertDialog.Builder(this).setTitle(t).setMessage(m).setPositiveButton("OK",null).show();}catch(Exception ignored){}}
+    private void info(String t,String m){try{PremiumDialogs.builder(this).setTitle(t).setMessage(m).setPositiveButton("OK",null).show();}catch(Exception ignored){}}
 }

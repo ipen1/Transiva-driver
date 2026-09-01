@@ -893,7 +893,7 @@ public class LoginActivity extends Activity {
             String title,
             String message
     ) {
-        new AlertDialog.Builder(this)
+        PremiumDialogs.builder(this)
                 .setTitle(title)
                 .setMessage(message)
                 .setPositiveButton("OK", null)

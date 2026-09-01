@@ -206,7 +206,7 @@ public class DriverDashboardActivity extends Activity
                     + (distance.isEmpty() ? " di dekat lokasi terakhirmu." : " sekitar " + distance + " km dari lokasi terakhirmu.");
         message += "\n\nAktifkan status ONLINE jika kamu siap menerima order.";
 
-        new AlertDialog.Builder(this)
+        PremiumDialogs.builder(this)
                 .setTitle("Peluang order di sekitar")
                 .setMessage(message)
                 .setPositiveButton("Online sekarang", (dialog, which) -> {
@@ -435,7 +435,7 @@ public class DriverDashboardActivity extends Activity
         sosButton = dangerOutlineButton("🆘  SOS");
         sosButton.setTextSize(13);
         sosButton.setContentDescription("Kirim sinyal darurat ke seluruh driver dan admin");
-        sosButton.setOnClickListener(v -> new AlertDialog.Builder(this)
+        sosButton.setOnClickListener(v -> PremiumDialogs.builder(this)
                 .setTitle("Kirim SOS Darurat?")
                 .setMessage("Semua driver dan admin akan menerima nama, lokasi terakhir, serta order aktif Anda.")
                 .setNegativeButton("Batal", null)
@@ -561,7 +561,7 @@ public class DriverDashboardActivity extends Activity
         destination.setHint("Tujuan pulang / area, kosong = nonaktif");
         destination.setText(state == null ? "" : clean(state.destinationLabel));
         box.addView(destination);
-        new AlertDialog.Builder(this)
+        PremiumDialogs.builder(this)
                 .setTitle("Driver Growth & Mode Pulang")
                 .setMessage("Isi area tujuan agar Transiva dapat menyimpan preferensi arah driver. Kosongkan tujuan untuk menonaktifkan mode tujuan.")
                 .setView(box)
@@ -1313,7 +1313,7 @@ public class DriverDashboardActivity extends Activity
      * ONLINE flow immediately before Android's location permission prompt.
      */
     private void showLocationDisclosureAndRequestForeground() {
-        new AlertDialog.Builder(this)
+        PremiumDialogs.builder(this)
                 .setTitle("Lokasi untuk Driver ONLINE")
                 .setMessage("Transiva Driver mengumpulkan data lokasi presisi untuk menjalankan fitur Driver ONLINE dan perjalanan aktif. Lokasi digunakan untuk menentukan posisi driver, menghubungkan order di sekitar, menampilkan posisi perjalanan kepada customer, dan navigasi. Saat Anda memilih ONLINE atau memiliki perjalanan aktif, lokasi dapat tetap dikumpulkan di latar belakang, termasuk ketika aplikasi ditutup atau tidak sedang digunakan. Lokasi tidak digunakan untuk iklan dan layanan lokasi berhenti ketika Driver OFFLINE dan tidak memiliki perjalanan aktif.")
                 .setNegativeButton("Tetap Offline", (d, w) -> {
@@ -1338,7 +1338,7 @@ public class DriverDashboardActivity extends Activity
     }
 
     private void showBackgroundLocationDisclosureAndRequest() {
-        new AlertDialog.Builder(this)
+        PremiumDialogs.builder(this)
                 .setTitle("Izinkan lokasi di latar belakang")
                 .setMessage("Transiva Driver memerlukan lokasi di latar belakang agar fitur Driver ONLINE dan perjalanan aktif tetap berjalan ketika aplikasi tidak sedang tampil di layar. Lokasi digunakan untuk posisi driver, pencocokan order di sekitar, progres perjalanan kepada customer, dan navigasi. Akses ini hanya berjalan saat Anda ONLINE atau memiliki perjalanan aktif, berhenti saat OFFLINE tanpa perjalanan aktif, dan tidak digunakan untuk iklan.")
                 .setNegativeButton("Tetap Offline", (d, w) -> {
@@ -1409,7 +1409,7 @@ public class DriverDashboardActivity extends Activity
     private void showGpsEnableDialog(boolean continueOnlineAfterReturn) {
         if (isFinishing()) return;
         pendingOnlineAfterGps = continueOnlineAfterReturn;
-        new AlertDialog.Builder(this)
+        PremiumDialogs.builder(this)
                 .setTitle("Aktifkan lokasi")
                 .setMessage(continueOnlineAfterReturn
                         ? "GPS/lokasi wajib aktif sebelum driver online. Aktifkan GPS, lalu kembali ke Transiva. Driver akan melanjutkan ONLINE otomatis."
