@@ -12,7 +12,6 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
@@ -76,8 +75,7 @@
             android:name=".TransivaDriverForegroundService"
             android:enabled="false"
             android:exported="false"
-            android:stopWithTask="false"
-            android:foregroundServiceType="location|dataSync" />
+            android:stopWithTask="false" />
 
         <service
             android:name=".DriverBubbleOverlayService"
@@ -97,8 +95,7 @@
             android:name=".BackgroundSyncService"
             android:enabled="false"
             android:exported="false"
-            android:stopWithTask="false"
-            android:foregroundServiceType="dataSync" />
+            android:stopWithTask="false" />
 
         <receiver
             android:name=".TransivaBootReceiver"
