@@ -938,7 +938,42 @@ public class DriverTripActivity extends Activity {
             JSONObject r = postJson(BASE_URL + endpoint, p);
             boolean ok = r.optBoolean("success", false);
             String m = first(r.optString("message"), ok ? "Status berhasil diperbarui." : "Gagal update status.");
-            mainHandler.post(() -> { updatingStatus=false; setLoading(false); if(ok){ pendingFinishOtp = ""; try{ order.put("status", next); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } saveActiveOrder(); refreshButtons(); mainHandler.postDelayed(() -> updateMap(), 250); info("Berhasil", m); if(next.equals("finished") || next.equals("completed")){ DriverMessageUnreadRepository.clearOrder(this, orderId()); clearActiveOrder(); finish(); } } else info("Gagal", m); });
+            mainHandler.post(() -> {
+                updatingStatus=false;
+                setLoading(false);
+                if(ok){
+                    pendingFinishOtp = "";
+                    try{ order.put("status", next); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
+                    saveActiveOrder();
+                    refreshButtons();
+                    mainHandler.postDelayed(() -> updateMap(), 250);
+                    if(next.equals("finished") || next.equals("completed")){
+                        final String finishedOrderId = orderId();
+                        final String finishedInternalId = internalId();
+                        final String finishedSource = isPickupOrder() ? "pickup_orders" : "orders";
+                        DriverMessageUnreadRepository.clearOrder(this, finishedOrderId);
+                        clearActiveOrder();
+                        DriverOrderCompletionDialog.show(this, r, order,
+                                (rating, review, callback) -> DriverNetworkExecutor.execute(() -> {
+                                    try {
+                                        JSONObject ratingPayload = new JSONObject();
+                                        ratingPayload.put("source", finishedSource);
+                                        ratingPayload.put("id", finishedInternalId);
+                                        ratingPayload.put("order_id", finishedOrderId);
+                                        ratingPayload.put("rating", rating);
+                                        ratingPayload.put("review", review);
+                                        JSONObject ratingResponse = postJson(BASE_URL + "driver_rate_customer.php", ratingPayload);
+                                        callback.complete(ratingResponse.optBoolean("success", false), first(ratingResponse.optString("message"), "Penilaian customer tersimpan."));
+                                    } catch (Exception ex) {
+                                        callback.complete(false, first(ex.getMessage(), "Gagal menyimpan penilaian customer."));
+                                    }
+                                }),
+                                this::finish);
+                    } else {
+                        info("Berhasil", m);
+                    }
+                } else info("Gagal", m);
+            });
         }catch(Exception e){
             final String errorMessage = e.getMessage() == null ? "" : e.getMessage().trim();
             mainHandler.post(() -> {
