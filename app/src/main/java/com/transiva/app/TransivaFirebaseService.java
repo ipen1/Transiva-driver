@@ -283,6 +283,13 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                 String msg = first(body, data != null ? first(data.get("message"), "Pesan baru") : "Pesan baru");
                 text = sender + ": " + msg;
             }
+            // FCM dapat menghidupkan proses ketika UI sudah dibuang dari Recent Apps.
+            // Jika driver masih ONLINE, pastikan foreground owner + bubble diminta hidup
+            // sebelum event dipublikasikan. Event sendiri di-queue oleh overlay service.
+            if (DriverBubbleController.driverOnline(this)) {
+                DriverServiceController.start(this);
+                DriverBubbleController.start(this);
+            }
             DriverBubbleOverlayService.publish(this, first(type, "general").toLowerCase(), text, orderId, roomId, mentionId, newOrder);
         } catch (Throwable ignored) {}
     }

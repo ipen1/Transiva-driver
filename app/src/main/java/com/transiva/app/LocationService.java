@@ -102,6 +102,11 @@ public class LocationService extends Service {
             return START_NOT_STICKY;
         }
 
+        // Saat driver ONLINE, foreground location service menjadi "anchor"
+        // proses. Bubble ikut dihidupkan dari sini agar tidak bergantung pada
+        // Activity/Recent Apps dan tetap ada setelah UI diswipe.
+        DriverBubbleController.start(this);
+
         requestUpdates();
         return START_STICKY;
     }
@@ -351,6 +356,15 @@ public class LocationService extends Service {
         channel.setSound(null, null);
         channel.setLockscreenVisibility(Notification.VISIBILITY_SECRET);
         manager.createNotificationChannel(channel);
+    }
+
+    @Override public void onTaskRemoved(Intent rootIntent) {
+        // stopWithTask=false + START_STICKY menjaga layanan ONLINE saat aplikasi
+        // dibuang dari Recent Apps. Pastikan overlay juga diminta hidup kembali.
+        if (session != null && "1".equals(session.get("driver_server_online"))) {
+            DriverBubbleController.start(this);
+        }
+        super.onTaskRemoved(rootIntent);
     }
 
     @Override public void onDestroy() {

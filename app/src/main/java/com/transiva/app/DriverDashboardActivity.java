@@ -675,30 +675,32 @@ public class DriverDashboardActivity extends Activity
             LinearLayout box = new LinearLayout(this);
             box.setOrientation(LinearLayout.VERTICAL);
             box.setGravity(Gravity.CENTER);
-            box.setPadding(dp(8), dp(7), dp(8), dp(7));
+            // Compact cluster chip: tetap terbaca di layar kecil tanpa membuat
+            // panel Area Ramai terlalu tinggi/lebar.
+            box.setPadding(dp(6), dp(5), dp(6), dp(5));
 
             int accent = clusterAccent(drivers);
             int fill = mixWithWhite(accent, current ? 0.87f : 0.94f);
             box.setBackground(roundStrokeColor(fill, accent, dp(14), current ? 2 : 1));
 
-            TextView number = text(String.valueOf(row.id), 10, "#FFFFFF", true);
+            TextView number = text(String.valueOf(row.id), 9, "#FFFFFF", true);
             number.setGravity(Gravity.CENTER);
             number.setBackground(roundStrokeColor(accent, accent, dp(999), 1));
-            box.addView(number, new LinearLayout.LayoutParams(dp(28), dp(28)));
+            box.addView(number, new LinearLayout.LayoutParams(dp(22), dp(22)));
 
-            TextView label = text(name, 9, "#0B3A78", true);
+            TextView label = text(name, 8, "#0B3A78", true);
             label.setGravity(Gravity.CENTER);
             label.setMaxLines(2);
-            LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(dp(92), dp(34));
-            labelLp.topMargin = dp(4);
+            LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(dp(72), dp(27));
+            labelLp.topMargin = dp(3);
             box.addView(label, labelLp);
 
-            TextView count = text(drivers + " driver", 8, "#475569", false);
+            TextView count = text(drivers + " driver", 7, "#475569", false);
             count.setGravity(Gravity.CENTER);
             box.addView(count);
 
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(108), dp(90));
-            if (i > 0) lp.setMargins(dp(6), 0, 0, 0);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(84), dp(72));
+            if (i > 0) lp.setMargins(dp(5), 0, 0, 0);
             clusterGrid.addView(box, lp);
         }
     }
@@ -803,6 +805,13 @@ public class DriverDashboardActivity extends Activity
         setSwitch(state.online);
 
         session.put("driver_server_online", state.online ? "1" : "0");
+        session.put("driver_is_online", state.online ? "1" : "0");
+
+        // Bubble mengikuti status operasional driver, bukan lifecycle Activity.
+        // Saat ONLINE bubble dipertahankan oleh service; saat OFFLINE bubble
+        // langsung disembunyikan tanpa mematikan preferensi pengguna.
+        if (state.online) DriverBubbleController.start(this);
+        else DriverBubbleController.stopForOffline(this);
 
         // Status ONLINE dari server tidak boleh membuat aplikasi crash ketika
         // driver login kembali saat GPS/lokasi sedang mati. Driver tetap boleh

@@ -28,6 +28,8 @@ import androidx.annotation.Nullable;
 public final class DriverBubbleOverlayService extends Service {
     public static final String ACTION_START = "com.transiva.app.BUBBLE_START";
     public static final String ACTION_STOP = "com.transiva.app.BUBBLE_STOP";
+    public static final String ACTION_OFFLINE = "com.transiva.app.BUBBLE_OFFLINE";
+    private static final String PENDING_PREF = "transiva_bubble_pending";
     private static final long DEFAULT_PREVIEW_MS = 4200L;
     private static volatile DriverBubbleOverlayService instance;
 
@@ -49,17 +51,45 @@ public final class DriverBubbleOverlayService extends Service {
     public static void publish(Context context, String type, String text,
                                String orderId, String roomId, long mentionId,
                                boolean newOrder) {
+        if (context == null) return;
+        Context app = context.getApplicationContext();
+        // Simpan event singkat terlebih dahulu. Jika proses baru saja dihidupkan
+        // oleh FCM, event tetap dapat ditampilkan setelah service overlay hidup.
+        try {
+            app.getSharedPreferences(PENDING_PREF, MODE_PRIVATE).edit()
+                    .putString("type", safeStatic(type))
+                    .putString("text", safeStatic(text))
+                    .putString("order_id", safeStatic(orderId))
+                    .putString("room_id", safeStatic(roomId))
+                    .putLong("mention_id", mentionId)
+                    .putBoolean("new_order", newOrder)
+                    .putBoolean("has_event", true)
+                    .apply();
+        } catch (Throwable ignored) {}
+
         DriverBubbleOverlayService s = instance;
-        if (s == null) return;
-        s.main.post(() -> s.showEvent(type, text, orderId, roomId, mentionId, newOrder));
+        if (s != null) {
+            s.main.post(s::consumePendingEvent);
+            return;
+        }
+        DriverBubbleController.start(app);
+    }
+
+    private static String safeStatic(String value) {
+        return value == null ? "" : value.trim();
     }
 
     @Override public void onCreate() {
         super.onCreate();
         instance = this;
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-        if (!canOverlay()) { stopSelf(); return; }
+        if (!canOverlay() || !DriverBubbleController.enabled(this)
+                || !DriverBubbleController.driverOnline(this)) {
+            stopSelf();
+            return;
+        }
         createViews();
+        consumePendingEvent();
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
@@ -68,9 +98,33 @@ public final class DriverBubbleOverlayService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
-        if (!canOverlay()) { stopSelf(); return START_NOT_STICKY; }
+        if (intent != null && ACTION_OFFLINE.equals(intent.getAction())) {
+            stopSelf();
+            return START_NOT_STICKY;
+        }
+        if (!canOverlay() || !DriverBubbleController.enabled(this)
+                || !DriverBubbleController.driverOnline(this)) {
+            stopSelf();
+            return START_NOT_STICKY;
+        }
         if (bubbleRoot == null) createViews();
+        consumePendingEvent();
         return START_STICKY;
+    }
+
+    private void consumePendingEvent() {
+        try {
+            android.content.SharedPreferences p = getSharedPreferences(PENDING_PREF, MODE_PRIVATE);
+            if (!p.getBoolean("has_event", false)) return;
+            String type = p.getString("type", "");
+            String text = p.getString("text", "");
+            String orderId = p.getString("order_id", "");
+            String roomId = p.getString("room_id", "");
+            long mentionId = p.getLong("mention_id", 0L);
+            boolean newOrder = p.getBoolean("new_order", false);
+            p.edit().putBoolean("has_event", false).apply();
+            main.post(() -> showEvent(type, text, orderId, roomId, mentionId, newOrder));
+        } catch (Throwable ignored) {}
     }
 
     private boolean canOverlay() {
@@ -179,8 +233,12 @@ public final class DriverBubbleOverlayService extends Service {
                         boolean close = isOverClose(e.getRawX(), e.getRawY());
                         closeTarget.setVisibility(View.GONE);
                         if (close) {
-                            getSharedPreferences("transiva_bubble", MODE_PRIVATE).edit().putBoolean("enabled", false).apply();
-                            stopSelf();
+                            // Saat ONLINE bubble tidak boleh hilang hanya karena
+                            // terseret ke target X. Penonaktifan tetap tersedia
+                            // secara eksplisit dari Pengaturan Driver, sedangkan
+                            // status OFFLINE akan menutup bubble otomatis.
+                            hidePreviewNow();
+                            snapToEdge();
                             return true;
                         }
                         if (!dragging) v.performClick();
