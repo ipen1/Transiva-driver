@@ -32,6 +32,8 @@ public final class DriverDashboardState {
     public final String hotspotName;
     public final String hotspotLevel;
     public final int hotspotScore;
+    public final int currentRegionId;
+    public final String currentRegionName;
     public final int currentClusterId;
     public final String currentClusterName;
     public final List<DriverClusterStatus> clusters;
@@ -69,6 +71,8 @@ public final class DriverDashboardState {
             String hotspotName,
             String hotspotLevel,
             int hotspotScore,
+            int currentRegionId,
+            String currentRegionName,
             int currentClusterId,
             String currentClusterName,
             List<DriverClusterStatus> clusters,
@@ -105,6 +109,8 @@ public final class DriverDashboardState {
         this.hotspotName = hotspotName == null ? "" : hotspotName;
         this.hotspotLevel = hotspotLevel == null ? "" : hotspotLevel;
         this.hotspotScore = hotspotScore;
+        this.currentRegionId = currentRegionId;
+        this.currentRegionName = currentRegionName == null ? "" : currentRegionName;
         this.currentClusterId = currentClusterId;
         this.currentClusterName = currentClusterName == null ? "" : currentClusterName;
         this.clusters = clusters == null ? Collections.emptyList() : clusters;
