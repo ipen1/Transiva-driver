@@ -48,6 +48,9 @@ public class TransivaDriverApplication extends Application implements Applicatio
         // Jangan sembunyikan tombol kiri hanya karena izin overlay aktif. DriverGlobalChatBubble.attach()
         // sendiri akan mengecualikan Splash/Login/PIN/halaman chat global.
         DriverGlobalChatBubble.attach(activity);
+        // Re-apply after resume because OEMs can change navigation-bar insets
+        // when switching gesture/3-button mode, PiP, keyboard, or immersive screens.
+        try { DriverResponsiveUi.apply(activity); } catch (Throwable ignored) { }
     }
 
     /**
@@ -74,7 +77,12 @@ public class TransivaDriverApplication extends Application implements Applicatio
         });
     }
 
-    public void onActivityCreated(Activity a, Bundle b) {}
+    public void onActivityCreated(Activity a, Bundle b) {
+        // Android 15/16 can enforce edge-to-edge for targetSdk 35+.
+        // Apply the same safe-inset strategy used by the customer app so
+        // bottom navigation/action controls never sit behind 3-button or gesture navigation.
+        try { DriverResponsiveUi.apply(a); } catch (Throwable ignored) { }
+    }
     public void onActivityStarted(Activity a) {}
     public void onActivityPaused(Activity a) {
         Activity current = currentActivity.get();
