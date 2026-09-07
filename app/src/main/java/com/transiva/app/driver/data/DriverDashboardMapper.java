@@ -36,13 +36,20 @@ public final class DriverDashboardMapper {
 
         JSONObject currentCluster = clusterSystem.optJSONObject("current");
         if (currentCluster == null) currentCluster = new JSONObject();
+        JSONObject currentRegion = clusterSystem.optJSONObject("region");
+        if (currentRegion == null) currentRegion = currentCluster.optJSONObject("region");
+        if (currentRegion == null) currentRegion = new JSONObject();
         List<DriverClusterStatus> clusterRows = new ArrayList<>();
         JSONArray clusterArray = clusterSystem.optJSONArray("clusters");
         if (clusterArray != null) {
             for (int i = 0; i < clusterArray.length(); i++) {
                 JSONObject c = clusterArray.optJSONObject(i);
                 if (c != null) clusterRows.add(new DriverClusterStatus(
-                        readInt(c, "id", 0), c.optString("name", "Cluster"), readInt(c, "active_drivers", 0)));
+                        readInt(c, "id", 0),
+                        readInt(c, "region_id", 0),
+                        c.optString("region_name", ""),
+                        c.optString("name", "Cluster"),
+                        readInt(c, "active_drivers", 0)));
             }
         }
 
@@ -97,6 +104,8 @@ public final class DriverDashboardMapper {
                 hotspot.optString("name", "Area sekitar Anda"),
                 hotspot.optString("level", "NORMAL"),
                 readInt(hotspot, "score", 0),
+                readInt(currentRegion, "id", 0),
+                currentRegion.optString("name", ""),
                 readInt(currentCluster, "id", 0),
                 currentCluster.optString("name", "Lokasi belum tersedia"),
                 clusterRows,
