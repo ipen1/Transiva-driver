@@ -616,10 +616,14 @@ public class DriverDashboardActivity extends Activity
         clusterCurrentText = text("📍 Cluster: mendeteksi lokasi...", 14, "#0B3A78", true);
         add(card, clusterCurrentText, 0, dp(10), 0, 0);
 
+        android.widget.HorizontalScrollView clusterScroll = new android.widget.HorizontalScrollView(this);
+        clusterScroll.setHorizontalScrollBarEnabled(false);
+        clusterScroll.setFillViewport(true);
         clusterGrid = new LinearLayout(this);
         clusterGrid.setOrientation(LinearLayout.HORIZONTAL);
-        clusterGrid.setGravity(Gravity.CENTER);
-        add(card, clusterGrid, 0, dp(8), 0, 0);
+        clusterGrid.setGravity(Gravity.CENTER_VERTICAL);
+        clusterScroll.addView(clusterGrid, new android.widget.HorizontalScrollView.LayoutParams(-2, -2));
+        add(card, clusterScroll, 0, dp(8), 0, 0);
         renderClusterGrid(null);
 
         clusterListText = text("", 1, "#FFFFFF", false);
@@ -646,50 +650,55 @@ public class DriverDashboardActivity extends Activity
         if (clusterGrid == null) return;
         clusterGrid.removeAllViews();
 
-        String[] fallbackNames = {"Sumbersari", "Dolago /\nRibamba", "Parigi", "Pangi", "Toboli"};
-        for (int i = 0; i < 5; i++) {
-            int id = i + 1;
-            String name = fallbackNames[i];
-            int drivers = 0;
-            boolean current = state != null && state.currentClusterId == id;
-
-            if (state != null && state.clusters != null) {
-                for (DriverClusterStatus row : state.clusters) {
-                    if (row != null && row.id == id) {
-                        name = clean(row.name).isEmpty() ? fallbackNames[i] : row.name.replace("/", "/\n");
-                        drivers = row.activeDrivers;
-                        break;
-                    }
-                }
+        java.util.List<DriverClusterStatus> rows = new java.util.ArrayList<>();
+        if (state != null && state.clusters != null) {
+            for (DriverClusterStatus row : state.clusters) {
+                if (row == null || row.id <= 0) continue;
+                if (state.currentRegionId > 0 && row.regionId > 0 && row.regionId != state.currentRegionId) continue;
+                rows.add(row);
             }
+        }
+
+        if (rows.isEmpty()) {
+            TextView empty = text("Cluster akan mengikuti database setelah lokasi tersinkron.", 11, "#64748B", false);
+            empty.setPadding(dp(8), dp(12), dp(8), dp(12));
+            clusterGrid.addView(empty, new LinearLayout.LayoutParams(-2, -2));
+            return;
+        }
+
+        for (int i = 0; i < rows.size(); i++) {
+            DriverClusterStatus row = rows.get(i);
+            int drivers = row.activeDrivers;
+            boolean current = state != null && state.currentClusterId == row.id;
+            String name = clean(row.name).isEmpty() ? "Cluster " + row.id : row.name.replace("/", "/\n");
 
             LinearLayout box = new LinearLayout(this);
             box.setOrientation(LinearLayout.VERTICAL);
             box.setGravity(Gravity.CENTER);
-            box.setPadding(dp(2), dp(6), dp(2), dp(6));
+            box.setPadding(dp(8), dp(7), dp(8), dp(7));
 
             int accent = clusterAccent(drivers);
             int fill = mixWithWhite(accent, current ? 0.87f : 0.94f);
             box.setBackground(roundStrokeColor(fill, accent, dp(14), current ? 2 : 1));
 
-            TextView number = text(String.valueOf(id), 10, "#FFFFFF", true);
+            TextView number = text(String.valueOf(row.id), 10, "#FFFFFF", true);
             number.setGravity(Gravity.CENTER);
             number.setBackground(roundStrokeColor(accent, accent, dp(999), 1));
-            box.addView(number, new LinearLayout.LayoutParams(dp(24), dp(24)));
+            box.addView(number, new LinearLayout.LayoutParams(dp(28), dp(28)));
 
-            TextView label = text(name, 8, "#0B3A78", true);
+            TextView label = text(name, 9, "#0B3A78", true);
             label.setGravity(Gravity.CENTER);
             label.setMaxLines(2);
-            LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(-1, dp(31));
-            labelLp.topMargin = dp(3);
+            LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(dp(92), dp(34));
+            labelLp.topMargin = dp(4);
             box.addView(label, labelLp);
 
             TextView count = text(drivers + " driver", 8, "#475569", false);
             count.setGravity(Gravity.CENTER);
             box.addView(count);
 
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(84), 1);
-            if (i > 0) lp.setMargins(dp(3), 0, 0, 0);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(108), dp(90));
+            if (i > 0) lp.setMargins(dp(6), 0, 0, 0);
             clusterGrid.addView(box, lp);
         }
     }
@@ -780,9 +789,11 @@ public class DriverDashboardActivity extends Activity
         hotspotText.setText(first(state.hotspotName, "Area sekitar Anda") + " • "
                 + localHotspotLevel + " (" + localHotspotScore + "% )");
         if (clusterCurrentText != null) {
+            String regionLabel = clean(state.currentRegionName);
             clusterCurrentText.setText(state.currentClusterId > 0
-                    ? "📍 Anda di Cluster " + state.currentClusterId + " • " + state.currentClusterName
-                    : "📍 Cluster belum terdeteksi • aktifkan GPS");
+                    ? "🌐 " + (regionLabel.isEmpty() ? "Regional" : "Regional " + regionLabel)
+                        + " • 📍 Cluster " + state.currentClusterName
+                    : "📍 Regional/Cluster belum terdeteksi • aktifkan GPS");
         }
         renderClusterGrid(state);
 
