@@ -3,18 +3,23 @@ package com.transiva.app;
 import android.app.Activity;
 import android.content.Context;
 import android.content.res.Configuration;
-import android.graphics.Rect;
 import android.os.Build;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
-import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.widget.TextView;
+
+import java.util.WeakHashMap;
+
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 /** Central responsive-device and system-bar safety policy for driver screens. */
 public final class DriverResponsiveUi {
     public enum Profile { COMPACT, SMALL, NORMAL, LARGE, TABLET }
+    private static final WeakHashMap<View, int[]> BASE_PADDING = new WeakHashMap<>();
     private DriverResponsiveUi() {}
 
     public static Profile profile(Context context) {
@@ -57,21 +62,55 @@ public final class DriverResponsiveUi {
         if (Build.VERSION.SDK_INT < 21) return;
         View content = a.findViewById(android.R.id.content);
         if (content == null) return;
-        final int pl=content.getPaddingLeft(), pt=content.getPaddingTop(), pr=content.getPaddingRight(), pb=content.getPaddingBottom();
-        if (Build.VERSION.SDK_INT >= 23) {
-            content.setOnApplyWindowInsetsListener((v, insets) -> {
-                int top=0,bottom=0,left=0,right=0;
-                if (Build.VERSION.SDK_INT >= 30) {
-                    android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
-                    left=bars.left; top=bars.top; right=bars.right; bottom=bars.bottom;
-                } else {
-                    left=insets.getSystemWindowInsetLeft(); top=insets.getSystemWindowInsetTop(); right=insets.getSystemWindowInsetRight(); bottom=insets.getSystemWindowInsetBottom();
-                }
-                v.setPadding(Math.max(pl,left), Math.max(pt,top), Math.max(pr,right), Math.max(pb,bottom));
-                return insets;
-            });
-            content.requestApplyInsets();
+
+        final int[] base;
+        synchronized (BASE_PADDING) {
+            int[] saved = BASE_PADDING.get(content);
+            if (saved == null) {
+                saved = new int[]{
+                        content.getPaddingLeft(), content.getPaddingTop(),
+                        content.getPaddingRight(), content.getPaddingBottom()};
+                BASE_PADDING.put(content, saved);
+            }
+            base = saved;
         }
+        final int pl = base[0];
+        final int pt = base[1];
+        final int pr = base[2];
+        final int pb = base[3];
+
+        /*
+         * targetSdk 35/36 can run edge-to-edge on Android 15/16. On a number of
+         * OEM builds SOFT_INPUT_ADJUST_RESIZE by itself no longer guarantees that
+         * a bottom composer is moved above the IME. Treat the keyboard as a real
+         * window inset, while preserving the existing system-bar/cutout safety.
+         *
+         * WindowInsetsCompat is intentionally used here instead of API-specific
+         * WindowInsets.Type calls so the same policy also works on older devices.
+         */
+        ViewCompat.setOnApplyWindowInsetsListener(content, (v, insets) -> {
+            Insets bars = insets.getInsets(
+                    WindowInsetsCompat.Type.systemBars()
+                            | WindowInsetsCompat.Type.displayCutout());
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+
+            int safeLeft = Math.max(pl, bars.left);
+            int safeTop = Math.max(pt, bars.top);
+            int safeRight = Math.max(pr, bars.right);
+
+            // IME inset includes/overlaps the nav-bar area on modern Android.
+            // max(), rather than addition, prevents double bottom spacing.
+            int safeBottom = Math.max(pb, Math.max(bars.bottom, ime.bottom));
+
+            if (v.getPaddingLeft() != safeLeft
+                    || v.getPaddingTop() != safeTop
+                    || v.getPaddingRight() != safeRight
+                    || v.getPaddingBottom() != safeBottom) {
+                v.setPadding(safeLeft, safeTop, safeRight, safeBottom);
+            }
+            return insets;
+        });
+        ViewCompat.requestApplyInsets(content);
     }
 
     private static void tuneTree(Context c, View v) {
