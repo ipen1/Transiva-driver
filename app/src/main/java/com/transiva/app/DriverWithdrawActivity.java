@@ -462,7 +462,7 @@ public class DriverWithdrawActivity extends Activity {
     }
 
     private String get(String link) throws Exception {
-        HttpURLConnection c = (HttpURLConnection) new URL(link).openConnection();
+        HttpURLConnection c = DriverHttpTransport.open(link);
         c.setConnectTimeout(TIMEOUT_MS); c.setReadTimeout(TIMEOUT_MS);
         c.setRequestMethod("GET"); c.setRequestProperty("Accept", "application/json");
         applySecurityHeaders(c);
@@ -471,7 +471,7 @@ public class DriverWithdrawActivity extends Activity {
     }
 
     private JSONObject post(String link, JSONObject payload) throws Exception {
-        HttpURLConnection c = (HttpURLConnection) new URL(link).openConnection();
+        HttpURLConnection c = DriverHttpTransport.open(link);
         c.setConnectTimeout(TIMEOUT_MS); c.setReadTimeout(TIMEOUT_MS);
         c.setRequestMethod("POST"); c.setDoOutput(true);
         c.setRequestProperty("Content-Type", "application/json; charset=UTF-8");

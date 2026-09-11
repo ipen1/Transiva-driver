@@ -70,7 +70,7 @@ public class ApiClient {
 
                 URL url = new URL(fullUrl);
 
-                conn = (HttpURLConnection) url.openConnection();
+                conn = DriverHttpTransport.open(url);
                 conn.setConnectTimeout(CONNECT_TIMEOUT);
                 conn.setReadTimeout(READ_TIMEOUT);
                 conn.setUseCaches(false);

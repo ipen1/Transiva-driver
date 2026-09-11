@@ -45,7 +45,7 @@ public final class DriverDeviceDisconnectClient {
                 JSONObject body = new JSONObject();
                 body.put("action", "disconnect_device");
 
-                conn = (HttpURLConnection) new URL(DEVICE_URL).openConnection();
+                conn = DriverHttpTransport.open(DEVICE_URL);
                 conn.setRequestMethod("POST");
                 conn.setConnectTimeout(15000);
                 conn.setReadTimeout(20000);

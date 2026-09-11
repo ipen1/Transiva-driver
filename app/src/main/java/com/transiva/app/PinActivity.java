@@ -496,7 +496,7 @@ public class PinActivity extends FragmentActivity {
         HttpURLConnection conn = null;
 
         try {
-            conn = (HttpURLConnection) new URL(endpoint).openConnection();
+            conn = DriverHttpTransport.open(endpoint);
             conn.setRequestMethod(payload == null ? "GET" : "POST");
             conn.setConnectTimeout(TIMEOUT_MS);
             conn.setReadTimeout(TIMEOUT_MS);

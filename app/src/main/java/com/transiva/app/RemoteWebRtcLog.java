@@ -54,7 +54,7 @@ public final class RemoteWebRtcLog {
             j.put("message", clean(message) + "\n" + deviceSummary());
 
             byte[] body = j.toString().getBytes(StandardCharsets.UTF_8);
-            c = (HttpURLConnection) new URL(ENDPOINT).openConnection();
+            c = DriverHttpTransport.open(ENDPOINT);
             c.setRequestMethod("POST");
             c.setConnectTimeout(timeout);
             c.setReadTimeout(timeout);

@@ -302,7 +302,7 @@ public class DriverReceiptHistoryActivity extends Activity {
     }
 
     private String get(String link) throws Exception {
-        HttpURLConnection c = (HttpURLConnection) new URL(link).openConnection();
+        HttpURLConnection c = DriverHttpTransport.open(link);
         c.setConnectTimeout(TIMEOUT_MS);
         c.setReadTimeout(TIMEOUT_MS);
         c.setRequestMethod("GET");

@@ -44,7 +44,7 @@ public final class RemoteImageLoader {
     private static void load(ImageView view,String clean){
         HttpURLConnection c=null;
         try{
-            c=(HttpURLConnection)new URL(clean).openConnection(); c.setConnectTimeout(10000);c.setReadTimeout(15000);c.setUseCaches(true);c.setRequestProperty("Accept","image/webp,image/*");
+            c=DriverHttpTransport.open(clean); c.setConnectTimeout(10000);c.setReadTimeout(15000);c.setUseCaches(true);c.setRequestProperty("Accept","image/webp,image/*");
             int status=c.getResponseCode(); if(status<200||status>=300)return;
             BufferedInputStream in=new BufferedInputStream(c.getInputStream()); ByteArrayOutputStream out=new ByteArrayOutputStream(64*1024); byte[] buf=new byte[8192];int n,total=0; final int maxBytes=6*1024*1024;
             while((n=in.read(buf))>0){total+=n;if(total>maxBytes){in.close();return;}out.write(buf,0,n);}in.close();byte[] data=out.toByteArray();

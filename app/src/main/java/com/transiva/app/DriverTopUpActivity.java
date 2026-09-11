@@ -182,7 +182,7 @@ public class DriverTopUpActivity extends Activity {
     private JSONObject uploadManual(int amount,Uri uri)throws Exception {
         String boundary="----Transiva"+System.currentTimeMillis(); HttpURLConnection c=null;
         try {
-            c=(HttpURLConnection)new URL(BASE_URL+"server/uploadDeposit.php").openConnection(); c.setRequestMethod("POST"); c.setConnectTimeout(TIMEOUT); c.setReadTimeout(TIMEOUT); c.setDoOutput(true);
+            c=DriverHttpTransport.open(BASE_URL+"server/uploadDeposit.php"); c.setRequestMethod("POST"); c.setConnectTimeout(TIMEOUT); c.setReadTimeout(TIMEOUT); c.setDoOutput(true);
             c.setRequestProperty("Accept","application/json"); c.setRequestProperty("Authorization","Bearer "+session.getToken().trim()); c.setRequestProperty("X-Device-UUID",DeviceIdentityManager.getInstallationUuid(this)); c.setRequestProperty("X-App-Scope","driver"); c.setRequestProperty("Content-Type","multipart/form-data; boundary="+boundary);
             String crlf="\r\n"; OutputStream out=c.getOutputStream();
             out.write(("--"+boundary+crlf+"Content-Disposition: form-data; name=\"amount\""+crlf+crlf+amount+crlf).getBytes(StandardCharsets.UTF_8));
@@ -338,7 +338,7 @@ public class DriverTopUpActivity extends Activity {
     private JSONObject postJson(String u,JSONObject body,String idem)throws Exception{return request("POST",u,body,idem);}
     private JSONObject request(String method,String u,JSONObject body,String idem)throws Exception{
         HttpURLConnection c=null; try{
-            c=(HttpURLConnection)new URL(u).openConnection(); c.setRequestMethod(method); c.setConnectTimeout(TIMEOUT); c.setReadTimeout(TIMEOUT); c.setRequestProperty("Accept","application/json");
+            c=DriverHttpTransport.open(u); c.setRequestMethod(method); c.setConnectTimeout(TIMEOUT); c.setReadTimeout(TIMEOUT); c.setRequestProperty("Accept","application/json");
             String token=session==null?"":session.getToken(); if(token!=null&&!token.trim().isEmpty()) c.setRequestProperty("Authorization","Bearer "+token.trim());
             c.setRequestProperty("X-Device-UUID",DeviceIdentityManager.getInstallationUuid(this)); c.setRequestProperty("X-App-Scope","driver"); if(idem!=null&&!idem.isEmpty())c.setRequestProperty("Idempotency-Key",idem);
             if(body!=null){ c.setDoOutput(true); c.setRequestProperty("Content-Type","application/json; charset=utf-8"); byte[] bytes=body.toString().getBytes(StandardCharsets.UTF_8); try(OutputStream out=c.getOutputStream()){out.write(bytes);} }

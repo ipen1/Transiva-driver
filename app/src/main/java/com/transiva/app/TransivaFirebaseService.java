@@ -1073,8 +1073,7 @@ public class TransivaFirebaseService extends FirebaseMessagingService {
                 );
 
                 connection =
-                        (HttpURLConnection)
-                                url.openConnection();
+                        DriverHttpTransport.open(url);
 
                 connection.setRequestMethod("POST");
                 connection.setConnectTimeout(15000);

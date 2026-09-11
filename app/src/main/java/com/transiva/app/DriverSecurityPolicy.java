@@ -69,7 +69,7 @@ public final class DriverSecurityPolicy {
             if (!userId.isEmpty()) link.append("&user_id=").append(Uri.encode(userId));
             if (!username.isEmpty()) link.append("&username=").append(Uri.encode(username));
 
-            connection = (HttpURLConnection) new URL(link.toString()).openConnection();
+            connection = DriverHttpTransport.open(link.toString());
             connection.setConnectTimeout(4500);
             connection.setReadTimeout(4500);
             connection.setUseCaches(false);

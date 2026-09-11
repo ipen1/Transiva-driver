@@ -127,7 +127,7 @@ public class DriverAccountSecurityActivity extends Activity {
     private Result request(JSONObject payload) {
         HttpURLConnection c=null;
         try{
-            c=(HttpURLConnection)new URL(URL_ACCOUNT).openConnection();
+            c=DriverHttpTransport.open(URL_ACCOUNT);
             c.setRequestMethod("POST"); c.setConnectTimeout(10000); c.setReadTimeout(15000); c.setDoOutput(true); c.setUseCaches(false);
             c.setRequestProperty("Accept","application/json"); c.setRequestProperty("Content-Type","application/json; charset=UTF-8");
             c.setRequestProperty("Authorization","Bearer "+safe(session.getToken()));

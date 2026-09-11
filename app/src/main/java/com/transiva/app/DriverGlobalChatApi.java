@@ -47,7 +47,7 @@ public final class DriverGlobalChatApi {
         DriverNetworkExecutor.execute(() -> {
             HttpURLConnection conn=null;
             try{
-                conn=(HttpURLConnection)new URL(url).openConnection();
+                conn=DriverHttpTransport.open(url);
                 conn.setConnectTimeout(15000); conn.setReadTimeout(25000); conn.setUseCaches(false);
                 conn.setRequestProperty("Accept","application/json"); conn.setRequestProperty("Content-Type","application/json; charset=UTF-8");
                 conn.setRequestProperty("X-Transiva-App","Android-Driver"); conn.setRequestProperty("X-App-Scope","driver");

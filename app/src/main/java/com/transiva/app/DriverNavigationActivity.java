@@ -92,25 +92,13 @@ public class DriverNavigationActivity extends Activity {
     private static final String VEHICLE_CAR_IMAGE = "transiva-vehicle-car";
 
     private static final long LOCATION_UPLOAD_MS = 2500L;
-    private static final long ROUTE_REFRESH_MS = 15000L;
-    private static final float ROUTE_REFRESH_DISTANCE_M = 35f;
 
     // Auto-reroute is deliberately confirmed over several fixes. This prevents a
     // single weak-GPS jump from replacing a route that is still correct.
-    private static final double OFF_ROUTE_BASE_DISTANCE_M = 45d;
-    private static final double OFF_ROUTE_HARD_DISTANCE_M = 120d;
-    private static final double OFF_ROUTE_MIN_TRAVEL_M = 24d;
-    private static final long OFF_ROUTE_CONFIRM_MS = 4200L;
-    private static final long REROUTE_COOLDOWN_MS = 12000L;
 
     // Navigation map-matching stability. These values are intentionally conservative:
     // on dual-carriageway / parallel roads we prefer continuity over jumping to a
     // geometrically-nearer segment several dozen metres ahead.
-    private static final double ROUTE_MATCH_BACKWARD_ALLOWANCE_M = 8d;
-    private static final double ROUTE_MATCH_FORWARD_BASE_M = 42d;
-    private static final double ROUTE_MATCH_MAX_DISTANCE_M = 65d;
-    private static final double ROUTE_LINE_CUT_AHEAD_M = 4.5d;
-    private static final double ROUTE_LINE_PROGRESS_STEP_M = 3.0d;
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final SmoothLocationEngine smoothLocation = new SmoothLocationEngine(1800L);
@@ -782,8 +770,8 @@ public class DriverNavigationActivity extends Activity {
         long now = System.currentTimeMillis();
         if (!force && lastRouteLocation != null &&
                 meters(lastRouteLocation.getLatitude(), lastRouteLocation.getLongitude(),
-                        driverLat, driverLng) < ROUTE_REFRESH_DISTANCE_M &&
-                now - lastRouteRequestAt < ROUTE_REFRESH_MS) {
+                        driverLat, driverLng) < NavigationRoutePolicy.ROUTE_REFRESH_DISTANCE_M &&
+                now - lastRouteRequestAt < NavigationRoutePolicy.ROUTE_REFRESH_MS) {
             return;
         }
 
@@ -875,12 +863,12 @@ public class DriverNavigationActivity extends Activity {
         final float accuracy = fix != null && fix.hasAccuracy()
                 ? Math.max(1f, fix.getAccuracy()) : lastGpsAccuracyM;
         final double deviation = nearestRouteDistanceMeters(driverLat, driverLng);
-        final double trigger = Math.max(OFF_ROUTE_BASE_DISTANCE_M, accuracy * 1.35d);
+        final double trigger = Math.max(NavigationRoutePolicy.OFF_ROUTE_BASE_DISTANCE_M, accuracy * 1.35d);
 
         // A highly inaccurate fix is not enough evidence by itself. Only an
         // unmistakably large deviation may start confirmation while GPS is weak.
         if (!Double.isFinite(deviation) ||
-                (accuracy > 85f && deviation < OFF_ROUTE_HARD_DISTANCE_M + 30d) ||
+                (accuracy > 85f && deviation < NavigationRoutePolicy.OFF_ROUTE_HARD_DISTANCE_M + 30d) ||
                 deviation < trigger) {
             resetOffRouteConfirmation();
             requestRoute(false);
@@ -901,13 +889,13 @@ public class DriverNavigationActivity extends Activity {
         long duration = now - offRouteStartedAt;
 
         int requiredFixes = accuracy >= 55f ? 5 : (accuracy >= 30f ? 4 : 3);
-        long requiredMs = accuracy >= 55f ? 8000L : OFF_ROUTE_CONFIRM_MS;
-        double requiredTravel = accuracy >= 55f ? 35d : OFF_ROUTE_MIN_TRAVEL_M;
-        boolean hardDeviation = deviation >= OFF_ROUTE_HARD_DISTANCE_M && offRouteFixCount >= 2;
+        long requiredMs = accuracy >= 55f ? 8000L : NavigationRoutePolicy.OFF_ROUTE_CONFIRM_MS;
+        double requiredTravel = accuracy >= 55f ? 35d : NavigationRoutePolicy.OFF_ROUTE_MIN_TRAVEL_M;
+        boolean hardDeviation = deviation >= NavigationRoutePolicy.OFF_ROUTE_HARD_DISTANCE_M && offRouteFixCount >= 2;
         boolean confirmed = offRouteFixCount >= requiredFixes &&
                 duration >= requiredMs && traveled >= requiredTravel;
 
-        if ((hardDeviation || confirmed) && now - lastAutoRerouteAt >= REROUTE_COOLDOWN_MS) {
+        if ((hardDeviation || confirmed) && now - lastAutoRerouteAt >= NavigationRoutePolicy.REROUTE_COOLDOWN_MS) {
             lastAutoRerouteAt = now;
             resetOffRouteConfirmation();
             if (routeBadge != null) routeBadge.setText("Mendeteksi pindah jalur • membuat rute baru…");
@@ -974,7 +962,7 @@ public class DriverNavigationActivity extends Activity {
         boolean segmentChanged = lineSegment != lastRenderedRouteIndex;
         boolean progressed = Double.isNaN(lastRenderedRouteProgressMeters) ||
                 (!Double.isNaN(lineProgress) &&
-                        lineProgress - lastRenderedRouteProgressMeters >= ROUTE_LINE_PROGRESS_STEP_M);
+                        lineProgress - lastRenderedRouteProgressMeters >= NavigationRoutePolicy.ROUTE_LINE_PROGRESS_STEP_M);
         if (!segmentChanged && !progressed) return;
         updateRemainingRouteLine(false);
     }
@@ -989,7 +977,7 @@ public class DriverNavigationActivity extends Activity {
             boolean segmentChanged = lineSegment != lastRenderedRouteIndex;
             boolean progressed = Double.isNaN(lastRenderedRouteProgressMeters) ||
                     (!Double.isNaN(lineProgress) &&
-                            lineProgress - lastRenderedRouteProgressMeters >= ROUTE_LINE_PROGRESS_STEP_M);
+                            lineProgress - lastRenderedRouteProgressMeters >= NavigationRoutePolicy.ROUTE_LINE_PROGRESS_STEP_M);
             if (!segmentChanged && !progressed) return;
         }
 
@@ -1024,7 +1012,7 @@ public class DriverNavigationActivity extends Activity {
                             ? routeProgressMeters(Math.max(0, routeProgressIndex))
                             : lastMatchedProgressMeters);
                 double total = routeProgressMeters(routePoints.size() - 1);
-                double lineStartProgress = Math.max(0d, Math.min(total, progress + ROUTE_LINE_CUT_AHEAD_M));
+                double lineStartProgress = Math.max(0d, Math.min(total, progress + NavigationRoutePolicy.ROUTE_LINE_CUT_AHEAD_M));
 
                 int seg = segmentForProgressLocked(lineStartProgress);
                 double[] a = routePoints.get(seg);
@@ -1151,7 +1139,7 @@ public class DriverNavigationActivity extends Activity {
             final double speedMps = Math.max(0d, currentSpeedKmh / 3.6d);
             final double dtSec = lastMatchRealtimeMs <= 0L ? 1d
                     : Math.max(0.25d, Math.min(8d, (nowRt - lastMatchRealtimeMs) / 1000d));
-            final double maxForward = Math.max(ROUTE_MATCH_FORWARD_BASE_M, speedMps * dtSec * 2.2d + 22d);
+            final double maxForward = Math.max(NavigationRoutePolicy.ROUTE_MATCH_FORWARD_BASE_M, speedMps * dtSec * 2.2d + 22d);
 
             int startIndex;
             int endIndex;
@@ -1160,7 +1148,7 @@ public class DriverNavigationActivity extends Activity {
                 endIndex = Math.min(routePoints.size() - 2, 220);
             } else {
                 startIndex = Math.max(0, segmentForProgressLocked(
-                        Math.max(0d, previousProgress - ROUTE_MATCH_BACKWARD_ALLOWANCE_M - 18d)) - 2);
+                        Math.max(0d, previousProgress - NavigationRoutePolicy.ROUTE_MATCH_BACKWARD_ALLOWANCE_M - 18d)) - 2);
                 endIndex = Math.min(routePoints.size() - 2, segmentForProgressLocked(
                         previousProgress + maxForward + 55d) + 3);
             }
@@ -1208,7 +1196,7 @@ public class DriverNavigationActivity extends Activity {
 
                 if (!Double.isNaN(previousProgress)) {
                     double delta = progress - previousProgress;
-                    if (delta < -ROUTE_MATCH_BACKWARD_ALLOWANCE_M) {
+                    if (delta < -NavigationRoutePolicy.ROUTE_MATCH_BACKWARD_ALLOWANCE_M) {
                         score += 150d + Math.abs(delta) * 2.5d;
                     } else if (delta < 0d) {
                         score += Math.abs(delta) * 2.0d;
@@ -1234,7 +1222,7 @@ public class DriverNavigationActivity extends Activity {
                 }
             }
 
-            if (bestDistance > ROUTE_MATCH_MAX_DISTANCE_M) {
+            if (bestDistance > NavigationRoutePolicy.ROUTE_MATCH_MAX_DISTANCE_M) {
                 return new SnapPoint(lat, lng, currentBearing, false, routeProgressIndex, 0d,
                         Double.isNaN(previousProgress) ? routeProgressMeters(routeProgressIndex) : previousProgress);
             }

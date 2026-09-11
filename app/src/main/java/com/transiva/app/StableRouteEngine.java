@@ -60,7 +60,7 @@ public final class StableRouteEngine {
                 String endpoint = OSRM
                         + String.format(Locale.US, "%.7f,%.7f;%.7f,%.7f", fromLng, fromLat, toLng, toLat)
                         + "?overview=full&geometries=geojson&steps=true&alternatives=false";
-                connection = (HttpURLConnection) new URL(endpoint).openConnection();
+                connection = DriverHttpTransport.open(endpoint);
                 connection.setRequestMethod("GET");
                 connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
                 connection.setReadTimeout(READ_TIMEOUT_MS);

@@ -188,7 +188,7 @@ public class ChangePinActivity extends Activity {
     private ApiResult changePin(String oldPin, String newPin) {
         HttpURLConnection connection = null;
         try {
-            connection = (HttpURLConnection) new URL(CHANGE_PIN_URL).openConnection();
+            connection = DriverHttpTransport.open(CHANGE_PIN_URL);
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(TIMEOUT_MS);
             connection.setReadTimeout(TIMEOUT_MS);

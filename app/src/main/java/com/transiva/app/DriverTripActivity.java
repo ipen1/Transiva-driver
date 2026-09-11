@@ -884,10 +884,7 @@ public class DriverTripActivity extends Activity {
         b.setAlpha(enabled ? 1f : 0.48f);
     }
 
-    private boolean isDeliveryPhase(String st){
-        String n = normalizeStatus(st);
-        return n.equals("arrived_pickup") || n.equals("on_delivery") || n.equals("arrived_delivery") || n.equals("finished") || n.equals("completed");
-    }
+    private boolean isDeliveryPhase(String st){ return DriverOrderStateMachine.isDeliveryPhase(st); }
 
 
     private String pendingFinishOtp = "";
@@ -1006,15 +1003,7 @@ public class DriverTripActivity extends Activity {
             });
         }});
     }
-    private String endpoint(String n){
-        // pickup_orders memakai endpoint unified karena endpoint lama hanya membaca tabel orders.
-        if(isPickupOrder()) return "driver_update_unified_status.php";
-        if(n.equals("arrived_pickup"))return "driverArrivedPickup.php";
-        if(n.equals("on_delivery"))return "driverStartDelivery.php";
-        if(n.equals("arrived_delivery"))return "driverArrivedDelivery.php";
-        if(n.equals("finished")||n.equals("completed"))return "finishOrder.php";
-        return "driver_update_unified_status.php";
-    }
+    private String endpoint(String n){ return DriverOrderStateMachine.endpoint(n, isPickupOrder()); }
     private boolean isPickupOrder(){
         String source = first(order == null ? "" : order.optString("source"),
                 order == null ? "" : order.optString("source_table"), orderKind).toLowerCase(Locale.US);
@@ -1127,19 +1116,11 @@ public class DriverTripActivity extends Activity {
     private void saveActiveOrder(){ if(tripSnapshotStore!=null) tripSnapshotStore.save(order, orderKind, resolveDriverTypeFromOrder()); }
     private void clearActiveOrder(){ if(tripSnapshotStore!=null) tripSnapshotStore.clear(); }
     private String orderId(){ return first(order.optString("order_id"), order.optString("id"), "-"); } private String internalId(){ return first(order.optString("id"), order.optString("order_id"), ""); } private String status(){ return normalizeStatus(first(order.optString("status"), "taken")); }
-    private String normalizeStatus(String raw){
-        String s = first(raw, "taken").toLowerCase(Locale.US).trim().replace('-', '_').replace(' ', '_');
-        if(s.equals("accepted") || s.equals("driver_accepted") || s.equals("driver_assigned") || s.equals("assigned") || s.equals("merchant_accepted") || s.equals("processing") || s.equals("confirmed")) return "taken";
-        if(s.equals("arrived") || s.equals("at_pickup") || s.equals("pickup_arrived") || s.equals("arrive_pickup")) return "arrived_pickup";
-        if(s.equals("picked_up") || s.equals("pickedup") || s.equals("start_delivery") || s.equals("delivering") || s.equals("in_delivery") || s.equals("otw_delivery")) return "on_delivery";
-        if(s.equals("at_delivery") || s.equals("delivery_arrived") || s.equals("arrive_delivery")) return "arrived_delivery";
-        if(s.equals("finish") || s.equals("done") || s.equals("success")) return "finished";
-        return s;
-    }
+    private String normalizeStatus(String raw){ return DriverOrderStateMachine.normalize(raw); }
     private String pickupAddress(){ return first(order.optString("pickup_address"), order.optString("pickup"), order.optString("sender_address"), "-"); } private String deliveryAddress(){ return first(order.optString("delivery_address"), order.optString("destination_address"), order.optString("destination"), order.optString("receiver_address"), "-"); }
     private String cleanServiceLabel(){ String s=first(order.optString("service_name"), order.optString("order_type"), orderKind.equals("pickup") ? "TransPickup" : "Food Delivery"); return s.trim(); }
     private double coord(String a, String b){ try{return Double.parseDouble(first(order.optString(a), order.optString(b), "0"));}catch(Exception e){return 0;} } private double optDouble(String... keys){ for(String k: keys){ try{ if(order.has(k)) return Double.parseDouble(order.optString(k,"0")); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } } return 0; }
-    private String statusLabel(String s){ if(s.equals("taken"))return "Menuju Penjemputan"; if(s.equals("arrived_pickup"))return "Tiba di Penjemputan"; if(s.equals("on_delivery"))return "Menuju Delivery"; if(s.equals("arrived_delivery"))return "Tiba Delivery"; if(s.equals("merchant_accepted"))return "Diterima Merchant"; if(s.equals("finished")||s.equals("completed"))return "Selesai"; return first(s,"Menuju Penjemputan"); }
+    private String statusLabel(String s){ return DriverOrderStateMachine.label(s); }
     private float distanceTo(double lat, double lng){ if(!valid(lastDriverLat,lastDriverLng)||!valid(lat,lng))return -1; float[] r=new float[1]; Location.distanceBetween(lastDriverLat,lastDriverLng,lat,lng,r); return r[0]; }
     private boolean valid(double lat,double lng){ return lat!=0 && lng!=0 && !Double.isNaN(lat) && !Double.isNaN(lng); } private String meter(float m){ return m>=1000 ? one(m/1000.0)+" km" : Math.round(m)+" meter"; }
     private String rupiah(double v){ return "Rp " + NumberFormat.getNumberInstance(new Locale("id","ID")).format((long)v); } private String one(double v){ return String.format(Locale.US,"%.1f",v); } private String zero(double v){ return String.format(Locale.US,"%.0f",v); } private String pref(String key){ try{return getSharedPreferences(PREF_NAME,MODE_PRIVATE).getString(key,"");}catch(Exception e){return "";} }

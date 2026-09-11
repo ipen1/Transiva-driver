@@ -541,7 +541,7 @@ public class BackgroundSyncService extends Service {
                     new URL(BASE_URL + cleanEndpoint(endpoint));
 
             conn =
-                    (HttpURLConnection) url.openConnection();
+                    DriverHttpTransport.open(url);
 
             conn.setRequestMethod("POST");
             conn.setConnectTimeout(CONNECT_TIMEOUT);

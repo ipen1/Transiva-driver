@@ -1061,8 +1061,7 @@ public class DriverChatRoomActivity extends Activity {
             InputStream inputStream = null;
 
             try {
-                connection = (HttpURLConnection)
-                        new URL(url).openConnection();
+                connection = DriverHttpTransport.open(url);
                 connection.setConnectTimeout(20000);
                 connection.setReadTimeout(20000);
                 connection.setUseCaches(true);

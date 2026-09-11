@@ -32,7 +32,7 @@ public final class SessionValidationClient {
         boolean accepted = DriverNetworkExecutor.execute(() -> {
             HttpURLConnection conn = null;
             try {
-                conn = (HttpURLConnection) new URL(URL_VALIDATE).openConnection();
+                conn = DriverHttpTransport.open(URL_VALIDATE);
                 conn.setRequestMethod("GET");
                 conn.setConnectTimeout(10000);
                 conn.setReadTimeout(12000);

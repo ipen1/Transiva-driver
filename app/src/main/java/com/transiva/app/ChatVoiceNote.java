@@ -279,7 +279,7 @@ public final class ChatVoiceNote {
             URL current = new URL(sourceUrl);
             int redirects = 0;
             while (true) {
-                connection = (HttpURLConnection) current.openConnection();
+                connection = DriverHttpTransport.open(current);
                 connection.setConnectTimeout(15000);
                 connection.setReadTimeout(30000);
                 connection.setInstanceFollowRedirects(false);

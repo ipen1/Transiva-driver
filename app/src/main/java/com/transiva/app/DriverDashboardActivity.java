@@ -60,10 +60,6 @@ public class DriverDashboardActivity extends Activity
 
     private static final int REQ_LOCATION = 8702;
     private static final int REQ_BACKGROUND_LOCATION = 8703;
-    private static final long IDLE_REFRESH_MS = 60000L;
-    private static final long ACTIVE_REFRESH_MS = 15000L;
-    private static final long OFFER_REFRESH_MS = 8000L;
-    private static final long COUNTDOWN_TICK_MS = 1000L;
     private static final long SERVER_DRIFT_TOLERANCE_MS = 2500L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -119,38 +115,15 @@ public class DriverDashboardActivity extends Activity
     private boolean suppressSwitch;
 
     private DashboardOfferCountdownController offerCountdownController;
+    private DashboardRefreshController refreshController;
     private DashboardCancellationController cancellationController;
 
     private boolean realtimeReceiverRegistered = false;
     private final BroadcastReceiver realtimeReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
             if (presenter == null) return;
-            handler.removeCallbacks(refreshRunnable);
             presenter.load(false);
-            handler.postDelayed(refreshRunnable, WaveLoadGuard.jitter(adaptiveRefreshMs()));
-        }
-    };
-
-    private final Runnable refreshRunnable = new Runnable() {
-        @Override public void run() {
-            if (presenter != null) presenter.load(false);
-            handler.postDelayed(this, WaveLoadGuard.jitter(adaptiveRefreshMs()));
-        }
-    };
-
-    private long adaptiveRefreshMs() {
-        DriverDashboardState state = currentState;
-        if (state != null) {
-            if (state.offers != null && !state.offers.isEmpty()) return DriverPollingCoordinator.interval(this, OFFER_REFRESH_MS);
-            if (state.activeOrders != null && !state.activeOrders.isEmpty()) return DriverPollingCoordinator.interval(this, ACTIVE_REFRESH_MS);
-        }
-        return DriverPollingCoordinator.interval(this, IDLE_REFRESH_MS);
-    }
-
-    private final Runnable countdownRunnable = new Runnable() {
-        @Override public void run() {
-            if (offerCountdownController != null) offerCountdownController.tick();
-            handler.postDelayed(this, COUNTDOWN_TICK_MS);
+            if (refreshController != null) refreshController.scheduleSoon(350L);
         }
     };
 
@@ -175,6 +148,15 @@ public class DriverDashboardActivity extends Activity
                 if (presenter != null) presenter.cancelOrder(order.id, clean(order.source), clean(order.status), reason);
             }
             @Override public void onMessage(String message) { showMessage(message); }
+        });
+
+        refreshController = new DashboardRefreshController(new DashboardRefreshController.Host() {
+            @Override public Context context() { return DriverDashboardActivity.this; }
+            @Override public DriverDashboardState state() { return currentState; }
+            @Override public void refreshDashboard() { if (presenter != null) presenter.load(false); }
+            @Override public void tickOfferCountdown() {
+                if (offerCountdownController != null) offerCountdownController.tick();
+            }
         });
 
         presenter = new DriverDashboardPresenter(
@@ -260,10 +242,7 @@ public class DriverDashboardActivity extends Activity
         }
         DriverAppSettings.apply(this);
         if (!validSession()) return;
-        handler.removeCallbacks(refreshRunnable);
-        handler.removeCallbacks(countdownRunnable);
-        handler.postDelayed(refreshRunnable, WaveLoadGuard.jitter(adaptiveRefreshMs()));
-        handler.post(countdownRunnable);
+        if (refreshController != null) refreshController.start();
         if (presenter != null) presenter.load(false);
 
         // Kembali dari halaman pengaturan GPS tanpa perlu menutup/membuka ulang APK.
@@ -284,12 +263,12 @@ public class DriverDashboardActivity extends Activity
     }
 
     @Override protected void onPause() {
-        handler.removeCallbacks(refreshRunnable);
-        handler.removeCallbacks(countdownRunnable);
+        if (refreshController != null) refreshController.stop();
         super.onPause();
     }
 
     @Override protected void onDestroy() {
+        if (refreshController != null) refreshController.destroy();
         handler.removeCallbacksAndMessages(null);
         if (presenter != null) presenter.destroy();
         super.onDestroy();

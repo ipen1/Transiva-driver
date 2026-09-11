@@ -309,8 +309,7 @@ public class DriverChatActivity extends Activity {
         HttpURLConnection connection = null;
 
         try {
-            connection = (HttpURLConnection)
-                    new URL(endpoint).openConnection();
+            connection = DriverHttpTransport.open(endpoint);
             connection.setRequestMethod("GET");
             connection.setConnectTimeout(20000);
             connection.setReadTimeout(20000);

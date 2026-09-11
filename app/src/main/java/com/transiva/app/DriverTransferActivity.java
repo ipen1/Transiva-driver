@@ -162,7 +162,7 @@ public class DriverTransferActivity extends FragmentActivity {
 
     private JSONObject baseRequest() throws Exception { JSONObject o=new JSONObject(); o.put("user_id",parse(session.getUserId())); o.put("username",session.getUsername()); return o; }
     private JSONObject post(String path,JSONObject body)throws Exception{
-        HttpURLConnection c=(HttpURLConnection)new URL(BASE+path).openConnection();
+        HttpURLConnection c=DriverHttpTransport.open(BASE+path);
         c.setConnectTimeout(15000);c.setReadTimeout(20000);c.setRequestMethod("POST");c.setDoOutput(true);
         c.setRequestProperty("Content-Type","application/json; charset=UTF-8");
         c.setRequestProperty("Accept","application/json");

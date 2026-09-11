@@ -399,8 +399,7 @@ public class LoginActivity extends Activity {
         HttpURLConnection connection = null;
 
         try {
-            connection = (HttpURLConnection)
-                    new URL(LOGIN_URL).openConnection();
+            connection = DriverHttpTransport.open(LOGIN_URL);
 
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(TIMEOUT_MS);
@@ -630,8 +629,7 @@ public class LoginActivity extends Activity {
             HttpURLConnection connection = null;
 
             try {
-                connection = (HttpURLConnection)
-                        new URL(SAVE_FCM_URL).openConnection();
+                connection = DriverHttpTransport.open(SAVE_FCM_URL);
 
                 String authToken = new SessionManager(this).getToken();
                 if (authToken != null && !authToken.trim().isEmpty()) {
