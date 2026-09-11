@@ -70,6 +70,12 @@ jobs:
           chmod +x tools/playstore_release_gate.py
           python3 tools/playstore_release_gate.py
 
+      - name: Verify Stability 4.0 architecture gate
+        run: |
+          chmod +x tools/stability4_gate.py
+          python3 tools/stability4_gate.py
+          python3 tools/prelaunch_invariant_check.py
+
       - name: Decode release keystore
         shell: bash
         run: |
