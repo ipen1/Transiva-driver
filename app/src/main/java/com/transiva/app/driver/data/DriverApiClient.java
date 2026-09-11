@@ -147,9 +147,15 @@ public final class DriverApiClient {
                         ? "Terlalu banyak permintaan." : "Permintaan gagal.");
                 int retryAfter = body.optInt("retry_after", 0);
                 if (retryAfter > 0) message = message + " retry_after=" + retryAfter;
-                throw new ApiException(status,
-                        body.optString("code", status == 401 ? "UNAUTHORIZED" : "API_ERROR"),
-                        message, null);
+                String code = body.optString("code", status == 401 ? "UNAUTHORIZED" : "API_ERROR");
+
+                // Single-active-session hardening: once the server has conclusively
+                // replaced/expired this device session, stop all driver services and
+                // clear secure auth state immediately. Never retry an invalid session.
+                if (status == 401 && isTerminalSessionCode(code)) {
+                    session.forceLogout(code);
+                }
+                throw new ApiException(status, code, message, null);
             }
             return new Result(status, body);
         } catch (ApiException e) {
@@ -174,6 +180,15 @@ public final class DriverApiClient {
         } finally {
             if (connection != null) connection.disconnect();
         }
+    }
+
+    private static boolean isTerminalSessionCode(String code) {
+        String c = clean(code).toUpperCase(java.util.Locale.US);
+        return "SESSION_REPLACED".equals(c)
+                || "SESSION_EXPIRED".equals(c)
+                || "TOKEN_REVOKED".equals(c)
+                || "DEVICE_REVOKED".equals(c)
+                || "AUTH_REVOKED".equals(c);
     }
 
     public void shutdown() { /* shared executor is app-wide; do not shut it down here */ }
