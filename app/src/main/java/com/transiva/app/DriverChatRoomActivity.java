@@ -143,6 +143,7 @@ public class DriverChatRoomActivity extends Activity {
         readIntent();
         DriverMessageUnreadRepository.markRead(this, orderId, roomId);
         setContentView(buildScreen());
+        DriverResponsiveUi.apply(this);
         DriverAppSettings.apply(this);
         DriverChatNotificationPoller.requestPermission(this);
         DriverChatNotificationPoller.start(this);
@@ -455,20 +456,20 @@ public class DriverChatRoomActivity extends Activity {
         setSendingEnabled(false);
         progress.setVisibility(View.VISIBLE);
 
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             try {
                 ChatImageProcessor.ImagePayload payload =
                         ChatImageProcessor.fromUri(
                                 getContentResolver(), uri);
 
-                main.post(() -> {
+                postUi(() -> {
                     uploading = false;
                     progress.setVisibility(View.GONE);
                     uploadPhoto(payload);
                 });
 
             } catch (Exception error) {
-                main.post(() -> {
+                postUi(() -> {
                     uploading = false;
                     progress.setVisibility(View.GONE);
                     setSendingEnabled(true);
@@ -476,7 +477,7 @@ public class DriverChatRoomActivity extends Activity {
                             "Foto tidak dapat dibaca."));
                 });
             }
-        }).start();
+        });
     }
 
     private void processCameraFile(String path) {
@@ -486,14 +487,14 @@ public class DriverChatRoomActivity extends Activity {
         setSendingEnabled(false);
         progress.setVisibility(View.VISIBLE);
 
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             File file = new File(path);
 
             try {
                 ChatImageProcessor.ImagePayload payload =
                         ChatImageProcessor.fromFile(file);
 
-                main.post(() -> {
+                postUi(() -> {
                     uploading = false;
                     progress.setVisibility(View.GONE);
                     uploadPhoto(payload);
@@ -501,14 +502,14 @@ public class DriverChatRoomActivity extends Activity {
                 });
 
             } catch (Exception error) {
-                main.post(() -> {
+                postUi(() -> {
                     uploading = false;
                     progress.setVisibility(View.GONE);
                     setSendingEnabled(true);
                     toast("Foto kamera tidak dapat dibaca.");
                 });
             }
-        }).start();
+        });
     }
 
     private void uploadPhoto(
@@ -523,7 +524,7 @@ public class DriverChatRoomActivity extends Activity {
                 addPendingPhotoBubble(payload);
         scrollBottom();
 
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             try {
                 JSONObject response =
                         DriverChatMediaApi.uploadImagePair(
@@ -532,7 +533,7 @@ public class DriverChatRoomActivity extends Activity {
                                 "driver",
                                 payload);
 
-                main.post(() -> {
+                postUi(() -> {
                     uploading = false;
                     setSendingEnabled(true);
 
@@ -554,7 +555,7 @@ public class DriverChatRoomActivity extends Activity {
                 });
 
             } catch (Exception error) {
-                main.post(() -> {
+                postUi(() -> {
                     uploading = false;
                     setSendingEnabled(true);
                     pendingBubble.markFailed(first(
@@ -562,7 +563,7 @@ public class DriverChatRoomActivity extends Activity {
                             "Foto gagal dikirim"));
                 });
             }
-        }).start();
+        });
     }
 
     private PendingPhotoBubble addPendingPhotoBubble(
@@ -658,17 +659,17 @@ public class DriverChatRoomActivity extends Activity {
     private void uploadVoiceNote(File file, long durationMs) {
         if (readOnly || uploading || file == null) return;
         uploading = true; voiceButton.setEnabled(false);
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             try {
                 JSONObject upload = DriverMessageApi.uploadVoice(session, UPLOAD_VOICE_URL, orderId, orderSource, roomId, file, durationMs);
                 if (!upload.optBoolean("success", false)) throw new IllegalStateException(upload.optString("message", "Upload voice note gagal"));
                 String audioUrl = upload.optString("url", upload.optString("audio_url", ""));
                 JSONObject body = new JSONObject(); body.put("order_id", orderId); body.put("order_db_id", orderDbId); body.put("source", orderSource); body.put("room_id", roomId); body.put("sender_type", "driver"); body.put("message", ChatVoiceNote.encode(audioUrl, durationMs));
                 JSONObject sent = DriverMessageApi.post(session, SEND_CHAT_URL, body);
-                main.post(() -> { uploading=false; voiceButton.setEnabled(!readOnly); voiceButton.setText("🎙"); if (sent.optBoolean("success", false)) loadMessages(false); else toast(sent.optString("message", "Voice note gagal dikirim")); });
-            } catch (Exception e) { main.post(() -> { uploading=false; voiceButton.setEnabled(!readOnly); voiceButton.setText("🎙"); statusText.setText("Voice note pending • jaringan"); toast(first(e.getMessage(), "Voice note gagal dikirim")); }); }
+                postUi(() -> { uploading=false; voiceButton.setEnabled(!readOnly); voiceButton.setText("🎙"); if (sent.optBoolean("success", false)) loadMessages(false); else toast(sent.optString("message", "Voice note gagal dikirim")); });
+            } catch (Exception e) { postUi(() -> { uploading=false; voiceButton.setEnabled(!readOnly); voiceButton.setText("🎙"); statusText.setText("Voice note pending • jaringan"); toast(first(e.getMessage(), "Voice note gagal dikirim")); }); }
             finally { file.delete(); }
-        }).start();
+        });
     }
 
     private String absoluteVoiceContent(String content) {
@@ -694,7 +695,7 @@ public class DriverChatRoomActivity extends Activity {
         if (showLoading) progress.setVisibility(View.VISIBLE);
         int requestedLastId = 0;
 
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             try {
                 String endpoint = GET_CHAT_URL
                         + "?order_id="
@@ -723,20 +724,20 @@ public class DriverChatRoomActivity extends Activity {
                 JSONObject response =
                         DriverMessageApi.get(session, endpoint);
 
-                main.post(() -> {
+                postUi(() -> {
                     loading = false;
                     progress.setVisibility(View.GONE);
                     handleResponse(response, firstLoad);
                 });
 
             } catch (Exception error) {
-                main.post(() -> {
+                postUi(() -> {
                     loading = false;
                     progress.setVisibility(View.GONE);
                     statusText.setText("Koneksi chat bermasalah");
                 });
             }
-        }).start();
+        });
     }
 
     private void handleResponse(
@@ -867,7 +868,7 @@ public class DriverChatRoomActivity extends Activity {
                 SystemClock.elapsedRealtime() - focusedSinceElapsedMs
         );
 
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             try {
                 if (generation != readVisibilityGeneration || !isChatActuallyVisible()) return;
 
@@ -901,7 +902,7 @@ public class DriverChatRoomActivity extends Activity {
                         1200L
                 );
             }
-        }, "chat-read-ack").start();
+        });
     }
 
     @Override
@@ -1055,7 +1056,7 @@ public class DriverChatRoomActivity extends Activity {
         String url = absoluteUrl(rawUrl);
         if (url.isEmpty()) return;
 
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             HttpURLConnection connection = null;
             InputStream inputStream = null;
 
@@ -1069,7 +1070,7 @@ public class DriverChatRoomActivity extends Activity {
                 Bitmap bitmap = BitmapFactory.decodeStream(inputStream);
 
                 if (bitmap != null) {
-                    main.post(() -> {
+                    postUi(() -> {
                         view.setAlpha(0f);
                         view.setImageBitmap(bitmap);
                         view.animate().alpha(1f).setDuration(180).start();
@@ -1082,7 +1083,7 @@ public class DriverChatRoomActivity extends Activity {
                 } catch (Exception ignored) {}
                 if (connection != null) connection.disconnect();
             }
-        }).start();
+        });
     }
 
     private void showHdImage(String rawUrl) {
@@ -1150,12 +1151,12 @@ public class DriverChatRoomActivity extends Activity {
             return;
         }
 
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             try {
                 JSONObject response =
                         DriverMessageApi.post(session, SEND_CHAT_URL, body);
 
-                main.post(() -> {
+                postUi(() -> {
                     sending = false;
                     setSendingEnabled(true);
 
@@ -1181,7 +1182,7 @@ public class DriverChatRoomActivity extends Activity {
                 });
 
             } catch (Exception error) {
-                main.post(() -> {
+                postUi(() -> {
                     sending = false;
                     setSendingEnabled(true);
                     if (pending != null) pending.markNetworkPending();
@@ -1189,7 +1190,7 @@ public class DriverChatRoomActivity extends Activity {
                             "Pesan gagal dikirim"));
                 });
             }
-        }).start();
+        });
     }
 
     private void applyReadOnlyState() {
@@ -1400,6 +1401,14 @@ public class DriverChatRoomActivity extends Activity {
         main.removeCallbacks(readReceiptRunnable);
         DriverChatNotificationPoller.clearOpenRoom(roomId);
         super.onPause();
+    }
+
+    /** Post hasil async hanya selama Activity masih hidup. */
+    private void postUi(Runnable action) {
+        if (action == null || destroyed || isFinishing()) return;
+        main.post(() -> {
+            if (!destroyed && !isFinishing()) action.run();
+        });
     }
 
     @Override

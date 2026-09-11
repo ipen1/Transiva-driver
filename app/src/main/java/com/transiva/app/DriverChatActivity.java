@@ -251,7 +251,7 @@ public class DriverChatActivity extends Activity {
         progress.setVisibility(View.VISIBLE);
         render();
 
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             try {
                 // Endpoint ini melakukan autentikasi driver dari Bearer token.
                 // Jangan memakai endpoint customer dengan driver_id karena endpoint
@@ -302,7 +302,7 @@ public class DriverChatActivity extends Activity {
                             "Gagal memuat daftar pesan"));
                 });
             }
-        }).start();
+        });
     }
 
     private JSONObject getAuthorized(String endpoint) throws Exception {

@@ -121,7 +121,7 @@ public class DriverReceiptHistoryActivity extends Activity {
         progressBar.setVisibility(View.VISIBLE);
         listBox.removeAllViews();
         listBox.addView(emptyBox("🧾", "Memuat riwayat transaksi...", ""));
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             String body = "";
             try { body = get(API_URL + "?v=" + System.currentTimeMillis()); } catch (Exception ignored) {}
             String finalBody = body;
@@ -129,7 +129,7 @@ public class DriverReceiptHistoryActivity extends Activity {
                 progressBar.setVisibility(View.GONE);
                 renderList(finalBody);
             });
-        }).start();
+        });
     }
 
     private void renderList(String body) {

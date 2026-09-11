@@ -47,14 +47,14 @@ public class DriverTransferActivity extends FragmentActivity {
     private void quote(){
         String to=recipient.getText().toString().trim(); long val=parse(amount.getText().toString());
         if(to.isEmpty()){info("Penerima belum diisi");return;} if(val<10000){info("Minimal transfer Rp10.000");return;}
-        loading(true); new Thread(()->{ try{
+        loading(true); DriverNetworkExecutor.execute(()->{ try{
             String requestId="DRV-"+System.currentTimeMillis()+"-"+UUID.randomUUID().toString().substring(0,8);
             JSONObject req=baseRequest(); req.put("recipient",to); req.put("amount",val); req.put("request_id",requestId);
             JSONObject q=post("driver_wallet_quote.php",req);
             if(!q.optBoolean("success")) throw new Exception(q.optString("message","Gagal memeriksa transfer"));
             JSONObject d=q.optJSONObject("data"); if(d==null)d=q;
             JSONObject finalD=d; main.post(()->confirm(finalD,to,val,requestId));
-        }catch(Exception e){main.post(()->{loading(false);info(e.getMessage());});}}).start();
+        }catch(Exception e){main.post(()->{loading(false);info(e.getMessage());});}});
     }
 
     private void confirm(JSONObject d,String to,long val,String requestId){
@@ -138,7 +138,7 @@ public class DriverTransferActivity extends FragmentActivity {
 
     private void verifyPinAndExecute(String pin,JSONObject q,String to,long val,String requestId){
         loading(true);
-        new Thread(()->{
+        DriverNetworkExecutor.execute(()->{
             try{
                 JSONObject req=new JSONObject();
                 req.put("pin",pin);
@@ -148,16 +148,16 @@ public class DriverTransferActivity extends FragmentActivity {
             }catch(Exception e){
                 main.post(()->{ loading(false); info(e.getMessage()); });
             }
-        },"transiva-transfer-pin").start();
+        });
     }
 
     private void execute(JSONObject q,String to,long val,String requestId){
-        loading(true); new Thread(()->{try{
+        loading(true); DriverNetworkExecutor.execute(()->{try{
             JSONObject req=baseRequest(); req.put("recipient",to); req.put("amount",val); req.put("note",note.getText().toString().trim()); req.put("request_id",requestId); req.put("quote_token",q.optString("quote_token"));
             JSONObject r=post("driver_wallet_transfer.php",req); if(!r.optBoolean("success"))throw new Exception(r.optString("message","Transfer gagal"));
             JSONObject d=r.optJSONObject("data"); if(d==null)d=r; long bal=d.optLong("balance_after",d.optLong("sender_balance",0)); session.put("balance",String.valueOf(bal));
             main.post(()->{loading(false);balanceInfo.setText("Saldo: "+money(bal)); PremiumDialogs.builder(this).setTitle("Transfer Berhasil").setMessage(r.optString("message","Dana berhasil dikirim")).setPositiveButton("Selesai",(a,b)->finish()).show();});
-        }catch(Exception e){main.post(()->{loading(false);info(e.getMessage());});}}).start();
+        }catch(Exception e){main.post(()->{loading(false);info(e.getMessage());});}});
     }
 
     private JSONObject baseRequest() throws Exception { JSONObject o=new JSONObject(); o.put("user_id",parse(session.getUserId())); o.put("username",session.getUsername()); return o; }

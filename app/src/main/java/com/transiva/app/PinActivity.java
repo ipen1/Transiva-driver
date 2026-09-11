@@ -331,7 +331,7 @@ public class PinActivity extends FragmentActivity {
     private void checkPinStatus() {
         setLoading(true);
 
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             ApiResult result = request(STATUS_URL, null);
             mainHandler.post(() -> {
                 if (pinContentRoot != null) {
@@ -374,7 +374,7 @@ public class PinActivity extends FragmentActivity {
                     mainHandler.postDelayed(this::showBiometricPrompt, 250);
                 }
             });
-        }, "transiva-pin-status").start();
+        });
     }
 
     private void updateBiometricAvailability() {
@@ -423,7 +423,7 @@ public class PinActivity extends FragmentActivity {
         } catch (Exception ignored) {}
 
         setLoading(true);
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             ApiResult result = request(SET_URL, body);
             mainHandler.post(() -> {
                 if (pinContentRoot != null) {
@@ -451,7 +451,7 @@ public class PinActivity extends FragmentActivity {
                 showMessage("PIN berhasil dibuat. Membuka akun...", true);
                 mainHandler.postDelayed(this::openRolePage, 450);
             });
-        }, "transiva-pin-set").start();
+        });
     }
 
     private void verifyPin(String pin) {
@@ -461,7 +461,7 @@ public class PinActivity extends FragmentActivity {
         } catch (Exception ignored) {}
 
         setLoading(true);
-        new Thread(() -> {
+        DriverNetworkExecutor.execute(() -> {
             ApiResult result = request(VERIFY_URL, body);
             mainHandler.post(() -> {
                 if (pinContentRoot != null) {
@@ -489,7 +489,7 @@ public class PinActivity extends FragmentActivity {
                 showMessage("PIN benar. Membuka akun...", true);
                 mainHandler.postDelayed(this::openRolePage, 350);
             });
-        }, "transiva-pin-verify").start();
+        });
     }
 
     private ApiResult request(String endpoint, JSONObject payload) {
