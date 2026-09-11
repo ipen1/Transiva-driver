@@ -5,6 +5,7 @@ import android.util.Log;
 
 import com.transiva.app.DeviceIdentityManager;
 import com.transiva.app.DriverNetworkExecutor;
+import com.transiva.app.DriverHttpTransport;
 import com.transiva.app.DriverCircuitBreaker;
 import com.transiva.app.DriverRetryPolicy;
 import com.transiva.app.DriverTlsPinning;
@@ -106,7 +107,7 @@ public final class DriverApiClient {
     private Result requestOnce(String method, String endpoint, JSONObject payload) throws ApiException {
         HttpURLConnection connection = null;
         try {
-            connection = (HttpURLConnection) new URL(BASE_URL + endpoint).openConnection();
+            connection = DriverHttpTransport.open(BASE_URL + endpoint);
             connection.setRequestMethod(method);
             connection.setConnectTimeout(15000);
             connection.setReadTimeout(20000);
