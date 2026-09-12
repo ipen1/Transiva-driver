@@ -289,7 +289,6 @@ abstract class LoginActivityLayer1 extends Activity {
         return "";
     }
     // Cross-layer contracts keep the split type-safe without duplicating state.
-    protected abstract void onCreate(Bundle savedInstanceState);
     protected abstract View buildScreen();
     protected abstract void attemptLogin();
     protected abstract LoginResult doLogin( String username, String password );

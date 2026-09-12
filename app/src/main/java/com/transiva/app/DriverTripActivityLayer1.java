@@ -131,7 +131,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
         private boolean fired = false;
 
         SlideActionView(String label, Runnable action) {
-            super(DriverTripActivity.this);
+            super(DriverTripActivityLayer1.this);
             this.action = action;
             this.idleLabel = label;
             setOrientation(HORIZONTAL);
@@ -144,7 +144,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
             labelView.setGravity(Gravity.CENTER_VERTICAL);
             addView(labelView, new LinearLayout.LayoutParams(0, -1, 1));
 
-            slider = new SeekBar(DriverTripActivity.this);
+            slider = new SeekBar(DriverTripActivityLayer1.this);
             slider.setMax(100);
             slider.setProgress(0);
             slider.setProgressDrawable(premiumSliderTrack());
@@ -495,11 +495,6 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected GradientDrawable round(String color,int radius){ GradientDrawable g=new GradientDrawable(); g.setColor(Color.parseColor(color)); g.setCornerRadius(radius); return g; } protected GradientDrawable stroke(String color,String st,int radius,int sw){ GradientDrawable g=round(color,radius); g.setStroke(dp(sw), Color.parseColor(st)); return g; } protected GradientDrawable gradient(String c1,String c2,int radius){ GradientDrawable g=new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{Color.parseColor(c1), Color.parseColor(c2)}); g.setCornerRadius(radius); return g; }
     protected void setLoading(boolean b){ if(progressBar!=null) progressBar.setVisibility(b?View.VISIBLE:View.GONE); } protected void info(String t,String m){ try{ PremiumDialogs.builder(this).setTitle(t).setMessage(m).setPositiveButton("OK", null).show(); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } }
     // Cross-layer contracts keep the split type-safe without duplicating state.
-    protected abstract void onCreate(Bundle b);
-    protected abstract void onResume();
-    protected abstract void onPause();
-    protected abstract void onDestroy();
-    protected abstract void onLowMemory();
     protected abstract void loadSession();
     protected abstract String normalizeDriverType(String value);
     protected abstract String resolveDriverTypeFromOrder();

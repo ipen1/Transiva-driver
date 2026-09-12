@@ -318,9 +318,6 @@ abstract class TransivaFirebaseServiceLayer1 extends FirebaseMessagingService {
         return "";
     }
     // Cross-layer contracts keep the split type-safe without duplicating state.
-    protected abstract void onCreate();
-    protected abstract void onNewToken(String token);
-    protected abstract void onMessageReceived( RemoteMessage remoteMessage );
     protected abstract void publishBubbleEvent(String type, String title, String body, String orderId, String roomId, Map<String, String> data);
     protected abstract void sendCallState(String callId, String status);
     protected abstract void cancelCallNotification(String callId);

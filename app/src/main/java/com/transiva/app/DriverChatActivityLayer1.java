@@ -339,8 +339,6 @@ abstract class DriverChatActivityLayer1 extends Activity {
         Toast.makeText(this, value, Toast.LENGTH_LONG).show();
     }
     // Cross-layer contracts keep the split type-safe without duplicating state.
-    protected abstract void onCreate(Bundle savedInstanceState);
-    protected abstract void onResume();
     protected abstract boolean validDriverSession();
     protected abstract View buildScreen();
     protected abstract void rebuildTabs();

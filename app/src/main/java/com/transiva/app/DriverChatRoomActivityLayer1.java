@@ -126,7 +126,7 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
         public void run() {
             if (!destroyed && !readOnly && chatVisible && hasWindowFocus()) {
                 loadMessages(false);
-                main.postDelayed(this, WaveLoadGuard.jitter(DriverPollingCoordinator.interval(DriverChatRoomActivity.this, REFRESH_MS)));
+                main.postDelayed(this, WaveLoadGuard.jitter(DriverPollingCoordinator.interval(DriverChatRoomActivityLayer1.this, REFRESH_MS)));
             }
         }
     };
@@ -524,7 +524,7 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
             if (lastId > 0) {
                 scheduleMessagesReadThrough(lastId);
             }
-            main.postDelayed(refreshRunnable, WaveLoadGuard.jitter(DriverPollingCoordinator.interval(DriverChatRoomActivity.this, REFRESH_MS)));
+            main.postDelayed(refreshRunnable, WaveLoadGuard.jitter(DriverPollingCoordinator.interval(DriverChatRoomActivityLayer1.this, REFRESH_MS)));
         }
     }
 
@@ -556,7 +556,6 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
         super.onDestroy();
     }
     // Cross-layer contracts keep the split type-safe without duplicating state.
-    protected abstract void onCreate(Bundle savedInstanceState);
     protected abstract void readIntent();
     protected abstract void callCustomer();
     protected abstract View buildScreen();
@@ -564,8 +563,6 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
     protected abstract void openCamera();
     protected abstract void launchCamera();
     protected abstract void openGallery();
-    protected abstract void onRequestPermissionsResult( int requestCode, String[] permissions, int[] grantResults );
-    protected abstract void onActivityResult( int requestCode, int resultCode, Intent data );
     protected abstract void processSelectedPhoto(Uri uri);
     protected abstract void processCameraFile(String path);
     protected abstract void uploadPhoto( ChatImageProcessor.ImagePayload payload );
@@ -579,7 +576,6 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
     protected abstract boolean isChatActuallyVisible();
     protected abstract void scheduleMessagesReadThrough(int readThroughId);
     protected abstract void sendReadReceiptNow(int readThroughId);
-    protected abstract void onWindowFocusChanged(boolean hasFocus);
     protected abstract void addBubble(JSONObject message, boolean animate);
     protected abstract void updateReceipt(JSONObject message);
 

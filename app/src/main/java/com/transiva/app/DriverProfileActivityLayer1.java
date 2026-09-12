@@ -242,8 +242,8 @@ abstract class DriverProfileActivityLayer1 extends Activity {
         loggingOut = true;
         DriverDeviceDisconnectClient.disconnect(this, new DriverDeviceDisconnectClient.Callback() {
             @Override public void onSuccess() {
-                DriverServiceController.stop(DriverProfileActivity.this);
-                try { new SessionManager(DriverProfileActivity.this).forceLogout("driver_profile_logout_device_reset"); }
+                DriverServiceController.stop(DriverProfileActivityLayer1.this);
+                try { new SessionManager(DriverProfileActivityLayer1.this).forceLogout("driver_profile_logout_device_reset"); }
                 catch (Exception ignored) {}
                 loggingOut = false;
                 redirectLogin();
@@ -252,7 +252,7 @@ abstract class DriverProfileActivityLayer1 extends Activity {
             @Override public void onError(String message) {
                 loggingOut = false;
                 if (isFinishing()) return;
-                PremiumDialogs.builder(DriverProfileActivity.this)
+                PremiumDialogs.builder(DriverProfileActivityLayer1.this)
                         .setTitle("Gagal keluar akun")
                         .setMessage(message + "\n\nAkun belum dilepas dari perangkat. Coba lagi saat koneksi stabil agar akun tetap dapat dipindahkan dengan aman.")
                         .setPositiveButton("OK", null)
@@ -425,9 +425,6 @@ abstract class DriverProfileActivityLayer1 extends Activity {
                 .show();
     }
     // Cross-layer contracts keep the split type-safe without duplicating state.
-    protected abstract void onCreate(Bundle savedInstanceState);
-    protected abstract void onResume();
-    protected abstract void onDestroy();
     protected abstract boolean validDriverSession();
     protected abstract void redirectLogin();
     protected abstract View buildScreen();

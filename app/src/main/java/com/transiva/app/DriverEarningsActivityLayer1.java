@@ -42,7 +42,7 @@ abstract class DriverEarningsActivityLayer1 extends Activity {
         public void run() {
             if (!screenVisible) return;
             loadRealtimeWallet();
-            realtimeHandler.postDelayed(this, WaveLoadGuard.jitter(DriverPollingCoordinator.interval(DriverEarningsActivity.this, REFRESH_INTERVAL_MS)));
+            realtimeHandler.postDelayed(this, WaveLoadGuard.jitter(DriverPollingCoordinator.interval(DriverEarningsActivityLayer1.this, REFRESH_INTERVAL_MS)));
         }
     };
 
@@ -367,10 +367,6 @@ abstract class DriverEarningsActivityLayer1 extends Activity {
         );
     }
     // Cross-layer contracts keep the split type-safe without duplicating state.
-    protected abstract void onCreate(Bundle savedInstanceState);
-    protected abstract void onResume();
-    protected abstract void onPause();
-    protected abstract void onDestroy();
     protected abstract void renderCachedBalance();
     protected abstract void loadRealtimeWallet();
     protected abstract boolean validDriverSession();

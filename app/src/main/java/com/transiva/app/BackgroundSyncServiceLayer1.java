@@ -485,8 +485,6 @@ abstract class BackgroundSyncServiceLayer1 extends Service {
         return null;
     }
     // Cross-layer contracts keep the split type-safe without duplicating state.
-    protected abstract void onCreate();
-    protected abstract int onStartCommand( Intent intent, int flags, int startId );
     protected abstract void ensureForeground();
     protected abstract void startLoop();
     protected abstract void runSyncOnce();

@@ -189,7 +189,7 @@ abstract class PinActivityLayer1 extends FragmentActivity {
             if (ForceLogoutManager.isForceLogoutCode(code)) {
                 mainHandler.post(() ->
                         ForceLogoutManager.execute(
-                                PinActivity.this,
+                                PinActivityLayer1.this,
                                 code.isEmpty() ? "SESSION_REVOKED" : code
                         )
                 );
@@ -395,8 +395,6 @@ abstract class PinActivityLayer1 extends FragmentActivity {
         return value == null ? "" : value;
     }
     // Cross-layer contracts keep the split type-safe without duplicating state.
-    protected abstract void onCreate(Bundle savedInstanceState);
-    protected abstract void onBackPressed();
     protected abstract View buildScreen();
     protected abstract LinearLayout buildKeypad();
     protected abstract void addKeyRow(LinearLayout parent, String a, String b, String c);
