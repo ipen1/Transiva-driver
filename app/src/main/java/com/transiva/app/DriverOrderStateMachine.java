@@ -19,6 +19,33 @@ public final class DriverOrderStateMachine {
         return s;
     }
 
+    /** Strict operational transition policy. Aliases are normalized first. */
+    public static boolean canTransition(String current, String next) {
+        String c = normalizeOperational(current);
+        String n = normalizeOperational(next);
+        if (c.equals(n)) return true;
+        if (c.isEmpty()) return "driver_accepted".equals(n);
+        if ("driver_accepted".equals(c)) return "arrived_pickup".equals(n);
+        if ("arrived_pickup".equals(c)) return "on_delivery".equals(n);
+        if ("on_delivery".equals(c)) return "arrived_delivery".equals(n);
+        if ("arrived_delivery".equals(c)) return "finished".equals(n);
+        return false;
+    }
+
+    /** Canonical DB vocabulary; unlike normalize(), this keeps driver_accepted explicit. */
+    public static String normalizeOperational(String raw) {
+        String s = raw == null ? "" : raw.trim().toLowerCase(Locale.US)
+                .replace('-', '_').replace(' ', '_');
+        if (s.isEmpty()) return "";
+        if (eq(s, "accepted", "taken", "driver_accepted", "driver_assigned", "assigned",
+                "merchant_accepted", "processing", "confirmed")) return "driver_accepted";
+        if (eq(s, "arrived", "at_pickup", "pickup_arrived", "arrive_pickup")) return "arrived_pickup";
+        if (eq(s, "picked_up", "pickedup", "start_delivery", "delivering", "in_delivery", "otw_delivery")) return "on_delivery";
+        if (eq(s, "at_delivery", "delivery_arrived", "arrive_delivery")) return "arrived_delivery";
+        if (eq(s, "finish", "done", "success", "completed")) return "finished";
+        return s;
+    }
+
     public static boolean isDeliveryPhase(String raw) {
         String s = normalize(raw);
         return "arrived_pickup".equals(s) || "on_delivery".equals(s)

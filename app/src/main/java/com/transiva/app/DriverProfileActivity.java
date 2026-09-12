@@ -25,51 +25,7 @@ import org.json.JSONObject;
 
 import java.text.NumberFormat;
 import java.util.Locale;
-
-public class DriverProfileActivity extends Activity {
-
-    private static final String PROFILE_ENDPOINT = "driver_profile_native.php?v=";
-
-    private SessionManager session;
-    private DriverApiClient api;
-    private ProgressBar loading;
-    private boolean loadingData;
-    private boolean loggingOut;
-
-    private ImageView avatarView;
-    private ImageView ktpView;
-    private ImageView vehicleView;
-
-    private TextView nameView;
-    private TextView usernameView;
-    private TextView verificationBadge;
-    private TextView driverTypeBadge;
-    private TextView emailValue;
-    private TextView phoneValue;
-    private TextView plateValue;
-    private TextView statusValue;
-    private TextView verifiedAtValue;
-    private TextView onlineValue;
-    private TextView busyValue;
-    private TextView onlineSinceValue;
-    private TextView lastOrderValue;
-    private TextView locationValue;
-    private TextView accuracyValue;
-    private TextView speedValue;
-    private TextView balanceValue;
-    private TextView noteValue;
-    private TextView ratingValue;
-    private TextView ratingCountValue;
-    private TextView ratingStarsValue;
-    private TextView bpjsStatusValue;
-    private TextView bpjsSummaryValue;
-    private TextView performanceModeValue;
-    private TextView performanceRecommendedValue;
-    private Button performanceAutoButton;
-    private Button performanceLowButton;
-    private Button performanceNormalButton;
-    private Button performanceHighButton;
-    private JSONObject latestProfile;
+public class DriverProfileActivity extends DriverProfileActivityLayer1 {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -105,14 +61,14 @@ public class DriverProfileActivity extends Activity {
         super.onDestroy();
     }
 
-    private boolean validDriverSession() {
+    protected boolean validDriverSession() {
         return session != null
                 && session.isLoggedIn()
                 && "driver".equals(session.normalizeRole(session.getRole()))
                 && !clean(session.getToken()).isEmpty();
     }
 
-    private void redirectLogin() {
+    protected void redirectLogin() {
         Intent intent = new Intent(this, LoginActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                 | Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -121,7 +77,7 @@ public class DriverProfileActivity extends Activity {
         finish();
     }
 
-    private View buildScreen() {
+    protected View buildScreen() {
         FrameLayout page = new FrameLayout(this);
         page.setBackgroundColor(Color.parseColor("#F6F9FE"));
 
@@ -162,7 +118,7 @@ public class DriverProfileActivity extends Activity {
         return page;
     }
 
-    private View buildHeader() {
+    protected View buildHeader() {
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
 
@@ -180,7 +136,7 @@ public class DriverProfileActivity extends Activity {
         return row;
     }
 
-    private View buildIdentityCard() {
+    protected View buildIdentityCard() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -236,7 +192,7 @@ public class DriverProfileActivity extends Activity {
         return card;
     }
 
-    private View buildPerformanceCard() {
+    protected View buildPerformanceCard() {
         LinearLayout card = whiteCard();
         card.addView(sectionTitle("Performa Aplikasi", "Auto detect menyesuaikan rendering, GPS, FPS, gambar, dan polling dengan kemampuan perangkat"));
 
@@ -277,7 +233,7 @@ public class DriverProfileActivity extends Activity {
         return card;
     }
 
-    private Button performanceButton(String label) {
+    protected Button performanceButton(String label) {
         Button b = new Button(this);
         b.setText(label);
         b.setAllCaps(false);
@@ -287,7 +243,7 @@ public class DriverProfileActivity extends Activity {
         return b;
     }
 
-    private void selectPerformanceMode(DevicePerformanceProfile.UserMode mode) {
+    protected void selectPerformanceMode(DevicePerformanceProfile.UserMode mode) {
         if (mode != DevicePerformanceProfile.UserMode.AUTO
                 && DevicePerformanceProfile.isAboveRecommended(this, mode)) {
             DevicePerformanceProfile.UserMode recommended = DevicePerformanceProfile.getRecommendedMode(this);
@@ -305,13 +261,13 @@ public class DriverProfileActivity extends Activity {
         applyPerformanceMode(mode);
     }
 
-    private void applyPerformanceMode(DevicePerformanceProfile.UserMode mode) {
+    protected void applyPerformanceMode(DevicePerformanceProfile.UserMode mode) {
         DevicePerformanceProfile.setSelectedMode(this, mode);
         RemoteImageLoader.onPerformanceModeChanged();
         updatePerformanceCard();
     }
 
-    private void updatePerformanceCard() {
+    protected void updatePerformanceCard() {
         if (performanceModeValue == null) return;
         DevicePerformanceProfile.UserMode selected = DevicePerformanceProfile.getSelectedMode(this);
         DevicePerformanceProfile.UserMode recommended = DevicePerformanceProfile.getRecommendedMode(this);
@@ -328,7 +284,7 @@ public class DriverProfileActivity extends Activity {
         stylePerformanceButton(performanceHighButton, selected == DevicePerformanceProfile.UserMode.HIGH);
     }
 
-    private void stylePerformanceButton(Button button, boolean active) {
+    protected void stylePerformanceButton(Button button, boolean active) {
         if (button == null) return;
         button.setTextColor(Color.parseColor(active ? "#FFFFFF" : "#0B3A78"));
         button.setBackground(active
@@ -336,7 +292,7 @@ public class DriverProfileActivity extends Activity {
                 : roundStroke("#F8FBFF", "#D7E6F8", 13, 1));
     }
 
-    private View buildRatingCard() {
+    protected View buildRatingCard() {
         LinearLayout card = whiteCard();
         card.addView(sectionTitle("Rating Driver", "Dihitung otomatis dari seluruh pesanan yang telah dinilai customer"));
 
@@ -366,7 +322,7 @@ public class DriverProfileActivity extends Activity {
         return card;
     }
 
-    private View buildDriverInfoCard() {
+    protected View buildDriverInfoCard() {
         LinearLayout card = whiteCard();
         card.addView(sectionTitle("Informasi Driver", "Data akun dan kendaraan utama"));
         emailValue = addInfoRow(card, "Email", "-");
@@ -379,7 +335,7 @@ public class DriverProfileActivity extends Activity {
         return card;
     }
 
-    private View buildStatusCard() {
+    protected View buildStatusCard() {
         LinearLayout card = whiteCard();
         card.addView(sectionTitle("Status Kerja", "Informasi operasional driver saat ini"));
         onlineValue = addInfoRow(card, "Status", "Offline");
@@ -392,7 +348,7 @@ public class DriverProfileActivity extends Activity {
         return card;
     }
 
-    private View buildBpjsCard() {
+    protected View buildBpjsCard() {
         LinearLayout card = whiteCard();
         card.setClickable(true);
         card.setFocusable(true);
@@ -414,7 +370,7 @@ public class DriverProfileActivity extends Activity {
         return card;
     }
 
-    private View buildDocumentCard() {
+    protected View buildDocumentCard() {
         LinearLayout card = whiteCard();
         card.addView(sectionTitle("Kendaraan & Dokumen", "Preview dokumen yang tersimpan di server"));
 
@@ -432,7 +388,7 @@ public class DriverProfileActivity extends Activity {
         return card;
     }
 
-    private View buildSecurityCard() {
+    protected View buildSecurityCard() {
         LinearLayout card = whiteCard();
         card.addView(sectionTitle("Keamanan", "Kelola sesi aplikasi driver"));
         Button logout = dangerButton("Keluar dari Akun");
@@ -441,7 +397,7 @@ public class DriverProfileActivity extends Activity {
         return card;
     }
 
-    private void loadProfile() {
+    protected void loadProfile() {
         if (loadingData || api == null) return;
         setLoading(true);
 
@@ -468,360 +424,5 @@ public class DriverProfileActivity extends Activity {
                 });
             }
         });
-    }
-
-    private void bindProfile(JSONObject profile) {
-        latestProfile = profile;
-        String name = first(profile.optString("name"), profile.optString("username"), "Driver");
-        String username = first(profile.optString("username"), "driver");
-        String driverType = normalizeDriverType(profile.optString("driver_type"));
-        String verification = normalizeVerification(profile.optString("verification_status"));
-
-        nameView.setText(name);
-        usernameView.setText("@" + username);
-        verificationBadge.setText(verificationLabel(verification));
-        verificationBadge.setTextColor(Color.parseColor(verificationTextColor(verification)));
-        verificationBadge.setBackground(round(verificationBackground(verification), 14));
-        driverTypeBadge.setText("Driver " + driverType);
-
-        emailValue.setText(first(profile.optString("email"), "-"));
-        phoneValue.setText(first(profile.optString("phone"), "-"));
-        plateValue.setText(first(profile.optString("plate"), "-"));
-        statusValue.setText(verificationLabel(verification));
-        verifiedAtValue.setText(formatDate(profile.optString("verified_at")));
-        balanceValue.setText(rupiah(profile.optDouble("balance", 0)));
-        noteValue.setText(first(profile.optString("verification_note"), "-"));
-
-        double driverRating = profile.optDouble("rating", 0);
-        int ratingCount = profile.optInt("rating_count", profile.optInt("review_count", 0));
-        if (ratingValue != null) ratingValue.setText(String.format(Locale.US, "%.1f", driverRating));
-        if (ratingCountValue != null) {
-            ratingCountValue.setText(ratingCount > 0
-                    ? ratingCount + " penilaian customer"
-                    : "Belum ada penilaian");
-        }
-        if (ratingStarsValue != null) ratingStarsValue.setText(stars(driverRating));
-
-        boolean bpjsActive = readFlag(profile, "bpjs_active", "bpjs_is_active");
-        if (bpjsStatusValue != null) {
-            bpjsStatusValue.setText(bpjsActive ? "Aktif" : "Tidak Aktif");
-            bpjsStatusValue.setTextColor(Color.parseColor(bpjsActive ? "#0E9F4B" : "#C62828"));
-        }
-        if (bpjsSummaryValue != null) {
-            bpjsSummaryValue.setText(first(profile.optString("bpjs_number"), profile.optString("bpjs_no"), "Belum diisi"));
-        }
-
-        boolean online = profile.optInt("is_online", 0) == 1;
-        boolean busy = profile.optInt("is_busy", 0) == 1;
-        onlineValue.setText(online ? "Online" : "Offline");
-        onlineValue.setTextColor(Color.parseColor(online ? "#0E9F4B" : "#64748B"));
-        busyValue.setText(busy ? "Sedang Menangani Order" : "Tersedia");
-        onlineSinceValue.setText(formatDate(profile.optString("online_since")));
-        lastOrderValue.setText(formatDate(profile.optString("last_order_at")));
-
-        String latitude = clean(profile.optString("latitude"));
-        String longitude = clean(profile.optString("longitude"));
-        locationValue.setText(latitude.isEmpty() || longitude.isEmpty() ? "-" : latitude + ", " + longitude);
-
-        String accuracy = clean(profile.optString("location_accuracy"));
-        accuracyValue.setText(accuracy.isEmpty() ? "-" : accuracy + " meter");
-        String speed = clean(profile.optString("location_speed"));
-        speedValue.setText(speed.isEmpty() ? "-" : speed + " m/s");
-
-        String driverPhoto = first(profile.optString("driver_photo"), profile.optString("profile_photo"));
-        String ktpPhoto = profile.optString("ktp_photo");
-        String vehiclePhoto = profile.optString("vehicle_photo");
-
-        loadImage(avatarView, driverPhoto, drawableOrFallback("ic_nav_profile"));
-        loadImage(ktpView, ktpPhoto, android.R.drawable.ic_menu_report_image);
-        loadImage(vehicleView, vehiclePhoto, android.R.drawable.ic_menu_report_image);
-        bindImageOpen(ktpView, ktpPhoto);
-        bindImageOpen(vehicleView, vehiclePhoto);
-    }
-
-    private void loadImage(ImageView target, String url, int fallback) {
-        RemoteImageLoader.loadCenterCrop(target, absoluteUrl(url), fallback);
-    }
-
-    private void bindImageOpen(ImageView target, String rawUrl) {
-        String url = absoluteUrl(rawUrl);
-        target.setOnClickListener(url.isEmpty() ? null : view -> {
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setData(android.net.Uri.parse(url));
-            startActivity(intent);
-        });
-    }
-
-    private String absoluteUrl(String value) {
-        String clean = clean(value);
-        if (clean.isEmpty()) return "";
-        if (clean.startsWith("http://") || clean.startsWith("https://")) return clean;
-        while (clean.startsWith("/")) clean = clean.substring(1);
-
-        // Path foto driver dari API disimpan relatif sebagai uploads/drivers/....
-        // Folder fisiknya berada di public_html/server/uploads/drivers, jadi
-        // URL publik harus melewati /server/. Tetap dukung nilai lama yang
-        // sudah mengandung server/ agar tidak terjadi double prefix.
-        if (clean.startsWith("uploads/")) {
-            return "https://transiva.my.id/server/" + clean;
-        }
-        if (clean.startsWith("server/")) {
-            return "https://transiva.my.id/" + clean;
-        }
-        return "https://transiva.my.id/" + clean;
-    }
-
-    private boolean readFlag(JSONObject object, String... keys) {
-        if (object == null || keys == null) return false;
-        for (String key : keys) {
-            if (!object.has(key) || object.isNull(key)) continue;
-            Object value = object.opt(key);
-            if (value instanceof Boolean) return (Boolean) value;
-            if (value instanceof Number) return ((Number) value).intValue() == 1;
-            String text = clean(String.valueOf(value)).toLowerCase(Locale.ROOT);
-            if ("1".equals(text) || "true".equals(text) || "active".equals(text) || "aktif".equals(text) || "yes".equals(text)) return true;
-        }
-        return false;
-    }
-
-    private String normalizeDriverType(String value) {
-        return "car".equals(clean(value).toLowerCase(Locale.ROOT)) ? "Car" : "Bike";
-    }
-
-    private String normalizeVerification(String value) {
-        String clean = clean(value).toLowerCase(Locale.ROOT);
-        if ("verified".equals(clean) || "rejected".equals(clean) || "suspended".equals(clean)) return clean;
-        return "pending";
-    }
-
-    private String verificationLabel(String status) {
-        if ("verified".equals(status)) return "✓ Terverifikasi";
-        if ("rejected".equals(status)) return "Ditolak";
-        if ("suspended".equals(status)) return "Ditangguhkan";
-        return "Menunggu Verifikasi";
-    }
-
-    private String verificationBackground(String status) {
-        if ("verified".equals(status)) return "#E7FFF2";
-        if ("rejected".equals(status)) return "#FFECEC";
-        if ("suspended".equals(status)) return "#FFF0E5";
-        return "#FFF7E6";
-    }
-
-    private String verificationTextColor(String status) {
-        if ("verified".equals(status)) return "#0A8F4C";
-        if ("rejected".equals(status)) return "#C62828";
-        if ("suspended".equals(status)) return "#B45309";
-        return "#C96A05";
-    }
-
-    private String stars(double rating) {
-        int filled = (int) Math.round(Math.max(0, Math.min(5, rating)));
-        StringBuilder value = new StringBuilder(5);
-        for (int i = 1; i <= 5; i++) value.append(i <= filled ? '★' : '☆');
-        return value.toString();
-    }
-
-    private String formatDate(String value) {
-        String clean = clean(value);
-        return clean.isEmpty() ? "-" : clean.replace("T", " ");
-    }
-
-    private void confirmLogout() {
-        if (loggingOut) return;
-        PremiumDialogs.builder(this)
-                .setTitle("Keluar Akun")
-                .setMessage("Keluar akan melepas akun dari perangkat ini seperti Reset Perangkat. Setelah berhasil, akun dapat langsung login di HP lain.")
-                .setNegativeButton("Batal", null)
-                .setPositiveButton("Keluar", (dialog, which) -> logoutAndReleaseDevice())
-                .show();
-    }
-
-    private void logoutAndReleaseDevice() {
-        if (loggingOut) return;
-        loggingOut = true;
-        DriverDeviceDisconnectClient.disconnect(this, new DriverDeviceDisconnectClient.Callback() {
-            @Override public void onSuccess() {
-                DriverServiceController.stop(DriverProfileActivity.this);
-                try { new SessionManager(DriverProfileActivity.this).forceLogout("driver_profile_logout_device_reset"); }
-                catch (Exception ignored) {}
-                loggingOut = false;
-                redirectLogin();
-            }
-
-            @Override public void onError(String message) {
-                loggingOut = false;
-                if (isFinishing()) return;
-                PremiumDialogs.builder(DriverProfileActivity.this)
-                        .setTitle("Gagal keluar akun")
-                        .setMessage(message + "\n\nAkun belum dilepas dari perangkat. Coba lagi saat koneksi stabil agar akun tetap dapat dipindahkan dengan aman.")
-                        .setPositiveButton("OK", null)
-                        .show();
-            }
-        });
-    }
-
-    private LinearLayout whiteCard() {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(15), dp(15), dp(15), dp(15));
-        card.setBackground(roundStroke("#FFFFFF", "#E1EAF5", 18, 1));
-        card.setElevation(dp(1));
-        return card;
-    }
-
-    private View sectionTitle(String title, String subtitle) {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.addView(text(title, 16, "#0B3A78", true));
-        box.addView(text(subtitle, 10, "#718096", false));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, 0, 0, dp(9));
-        box.setLayoutParams(lp);
-        return box;
-    }
-
-    private TextView addInfoRow(LinearLayout parent, String label, String value) {
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(11), 0, dp(10));
-        TextView left = text(label, 11, "#64748B", false);
-        row.addView(left, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView right = text(value, 11, "#0B3A78", true);
-        right.setGravity(Gravity.END);
-        right.setMaxWidth(dp(190));
-        row.addView(right);
-        parent.addView(row);
-        return right;
-    }
-
-    private ImageView documentImage(String description) {
-        ImageView image = new ImageView(this);
-        image.setContentDescription(description);
-        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        image.setImageResource(android.R.drawable.ic_menu_report_image);
-        image.setBackground(round("#EEF5FD", 14));
-        image.setClipToOutline(true);
-        image.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
-        return image;
-    }
-
-    private View documentBox(ImageView image, String label) {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.addView(image, new LinearLayout.LayoutParams(-1, dp(116)));
-        TextView caption = text(label, 10, "#0B3A78", true);
-        caption.setGravity(Gravity.CENTER);
-        caption.setPadding(0, dp(6), 0, 0);
-        box.addView(caption);
-        return box;
-    }
-
-    private LinearLayout.LayoutParams documentLp(boolean margin) {
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
-        if (margin) lp.setMargins(dp(9), 0, 0, 0);
-        return lp;
-    }
-
-    private TextView badge(String value, String background, String color) {
-        TextView badge = text(value, 9, color, true);
-        badge.setGravity(Gravity.CENTER);
-        badge.setPadding(dp(9), dp(5), dp(9), dp(5));
-        badge.setBackground(round(background, 14));
-        return badge;
-    }
-
-    private Button dangerButton(String value) {
-        Button button = new Button(this);
-        button.setText(value);
-        button.setAllCaps(false);
-        button.setTextSize(13);
-        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        button.setTextColor(Color.WHITE);
-        button.setBackground(gradient("#EF4444", "#DC2626", 14));
-        return button;
-    }
-
-    private LinearLayout.LayoutParams sectionLp() {
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, dp(14), 0, 0);
-        return lp;
-    }
-
-    private TextView text(String value, int size, String color, boolean bold) {
-        TextView view = new TextView(this);
-        view.setText(value == null ? "" : value);
-        view.setTextSize(size);
-        view.setTextColor(Color.parseColor(color));
-        view.setIncludeFontPadding(false);
-        if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        return view;
-    }
-
-    private GradientDrawable round(String fill, int radius) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(Color.parseColor(fill));
-        drawable.setCornerRadius(dp(radius));
-        return drawable;
-    }
-
-    private GradientDrawable roundStroke(String fill, String stroke, int radius, int width) {
-        GradientDrawable drawable = round(fill, radius);
-        drawable.setStroke(dp(width), Color.parseColor(stroke));
-        return drawable;
-    }
-
-    private GradientDrawable gradient(String start, String end, int radius) {
-        GradientDrawable drawable = new GradientDrawable(
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{Color.parseColor(start), Color.parseColor(end)}
-        );
-        drawable.setCornerRadius(dp(radius));
-        return drawable;
-    }
-
-    private int drawableOrFallback(String name) {
-        int id = getResources().getIdentifier(name, "drawable", getPackageName());
-        return id != 0 ? id : android.R.drawable.sym_def_app_icon;
-    }
-
-    private String rupiah(double amount) {
-        NumberFormat format = NumberFormat.getCurrencyInstance(new Locale("id", "ID"));
-        format.setMaximumFractionDigits(0);
-        format.setMinimumFractionDigits(0);
-        return format.format(amount);
-    }
-
-    private String first(String... values) {
-        if (values == null) return "";
-        for (String value : values) {
-            String clean = clean(value);
-            if (!clean.isEmpty()) return clean;
-        }
-        return "";
-    }
-
-    private String clean(String value) {
-        if (value == null) return "";
-        value = value.trim();
-        if (value.isEmpty() || "null".equalsIgnoreCase(value) || "undefined".equalsIgnoreCase(value)) return "";
-        return value;
-    }
-
-    private int dp(int value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
-    }
-
-    private void setLoading(boolean value) {
-        loadingData = value;
-        if (loading != null) loading.setVisibility(value ? View.VISIBLE : View.GONE);
-    }
-
-    private void showInfo(String title, String message) {
-        PremiumDialogs.builder(this)
-                .setTitle(title)
-                .setMessage(message)
-                .setPositiveButton("OK", null)
-                .show();
     }
 }

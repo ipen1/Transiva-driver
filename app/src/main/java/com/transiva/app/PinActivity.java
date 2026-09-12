@@ -37,38 +37,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
-
-public class PinActivity extends FragmentActivity {
-
-    private static final String TAG = "TRANSIVA_PIN";
-    private static final String BASE_URL = "https://transiva.my.id/server/";
-    private static final String STATUS_URL = BASE_URL + "pin_status.php";
-    private static final String SET_URL = BASE_URL + "pin_set.php";
-    private static final String VERIFY_URL = BASE_URL + "pin_verify.php";
-    private static final int TIMEOUT_MS = 25000;
-    private static final int PIN_LENGTH = 6;
-
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
-
-    private SessionManager session;
-    private LinearLayout dotsContainer;
-    private TextView titleText;
-    private TextView subtitleText;
-    private TextView messageText;
-    private TextView stepText;
-    private TextView actionHintText;
-    private ProgressBar progressBar;
-    private LinearLayout keypadContainer;
-    private LinearLayout pinContentRoot;
-    private TextView biometricButton;
-    private boolean biometricPromptShown = false;
-
-    private boolean loading;
-    private boolean setupMode;
-    private boolean confirmingPin;
-    private String firstPin = "";
-    private String currentPin = "";
-    private String role = "driver";
+public class PinActivity extends PinActivityLayer1 {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -104,7 +73,7 @@ public class PinActivity extends FragmentActivity {
         // Pengguna tetap bisa keluar akun melalui tombol "Keluar akun".
     }
 
-    private View buildScreen() {
+    protected View buildScreen() {
         FrameLayout page = new FrameLayout(this);
         page.setBackgroundColor(Color.parseColor("#F7FBFF"));
 
@@ -229,7 +198,7 @@ public class PinActivity extends FragmentActivity {
         return page;
     }
 
-    private LinearLayout buildKeypad() {
+    protected LinearLayout buildKeypad() {
         LinearLayout keypad = new LinearLayout(this);
         keypad.setOrientation(LinearLayout.VERTICAL);
 
@@ -241,7 +210,7 @@ public class PinActivity extends FragmentActivity {
         return keypad;
     }
 
-    private void addKeyRow(LinearLayout parent, String a, String b, String c) {
+    protected void addKeyRow(LinearLayout parent, String a, String b, String c) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER);
@@ -255,7 +224,7 @@ public class PinActivity extends FragmentActivity {
         parent.addView(row, rowLp);
     }
 
-    private void addKey(LinearLayout row, String value) {
+    protected void addKey(LinearLayout row, String value) {
         if (value.isEmpty()) {
             View spacer = new View(this);
             row.addView(spacer, new LinearLayout.LayoutParams(0, -1, 1f));
@@ -294,7 +263,7 @@ public class PinActivity extends FragmentActivity {
         });
     }
 
-    private void onPinComplete() {
+    protected void onPinComplete() {
         if (loading || currentPin.length() != PIN_LENGTH) return;
 
         if (!setupMode) {
@@ -328,7 +297,7 @@ public class PinActivity extends FragmentActivity {
         setPin(currentPin);
     }
 
-    private void checkPinStatus() {
+    protected void checkPinStatus() {
         setLoading(true);
 
         DriverNetworkExecutor.execute(() -> {
@@ -377,7 +346,7 @@ public class PinActivity extends FragmentActivity {
         });
     }
 
-    private void updateBiometricAvailability() {
+    protected void updateBiometricAvailability() {
         if (biometricButton == null) return;
         if (setupMode) { biometricButton.setVisibility(View.GONE); return; }
         BiometricManager bm = BiometricManager.from(this);
@@ -385,7 +354,7 @@ public class PinActivity extends FragmentActivity {
         biometricButton.setVisibility(can == BiometricManager.BIOMETRIC_SUCCESS ? View.VISIBLE : View.GONE);
     }
 
-    private void showBiometricPrompt() {
+    protected void showBiometricPrompt() {
         if (setupMode || loading) return;
         BiometricManager bm = BiometricManager.from(this);
         if (bm.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) != BiometricManager.BIOMETRIC_SUCCESS) return;
@@ -415,7 +384,7 @@ public class PinActivity extends FragmentActivity {
         prompt.authenticate(info);
     }
 
-    private void setPin(String pin) {
+    protected void setPin(String pin) {
         JSONObject body = new JSONObject();
         try {
             body.put("pin", pin);
@@ -452,331 +421,5 @@ public class PinActivity extends FragmentActivity {
                 mainHandler.postDelayed(this::openRolePage, 450);
             });
         });
-    }
-
-    private void verifyPin(String pin) {
-        JSONObject body = new JSONObject();
-        try {
-            body.put("pin", pin);
-        } catch (Exception ignored) {}
-
-        setLoading(true);
-        DriverNetworkExecutor.execute(() -> {
-            ApiResult result = request(VERIFY_URL, body);
-            mainHandler.post(() -> {
-                if (pinContentRoot != null) {
-                    pinContentRoot.setVisibility(View.VISIBLE);
-                }
-                setLoading(false);
-
-                if (!result.success) {
-                    currentPin = "";
-                    renderDots();
-
-                    if ("PIN_NOT_SET".equals(result.code)) {
-                        setupMode = true;
-                        confirmingPin = false;
-                        firstPin = "";
-                        titleText.setText("Buat PIN Transiva");
-                        subtitleText.setText("Akun ini belum memiliki PIN. Buat PIN 6 digit untuk melanjutkan.");
-                        stepText.setText("Buat PIN 6 digit");
-                    }
-
-                    showMessage(result.message, false);
-                    return;
-                }
-
-                showMessage("PIN benar. Membuka akun...", true);
-                mainHandler.postDelayed(this::openRolePage, 350);
-            });
-        });
-    }
-
-    private ApiResult request(String endpoint, JSONObject payload) {
-        HttpURLConnection conn = null;
-
-        try {
-            conn = DriverHttpTransport.open(endpoint);
-            conn.setRequestMethod(payload == null ? "GET" : "POST");
-            conn.setConnectTimeout(TIMEOUT_MS);
-            conn.setReadTimeout(TIMEOUT_MS);
-            conn.setUseCaches(false);
-            conn.setDoInput(true);
-
-            conn.setRequestProperty("Accept", "application/json");
-            conn.setRequestProperty("Cache-Control", "no-store");
-            conn.setRequestProperty("Authorization", "Bearer " + safe(session.getToken()).trim());
-            conn.setRequestProperty("X-App-Scope", "driver");
-            conn.setRequestProperty(
-                    "X-Device-UUID",
-                    DeviceIdentityManager.getInstallationUuid(this)
-            );
-            conn.setRequestProperty("X-Transiva-Client", "Android-Native");
-
-            if (payload != null) {
-                conn.setDoOutput(true);
-                conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-
-                try (BufferedWriter writer = new BufferedWriter(
-                        new OutputStreamWriter(conn.getOutputStream(), StandardCharsets.UTF_8)
-                )) {
-                    writer.write(payload.toString());
-                }
-            }
-
-            int status = conn.getResponseCode();
-            InputStream stream =
-                    status >= 200 && status < 400
-                            ? conn.getInputStream()
-                            : conn.getErrorStream();
-
-            String raw = readAll(stream);
-            JSONObject json;
-
-            try {
-                json = raw.trim().isEmpty()
-                        ? new JSONObject()
-                        : new JSONObject(raw.trim());
-            } catch (Exception parseError) {
-                return new ApiResult(
-                        false,
-                        "INVALID_RESPONSE",
-                        "Respons server PIN tidak valid.",
-                        new JSONObject()
-                );
-            }
-
-            String code = json.optString("code", "");
-            String message = json.optString(
-                    "message",
-                    status >= 200 && status < 300
-                            ? "Berhasil."
-                            : "Permintaan PIN gagal."
-            );
-
-            // Jangan logout hanya karena HTTP 401/403 generik.
-            // Endpoint PIN dapat memakai status tersebut untuk error PIN;
-            // logout hanya untuk kode sesi/perangkat yang memang final.
-            if (ForceLogoutManager.isForceLogoutCode(code)) {
-                mainHandler.post(() ->
-                        ForceLogoutManager.execute(
-                                PinActivity.this,
-                                code.isEmpty() ? "SESSION_REVOKED" : code
-                        )
-                );
-            }
-
-            return new ApiResult(
-                    status >= 200 && status < 300 && json.optBoolean("success", false),
-                    code,
-                    message,
-                    json
-            );
-
-        } catch (Exception e) {
-            return new ApiResult(
-                    false,
-                    "NETWORK_ERROR",
-                    "Tidak dapat terhubung ke server. Periksa koneksi internet Anda.",
-                    new JSONObject()
-            );
-        } finally {
-            if (conn != null) conn.disconnect();
-        }
-    }
-
-    private void renderDots() {
-        if (dotsContainer == null) return;
-
-        dotsContainer.removeAllViews();
-
-        for (int i = 0; i < PIN_LENGTH; i++) {
-            TextView dot = new TextView(this);
-            boolean filled = i < currentPin.length();
-
-            dot.setGravity(Gravity.CENTER);
-            dot.setText(filled ? "●" : "");
-            dot.setTextSize(20);
-            dot.setTextColor(Color.WHITE);
-            dot.setBackground(
-                    filled
-                            ? round("#1677FF", dp(14))
-                            : roundStroke("#F7FBFF", "#B9C7D8", dp(14), 1)
-            );
-
-            LinearLayout.LayoutParams lp =
-                    new LinearLayout.LayoutParams(dp(38), dp(46));
-            lp.setMargins(dp(5), 0, dp(5), 0);
-            dotsContainer.addView(dot, lp);
-        }
-    }
-
-    private void setLoading(boolean value) {
-        loading = value;
-        if (progressBar != null) {
-            progressBar.setVisibility(value ? View.VISIBLE : View.GONE);
-        }
-        setKeypadEnabled(!value);
-    }
-
-    private void setKeypadEnabled(boolean enabled) {
-        if (keypadContainer == null) return;
-        setChildrenEnabled(keypadContainer, enabled);
-        keypadContainer.setAlpha(enabled ? 1f : 0.55f);
-    }
-
-    private void setChildrenEnabled(View view, boolean enabled) {
-        view.setEnabled(enabled);
-        if (view instanceof LinearLayout) {
-            LinearLayout group = (LinearLayout) view;
-            for (int i = 0; i < group.getChildCount(); i++) {
-                setChildrenEnabled(group.getChildAt(i), enabled);
-            }
-        }
-    }
-
-    private void showMessage(String message, boolean success) {
-        if (messageText == null) return;
-        messageText.setVisibility(View.VISIBLE);
-        messageText.setText(safe(message));
-        messageText.setTextColor(Color.parseColor(success ? "#166534" : "#B91C1C"));
-        messageText.setBackground(
-                round(success ? "#DCFCE7" : "#FEE2E2", dp(12))
-        );
-    }
-
-    private void clearMessage() {
-        if (messageText == null) return;
-        messageText.setText("");
-        messageText.setVisibility(View.GONE);
-    }
-
-    private void openRolePage() {
-        // PIN hanya membuka kunci lokal; jangan pernah menghapus sesi login yang masih valid.
-        if (session == null || !session.isLoggedIn() || safe(session.getToken()).trim().isEmpty()) {
-            showMessage("Sesi login tidak tersedia. Silakan login kembali.", false);
-            return;
-        }
-        session.touchSession();
-        try {
-            TransivaSession.saveUser(this, session.getSessionJson());
-        } catch (Exception ignored) {}
-
-        Intent intent = new Intent(this, DriverDashboardActivity.class);
-        intent.putExtra("native_role", "driver");
-        intent.putExtra("request_gps_after_login", true);
-        intent.addFlags(
-                Intent.FLAG_ACTIVITY_NEW_TASK
-                        | Intent.FLAG_ACTIVITY_CLEAR_TASK
-                        | Intent.FLAG_ACTIVITY_CLEAR_TOP
-        );
-        startActivity(intent);
-        finish();
-    }
-
-    private void logout() {
-        try {
-            session.forceLogout("pin_gate_logout");
-        } catch (Exception ignored) {}
-        openLogin();
-    }
-
-    private void openLogin() {
-        Intent intent = new Intent(this, LoginActivity.class);
-        intent.addFlags(
-                Intent.FLAG_ACTIVITY_NEW_TASK
-                        | Intent.FLAG_ACTIVITY_CLEAR_TASK
-                        | Intent.FLAG_ACTIVITY_CLEAR_TOP
-        );
-        startActivity(intent);
-        finish();
-    }
-
-    private String normalizeRole(String value) {
-        String clean = safe(value).trim().toLowerCase(Locale.US);
-        if (clean.equals("driver")
-                || clean.equals("kurir")
-                || clean.equals("ojek")
-                || clean.equals("rider")) {
-            return "driver";
-        }
-        return "";
-    }
-
-    private TextView text(String value, int size, String color, boolean bold) {
-        TextView out = new TextView(this);
-        out.setText(value);
-        out.setTextSize(size);
-        out.setTextColor(Color.parseColor(color));
-        if (bold) out.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        return out;
-    }
-
-    private GradientDrawable round(String color, int radius) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(Color.parseColor(color));
-        drawable.setCornerRadius(radius);
-        return drawable;
-    }
-
-    private GradientDrawable roundStroke(
-            String fill,
-            String stroke,
-            int radius,
-            int width
-    ) {
-        GradientDrawable drawable = round(fill, radius);
-        drawable.setStroke(dp(width), Color.parseColor(stroke));
-        return drawable;
-    }
-
-    private int findDrawable(String name) {
-        try {
-            return getResources().getIdentifier(name, "drawable", getPackageName());
-        } catch (Exception ignored) {
-            return 0;
-        }
-    }
-
-    private int dp(int value) {
-        return Math.round(
-                value * getResources().getDisplayMetrics().density
-        );
-    }
-
-    private String readAll(InputStream stream) throws Exception {
-        if (stream == null) return "";
-
-        BufferedReader reader = new BufferedReader(
-                new InputStreamReader(stream, StandardCharsets.UTF_8)
-        );
-
-        StringBuilder out = new StringBuilder();
-        String line;
-
-        while ((line = reader.readLine()) != null) {
-            out.append(line);
-        }
-
-        reader.close();
-        return out.toString();
-    }
-
-    private String safe(String value) {
-        return value == null ? "" : value;
-    }
-
-    private static final class ApiResult {
-        final boolean success;
-        final String code;
-        final String message;
-        final JSONObject data;
-
-        ApiResult(boolean success, String code, String message, JSONObject data) {
-            this.success = success;
-            this.code = code == null ? "" : code;
-            this.message = message == null ? "" : message;
-            this.data = data == null ? new JSONObject() : data;
-        }
     }
 }

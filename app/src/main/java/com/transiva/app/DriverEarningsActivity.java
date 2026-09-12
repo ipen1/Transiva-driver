@@ -23,29 +23,7 @@ import com.transiva.app.driver.domain.DriverDashboardState;
 
 import java.text.NumberFormat;
 import java.util.Locale;
-
-public class DriverEarningsActivity extends Activity {
-
-    private static final long REFRESH_INTERVAL_MS = 30000L;
-
-    private SessionManager session;
-    private TextView balanceText;
-    private TextView todayEarningText;
-    private TextView pendingDepositText;
-    private TextView pendingWithdrawText;
-    private DriverDashboardRepository dashboardRepository;
-    private final Handler realtimeHandler = new Handler(Looper.getMainLooper());
-    private boolean refreshInFlight = false;
-    private boolean screenVisible = false;
-
-    private final Runnable realtimeRefresh = new Runnable() {
-        @Override
-        public void run() {
-            if (!screenVisible) return;
-            loadRealtimeWallet();
-            realtimeHandler.postDelayed(this, WaveLoadGuard.jitter(DriverPollingCoordinator.interval(DriverEarningsActivity.this, REFRESH_INTERVAL_MS)));
-        }
-    };
+public class DriverEarningsActivity extends DriverEarningsActivityLayer1 {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -98,13 +76,13 @@ public class DriverEarningsActivity extends Activity {
         super.onDestroy();
     }
 
-    private void renderCachedBalance() {
+    protected void renderCachedBalance() {
         if (balanceText != null) {
             balanceText.setText(rupiah(parseLong(session.getBalance())));
         }
     }
 
-    private void loadRealtimeWallet() {
+    protected void loadRealtimeWallet() {
         if (refreshInFlight || dashboardRepository == null || !screenVisible) return;
         refreshInFlight = true;
 
@@ -140,7 +118,7 @@ public class DriverEarningsActivity extends Activity {
         });
     }
 
-    private boolean validDriverSession() {
+    protected boolean validDriverSession() {
         return session != null
                 && session.isLoggedIn()
                 && "driver".equals(
@@ -153,7 +131,7 @@ public class DriverEarningsActivity extends Activity {
         ).isEmpty();
     }
 
-    private void redirectLogin() {
+    protected void redirectLogin() {
         Intent intent =
                 new Intent(
                         this,
@@ -170,7 +148,7 @@ public class DriverEarningsActivity extends Activity {
         finish();
     }
 
-    private View buildScreen() {
+    protected View buildScreen() {
         FrameLayout page =
                 new FrameLayout(this);
 
@@ -501,326 +479,5 @@ public class DriverEarningsActivity extends Activity {
         );
 
         return page;
-    }
-
-    private View header(
-            String title,
-            String subtitle
-    ) {
-        LinearLayout box =
-                new LinearLayout(this);
-
-        box.setOrientation(
-                LinearLayout.VERTICAL
-        );
-
-        box.addView(
-                text(
-                        title,
-                        24,
-                        "#0B3A78",
-                        true
-                )
-        );
-
-        box.addView(
-                text(
-                        subtitle,
-                        11,
-                        "#718096",
-                        false
-                )
-        );
-
-        return box;
-    }
-
-    private View statCard(
-            String value,
-            String label,
-            int slot
-    ) {
-        LinearLayout box =
-                card();
-
-        box.setGravity(Gravity.CENTER);
-        box.setPadding(
-                dp(8),
-                dp(13),
-                dp(8),
-                dp(13)
-        );
-
-        TextView amount =
-                text(
-                        value,
-                        13,
-                        "#0B7CFF",
-                        true
-                );
-
-        amount.setGravity(Gravity.CENTER);
-        box.addView(amount);
-
-        if (slot == 0) todayEarningText = amount;
-        else if (slot == 1) pendingDepositText = amount;
-        else if (slot == 2) pendingWithdrawText = amount;
-
-        TextView caption =
-                text(
-                        label,
-                        9,
-                        "#64748B",
-                        false
-                );
-
-        caption.setGravity(Gravity.CENTER);
-        box.addView(caption);
-
-        return box;
-    }
-
-    private LinearLayout.LayoutParams statLp(
-            boolean margin
-    ) {
-        LinearLayout.LayoutParams lp =
-                new LinearLayout.LayoutParams(
-                        0,
-                        dp(74),
-                        1
-                );
-
-        if (margin) {
-            lp.setMargins(
-                    dp(7),
-                    0,
-                    0,
-                    0
-            );
-        }
-
-        return lp;
-    }
-
-    private LinearLayout card() {
-        LinearLayout box =
-                new LinearLayout(this);
-
-        box.setOrientation(
-                LinearLayout.VERTICAL
-        );
-
-        box.setPadding(
-                dp(15),
-                dp(15),
-                dp(15),
-                dp(15)
-        );
-
-        box.setBackground(
-                roundStroke(
-                        "#FFFFFF",
-                        "#E1EAF5",
-                        18,
-                        1
-                )
-        );
-
-        box.setElevation(dp(1));
-        return box;
-    }
-
-    private Button whiteButton(
-            String value
-    ) {
-        Button button =
-                new Button(this);
-
-        button.setText(value);
-        button.setAllCaps(false);
-        button.setTextSize(12);
-
-        button.setTypeface(
-                Typeface.DEFAULT,
-                Typeface.BOLD
-        );
-
-        button.setTextColor(
-                Color.parseColor("#0B7CFF")
-        );
-
-        button.setBackground(
-                round(
-                        "#FFFFFF",
-                        14
-                )
-        );
-
-        return button;
-    }
-
-    private Button outlineButton(
-            String value
-    ) {
-        Button button =
-                whiteButton(value);
-
-        button.setBackground(
-                roundStroke(
-                        "#FFFFFF",
-                        "#A9D1FF",
-                        14,
-                        1
-                )
-        );
-
-        return button;
-    }
-
-    private TextView text(
-            String value,
-            int size,
-            String color,
-            boolean bold
-    ) {
-        TextView view =
-                new TextView(this);
-
-        view.setText(value);
-        view.setTextSize(size);
-
-        view.setTextColor(
-                Color.parseColor(color)
-        );
-
-        view.setIncludeFontPadding(false);
-
-        if (bold) {
-            view.setTypeface(
-                    Typeface.DEFAULT,
-                    Typeface.BOLD
-            );
-        }
-
-        return view;
-    }
-
-    private GradientDrawable round(
-            String fill,
-            int radius
-    ) {
-        GradientDrawable drawable =
-                new GradientDrawable();
-
-        drawable.setColor(
-                Color.parseColor(fill)
-        );
-
-        drawable.setCornerRadius(
-                dp(radius)
-        );
-
-        return drawable;
-    }
-
-    private GradientDrawable roundStroke(
-            String fill,
-            String stroke,
-            int radius,
-            int width
-    ) {
-        GradientDrawable drawable =
-                round(
-                        fill,
-                        radius
-                );
-
-        drawable.setStroke(
-                dp(width),
-                Color.parseColor(stroke)
-        );
-
-        return drawable;
-    }
-
-    private GradientDrawable gradient(
-            String start,
-            String end,
-            int radius
-    ) {
-        GradientDrawable drawable =
-                new GradientDrawable(
-                        GradientDrawable
-                                .Orientation
-                                .LEFT_RIGHT,
-                        new int[]{
-                                Color.parseColor(start),
-                                Color.parseColor(end)
-                        }
-                );
-
-        drawable.setCornerRadius(
-                dp(radius)
-        );
-
-        return drawable;
-    }
-
-    private String rupiah(
-            long amount
-    ) {
-        NumberFormat format =
-                NumberFormat.getCurrencyInstance(
-                        new Locale(
-                                "id",
-                                "ID"
-                        )
-                );
-
-        format.setMaximumFractionDigits(0);
-        format.setMinimumFractionDigits(0);
-
-        return format.format(amount);
-    }
-
-    private long parseLong(
-            String value
-    ) {
-        try {
-            return Long.parseLong(
-                    clean(value)
-                            .replaceAll(
-                                    "[^0-9-]",
-                                    ""
-                            )
-            );
-        } catch (Exception ignored) {
-            return 0L;
-        }
-    }
-
-    private String clean(
-            String value
-    ) {
-        if (value == null) {
-            return "";
-        }
-
-        value = value.trim();
-
-        return "null".equalsIgnoreCase(value)
-                ? ""
-                : value;
-    }
-
-    private int dp(
-            int value
-    ) {
-        return Math.round(
-                value
-                        * getResources()
-                        .getDisplayMetrics()
-                        .density
-        );
     }
 }

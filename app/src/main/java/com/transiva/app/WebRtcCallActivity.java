@@ -52,101 +52,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
-public class WebRtcCallActivity extends Activity {
-    private static final int REQ_MIC = 7101;
-    private static final long POLL_MS = 900L;
-    public static final String ACTION_CALL_STATE = "com.transiva.app.WEBRTC_CALL_STATE";
-    public static final String EXTRA_CALL_ID = "call_id";
-    public static final String EXTRA_CALL_STATUS = "call_status";
-    private static final String STATE_CALL_ID = "wr_call_id";
-    private static final String STATE_ORDER_ID = "wr_order_id";
-    private static final String STATE_SOURCE = "wr_source";
-    private static final String STATE_PEER = "wr_peer";
-    private static final String STATE_INCOMING = "wr_incoming";
-    private static final String STATE_ACCEPTED = "wr_accepted";
-    private static final Object RTC_INIT_LOCK = new Object();
-    private static boolean rtcFactoryInitialized;
-
-
-    private final Handler main = new Handler(Looper.getMainLooper());
-    private final ExecutorService io = Executors.newSingleThreadExecutor();
-    private final List<IceCandidate> pendingRemoteCandidates = new ArrayList<>();
-
-    private SessionManager session;
-    private String role;
-    private String orderId = "";
-    private String orderSource = "orders";
-    private String callId = "";
-    private String peerName = "";
-    private boolean incoming;
-    private boolean accepted;
-    private boolean autoAccept;
-    private boolean ended;
-    private boolean peerStarted;
-    private boolean offerCreated;
-    private boolean answerCreated;
-    private boolean remoteDescriptionSet;
-    private boolean rtcStartRequested;
-    private boolean muted;
-    private boolean speaker = true;
-    private int lastCandidateId;
-    private String lastServerStatus = "";
-
-    private PeerConnectionFactory factory;
-    private PeerConnection peerConnection;
-    private JavaAudioDeviceModule audioDeviceModule;
-    private AudioSource audioSource;
-    private AudioTrack localAudioTrack;
-    private AudioManager audioManager;
-    private Ringtone ringtone;
-
-    private TextView titleView;
-    private TextView statusView;
-    private Chronometer timerView;
-    private Button acceptButton;
-    private Button endButton;
-    private Button muteButton;
-    private Button speakerButton;
-    private boolean userRequestedClose;
-    private boolean everConnected;
-
-    private boolean receiverRegistered;
-    private volatile boolean destroyed;
-    private int rtcRetryCount;
-    private static final int MAX_RTC_RETRIES = 5;
-
-    private final Runnable rtcRetryTask = new Runnable() {
-        @Override public void run() {
-            if (destroyed || ended || !accepted || callId.isEmpty()) return;
-            status("Mencoba menyambungkan audio kembali...");
-            resetRtcForRetry();
-            loadIceAndStartPeer();
-        }
-    };
-
-    private final BroadcastReceiver callStateReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (intent == null || ended) return;
-            String eventCallId = clean(intent.getStringExtra(EXTRA_CALL_ID));
-            String eventStatus = clean(intent.getStringExtra(EXTRA_CALL_STATUS)).toLowerCase();
-            if (eventCallId.isEmpty() || !eventCallId.equals(callId)) return;
-            if ("accepted".equals(eventStatus)) {
-                handleStatus("accepted");
-                return;
-            }
-            handleTerminalStatus(eventStatus, true);
-        }
-    };
-
-    private final Runnable pollTask = new Runnable() {
-        @Override public void run() {
-            if (ended || destroyed || callId.isEmpty()) return;
-            pollSignal();
-            if (!ended && !destroyed) main.postDelayed(this, POLL_MS);
-        }
-    };
+public class WebRtcCallActivity extends WebRtcCallActivityLayer1 {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -206,7 +112,7 @@ public class WebRtcCallActivity extends Activity {
         }
     }
 
-    private void readIntent() {
+    protected void readIntent() {
         Intent i = getIntent();
         callId = clean(i.getStringExtra("call_id"));
         orderId = clean(i.getStringExtra("order_id"));
@@ -260,7 +166,7 @@ public class WebRtcCallActivity extends Activity {
         }
     }
 
-    private View buildUi() {
+    protected View buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -325,7 +231,7 @@ public class WebRtcCallActivity extends Activity {
         return root;
     }
 
-    private void ensureMicrophoneThenResume() {
+    protected void ensureMicrophoneThenResume() {
         if (Build.VERSION.SDK_INT >= 23
                 && checkSelfPermission(Manifest.permission.RECORD_AUDIO)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -337,7 +243,7 @@ public class WebRtcCallActivity extends Activity {
         loadIceAndStartPeer();
     }
 
-    private void ensureMicrophoneThenStart() {
+    protected void ensureMicrophoneThenStart() {
         if (Build.VERSION.SDK_INT >= 23 && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_MIC);
             return;
@@ -364,7 +270,7 @@ public class WebRtcCallActivity extends Activity {
         }
     }
 
-    private void startOutgoingCall() {
+    protected void startOutgoingCall() {
         debug("SIGNAL start outgoing order=" + orderId + " source=" + orderSource);
         if (orderId.isEmpty()) { toast("Order tidak valid"); finish(); return; }
         safeIo(() -> {
@@ -388,7 +294,7 @@ public class WebRtcCallActivity extends Activity {
         });
     }
 
-    private void acceptIncoming() {
+    protected void acceptIncoming() {
         debug("UI acceptIncoming() call=" + callId);
         if (accepted || callId.isEmpty()) return;
         accepted = true;
@@ -405,7 +311,7 @@ public class WebRtcCallActivity extends Activity {
         });
     }
 
-    private void loadIceAndStartPeer() {
+    protected void loadIceAndStartPeer() {
         debug("RTC loadIceAndStartPeer peerStarted=" + peerStarted + " accepted=" + accepted);
         if (peerStarted || ended) return;
         peerStarted = true;
@@ -444,7 +350,7 @@ public class WebRtcCallActivity extends Activity {
         });
     }
 
-    private void initializePeer(List<PeerConnection.IceServer> iceServers) {
+    protected void initializePeer(List<PeerConnection.IceServer> iceServers) {
         debug("RTC initializePeer servers=" + (iceServers == null ? 0 : iceServers.size()));
         if (ended || peerConnection != null || factory != null) return;
         try {
@@ -474,7 +380,7 @@ public class WebRtcCallActivity extends Activity {
         } catch (Throwable e) { fail(e); }
     }
 
-    private void createOffer() {
+    protected void createOffer() {
         debug("SDP createOffer requested");
         if (offerCreated || peerConnection == null) return;
         offerCreated = true;
@@ -493,7 +399,7 @@ public class WebRtcCallActivity extends Activity {
         }, c);
     }
 
-    private void createAnswer() {
+    protected void createAnswer() {
         debug("SDP createAnswer requested");
         if (answerCreated || peerConnection == null) return;
         answerCreated = true;
@@ -511,7 +417,7 @@ public class WebRtcCallActivity extends Activity {
         }, c);
     }
 
-    private void postSdp(String action, String sdp) {
+    protected void postSdp(String action, String sdp) {
         debug("SIGNAL post SDP " + action + " bytes=" + (sdp == null ? 0 : sdp.length()));
         safeIo(() -> {
             try { JSONObject p = basePayload(action); p.put("sdp", sdp); WebRtcSignalApi.post(session, p); }
@@ -519,7 +425,7 @@ public class WebRtcCallActivity extends Activity {
         });
     }
 
-    private void postCandidate(IceCandidate c) {
+    protected void postCandidate(IceCandidate c) {
         debug("ICE local candidate mid=" + (c == null ? "?" : c.sdpMid) + " line=" + (c == null ? -1 : c.sdpMLineIndex));
         safeIo(() -> {
             try {
@@ -532,7 +438,7 @@ public class WebRtcCallActivity extends Activity {
         });
     }
 
-    private void pollSignal() {
+    protected void pollSignal() {
         safeIo(() -> {
             try {
                 JSONObject p = basePayload("poll");
@@ -570,380 +476,4 @@ public class WebRtcCallActivity extends Activity {
             }
         });
     }
-
-    private void setRemote(SessionDescription sdp, Runnable after) {
-        debug("SDP setRemote type=" + (sdp == null ? "?" : sdp.type));
-        if (peerConnection == null || remoteDescriptionSet) return;
-        peerConnection.setRemoteDescription(new SimpleSdpObserver() {
-            @Override public void onSetSuccess() {
-                remoteDescriptionSet = true;
-                debug("SDP remote SET OK");
-                for (IceCandidate c : pendingRemoteCandidates) peerConnection.addIceCandidate(c);
-                pendingRemoteCandidates.clear();
-                if (after != null) after.run();
-            }
-            @Override public void onSetFailure(String error) { fail(new IllegalStateException("SDP remote gagal: " + error)); }
-        }, sdp);
-    }
-
-    private void addRemoteCandidate(IceCandidate candidate) {
-        if (candidate.sdp == null || candidate.sdp.isEmpty()) return;
-        if (remoteDescriptionSet && peerConnection != null) peerConnection.addIceCandidate(candidate);
-        else pendingRemoteCandidates.add(candidate);
-    }
-
-    private void handleStatus(String st) {
-        if (ended) return;
-        st = clean(st).toLowerCase();
-        if ("accepted".equals(st)) {
-            debug("CALL accepted by server");
-            // Accepted is a call-wide state, not only a callee-side UI state.
-            // Keeping this flag on the caller lets us retry WebRTC without
-            // accidentally closing the call screen.
-            accepted = true;
-            if (!incoming) {
-                status("Diterima, menyambungkan audio...");
-                if (!peerStarted && !rtcStartRequested) {
-                    rtcStartRequested = true;
-                    ensureMicrophoneThenResume();
-                }
-            }
-        }
-        handleTerminalStatus(st, false);
-    }
-
-    private void handleTerminalStatus(String st, boolean fromPush) {
-        if (ended) return;
-        if ("rejected".equals(st)) {
-            debug("CALL terminal server=rejected");
-            toast("Panggilan ditolak");
-            finishCall("", false);
-        } else if ("ended".equals(st) || "cancelled".equals(st) || "canceled".equals(st)) {
-            debug("CALL terminal server=" + st);
-            toast("Panggilan berakhir");
-            finishCall("", false);
-        } else if ("missed".equals(st) || "timeout".equals(st)) {
-            debug("CALL terminal server=" + st);
-            toast("Panggilan tidak terjawab");
-            finishCall("", false);
-        }
-    }
-
-    private void safeIo(Runnable task) {
-        if (task == null || destroyed || ended || io.isShutdown()) return;
-        try {
-            io.execute(() -> {
-                if (destroyed || ended) return;
-                try {
-                    task.run();
-                } catch (Throwable t) {
-                    // Do not let an executor callback kill the process.
-                    fail(t);
-                }
-            });
-        } catch (Throwable ignored) {
-            // Activity may be shutting down between the check and execute().
-        }
-    }
-
-    private void terminalIo(Runnable task) {
-        if (task == null || destroyed || io.isShutdown()) {
-            return;
-        }
-        try {
-            io.execute(task);
-        } catch (Throwable ignored) {
-            // Shutdown race: the UI will still be closed safely.
-        }
-    }
-
-    private void ensureRtcFactoryInitialized() {
-        synchronized (RTC_INIT_LOCK) {
-            if (rtcFactoryInitialized) return;
-            PeerConnectionFactory.initialize(
-                    PeerConnectionFactory.InitializationOptions
-                            .builder(getApplicationContext())
-                            .createInitializationOptions()
-            );
-            rtcFactoryInitialized = true;
-        }
-    }
-
-    private JSONObject basePayload(String action) throws Exception {
-        JSONObject p = new JSONObject();
-        p.put("action", action);
-        p.put("role", role);
-        if (!callId.isEmpty()) p.put("call_id", callId);
-        if (role.equals("customer")) p.put("user_id", session.getUserId());
-        return p;
-    }
-
-    private void finishCall(String action, boolean closeNow) {
-        debug("CALL finishCall action=" + action + " closeNow=" + closeNow);
-        if (closeNow) userRequestedClose = true;
-        if (ended) return;
-        ended = true;
-        stopRingtone();
-        main.removeCallbacks(pollTask);
-        main.removeCallbacks(rtcRetryTask);
-
-        final Runnable closeUi = () -> {
-            releaseRtc();
-            if (closeNow) finish();
-            else main.postDelayed(this::finish, 180);
-        };
-
-        if (!action.isEmpty() && !callId.isEmpty()) {
-            // IMPORTANT: do not finish the Activity before this terminal signal
-            // reaches the backend. Otherwise onDestroy() may cancel the executor
-            // and the peer can remain stuck on the call screen.
-            terminalIo(() -> {
-                try {
-                    WebRtcSignalApi.post(session, basePayload(action));
-                } catch (Exception ignored) {
-                    // Polling/timeout on the peer remains the fallback.
-                } finally {
-                    runOnUiThread(closeUi);
-                }
-            });
-        } else {
-            closeUi.run();
-        }
-    }
-
-    private void releaseRtc() {
-        try { if (peerConnection != null) { peerConnection.close(); peerConnection.dispose(); } } catch (Throwable ignored) {}
-        peerConnection = null;
-        try { if (localAudioTrack != null) localAudioTrack.dispose(); } catch (Throwable ignored) {}
-        try { if (audioSource != null) audioSource.dispose(); } catch (Throwable ignored) {}
-        try { if (factory != null) factory.dispose(); } catch (Throwable ignored) {}
-        try { if (audioDeviceModule != null) audioDeviceModule.release(); } catch (Throwable ignored) {}
-        if (audioManager != null) {
-            audioManager.setSpeakerphoneOn(false);
-            audioManager.setMode(AudioManager.MODE_NORMAL);
-        }
-    }
-
-
-    private void registerCallStateReceiver() {
-        if (receiverRegistered) return;
-        IntentFilter filter = new IntentFilter(ACTION_CALL_STATE);
-        ContextCompat.registerReceiver(
-                this,
-                callStateReceiver,
-                filter,
-                ContextCompat.RECEIVER_NOT_EXPORTED
-        );
-        receiverRegistered = true;
-    }
-
-    private void unregisterCallStateReceiver() {
-        if (!receiverRegistered) return;
-        try { unregisterReceiver(callStateReceiver); } catch (Throwable ignored) {}
-        receiverRegistered = false;
-    }
-
-    private void toggleMute() {
-        muted = !muted;
-        if (localAudioTrack != null) localAudioTrack.setEnabled(!muted);
-        muteButton.setText(muted ? "🔇 Muted" : "🎙 Mic");
-    }
-
-    private void toggleSpeaker() {
-        speaker = !speaker;
-        if (audioManager != null) audioManager.setSpeakerphoneOn(speaker);
-        speakerButton.setText(speaker ? "🔊 Speaker" : "🔈 Earpiece");
-    }
-
-    private void configureAudioRoute() {
-        audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-        if (audioManager != null) {
-            audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
-            audioManager.setSpeakerphoneOn(speaker);
-        }
-    }
-
-    private void startRingtone() {
-        try {
-            // The Activity is the single owner of call audio. FCM notifications
-            // are intentionally silent, preventing double ringtone.
-            if (ringtone != null && ringtone.isPlaying()) return;
-            Uri uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
-            ringtone = RingtoneManager.getRingtone(getApplicationContext(), uri);
-            if (ringtone != null && !ringtone.isPlaying()) ringtone.play();
-        } catch (Throwable ignored) {}
-    }
-
-    private void stopRingtone() {
-        IncomingCallAlertManager.stop(callId);
-        try { if (ringtone != null && ringtone.isPlaying()) ringtone.stop(); } catch (Throwable ignored) {}
-        ringtone = null;
-    }
-
-    private void cancelOwnCallNotification() {
-        String id = clean(callId);
-        if (id.isEmpty() && getIntent() != null) {
-            id = clean(getIntent().getStringExtra("call_id"));
-        }
-        if (id.isEmpty()) return;
-        try {
-            NotificationManager nm =
-                    (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-            if (nm != null) nm.cancel(Math.abs(("webrtc_call|" + id).hashCode()));
-        } catch (Throwable ignored) {}
-    }
-
-    private void connected() {
-        everConnected = true;
-        debug("RTC CONNECTED audio call active");
-        main.removeCallbacks(rtcRetryTask);
-        rtcRetryCount = 0;
-        stopRingtone();
-        status("Panggilan tersambung");
-        timerView.setBase(SystemClock.elapsedRealtime());
-        timerView.setVisibility(View.VISIBLE);
-        timerView.start();
-        acceptButton.setVisibility(View.GONE);
-        endButton.setText("Akhiri");
-    }
-
-    private void status(String text) { if (statusView != null) statusView.setText(text); }
-    private void toast(String text) { Toast.makeText(this, text, Toast.LENGTH_LONG).show(); }
-    private void fail(Throwable e) {
-        debug("ERROR " + (e == null ? "unknown" : e.getClass().getSimpleName() + ": " + clean(e.getMessage())));
-        if (destroyed || ended) return;
-        runOnUiThread(() -> {
-            if (destroyed || ended) return;
-            String message = (e == null || e.getMessage() == null || e.getMessage().trim().isEmpty())
-                    ? "Audio belum tersambung"
-                    : e.getMessage().trim();
-
-            // A WebRTC/SDP/ICE failure is NOT the same as the other person
-            // hanging up. Never close the call Activity automatically here.
-            status("Audio belum tersambung. Mencoba kembali...");
-
-            if (accepted && !callId.isEmpty() && rtcRetryCount < MAX_RTC_RETRIES) {
-                rtcRetryCount++;
-                main.removeCallbacks(rtcRetryTask);
-                main.postDelayed(rtcRetryTask, 1800L);
-            } else if (accepted && rtcRetryCount >= MAX_RTC_RETRIES) {
-                status("Panggilan tetap aktif, tetapi audio belum tersambung. Tekan Akhiri untuk menutup.");
-                toast("Koneksi audio belum berhasil: " + message);
-            } else {
-                status("Menyambungkan...");
-            }
-        });
-    }
-
-    private void resetRtcForRetry() {
-        debug("RTC reset retry #" + rtcRetryCount);
-        main.removeCallbacks(rtcRetryTask);
-        releaseRtc();
-        peerStarted = false;
-        rtcStartRequested = false;
-        offerCreated = false;
-        answerCreated = false;
-        remoteDescriptionSet = false;
-        pendingRemoteCandidates.clear();
-    }
-
-    @Override
-    @SuppressLint("MissingSuperCall")
-    public void onBackPressed() {
-        finishCall(
-                callId.isEmpty() ? "" : (incoming && !accepted ? "reject" : "end"),
-                true
-        );
-    }
-
-    @Override
-    protected void onSaveInstanceState(Bundle outState) {
-        outState.putString(STATE_CALL_ID, callId);
-        outState.putString(STATE_ORDER_ID, orderId);
-        outState.putString(STATE_SOURCE, orderSource);
-        outState.putString(STATE_PEER, peerName);
-        outState.putBoolean(STATE_INCOMING, incoming);
-        outState.putBoolean(STATE_ACCEPTED, accepted);
-        super.onSaveInstanceState(outState);
-    }
-
-    @Override protected void onPause() { super.onPause(); debug("LIFECYCLE onPause finishing=" + isFinishing()); }
-    @Override protected void onStop() { super.onStop(); debug("LIFECYCLE onStop finishing=" + isFinishing()); }
-
-    @Override
-    protected void onDestroy() {
-        debug("LIFECYCLE onDestroy finishing=" + isFinishing() + " ended=" + ended + " userClose=" + userRequestedClose + " connected=" + everConnected);
-        destroyed = true;
-        unregisterCallStateReceiver();
-        main.removeCallbacks(pollTask);
-        main.removeCallbacks(rtcRetryTask);
-        stopRingtone();
-
-        // Android/OEM may destroy and recreate this Activity without the user
-        // hanging up. Never send "end" from onDestroy().
-        releaseRtc();
-        io.shutdown();
-        super.onDestroy();
-    }
-
-    private class PeerObserver implements PeerConnection.Observer {
-        @Override public void onSignalingChange(PeerConnection.SignalingState newState) { debug("RTC signaling=" + newState); }
-        @Override public void onIceConnectionChange(PeerConnection.IceConnectionState state) {
-            debug("ICE connection=" + state);
-            runOnUiThread(() -> {
-                if (state == PeerConnection.IceConnectionState.CONNECTED || state == PeerConnection.IceConnectionState.COMPLETED) {
-                    connected();
-                } else if (state == PeerConnection.IceConnectionState.FAILED) {
-                    // Do not treat a transport failure as a hang-up. Mobile
-                    // networks often briefly report FAILED while switching
-                    // Wi-Fi/data or while TURN/STUN negotiation is retried.
-                    status("Koneksi audio gagal, mencoba kembali...");
-                    if (accepted && rtcRetryCount < MAX_RTC_RETRIES) {
-                        rtcRetryCount++;
-                        main.removeCallbacks(rtcRetryTask);
-                        main.postDelayed(rtcRetryTask, 1800L);
-                    } else {
-                        status("Panggilan tetap aktif, audio belum tersambung.");
-                    }
-                } else if (state == PeerConnection.IceConnectionState.DISCONNECTED) {
-                    status("Koneksi terputus, mencoba kembali...");
-                }
-            });
-        }
-        @Override public void onIceConnectionReceivingChange(boolean receiving) { debug("ICE receiving=" + receiving); }
-        @Override public void onIceGatheringChange(PeerConnection.IceGatheringState state) { debug("ICE gathering=" + state); }
-        @Override public void onIceCandidate(IceCandidate candidate) { postCandidate(candidate); }
-        @Override public void onIceCandidatesRemoved(IceCandidate[] candidates) {}
-        @Override public void onAddStream(MediaStream stream) {}
-        @Override public void onRemoveStream(MediaStream stream) {}
-        @Override public void onDataChannel(DataChannel dataChannel) {}
-        @Override public void onRenegotiationNeeded() { debug("RTC renegotiation needed"); }
-        @Override public void onAddTrack(RtpReceiver receiver, MediaStream[] mediaStreams) { debug("AUDIO remote track added"); }
-    }
-
-    private static class SimpleSdpObserver implements SdpObserver {
-        @Override public void onCreateSuccess(SessionDescription sdp) {}
-        @Override public void onSetSuccess() {}
-        @Override public void onCreateFailure(String error) {}
-        @Override public void onSetFailure(String error) {}
-    }
-
-    private void debug(String event) {
-        // Production: diagnostic UI/remote logging disabled.
-    }
-
-    private TextView text(String value, int sp, int color, boolean bold) {
-        TextView t = new TextView(this); t.setText(value); t.setTextSize(sp); t.setTextColor(color);
-        if (bold) t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD); return t;
-    }
-    private Button button(String value, String color) {
-        Button b = new Button(this); b.setText(value); b.setTextColor(Color.WHITE); b.setTextSize(14); b.setAllCaps(false); b.setBackground(round(color, 28)); return b;
-    }
-    private LinearLayout.LayoutParams controlLp() { LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(54), 1f); p.setMargins(dp(6),0,dp(6),0); return p; }
-    private LinearLayout.LayoutParams actionLp() { LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(58), 1f); p.setMargins(dp(8),0,dp(8),0); return p; }
-    private GradientDrawable round(String color, int radius) { GradientDrawable g=new GradientDrawable();g.setColor(Color.parseColor(color));g.setCornerRadius(dp(radius));return g; }
-    private GradientDrawable circle(String color) { GradientDrawable g=round(color,50);g.setShape(GradientDrawable.OVAL);return g; }
-    private int dp(int v) { return Math.round(v * getResources().getDisplayMetrics().density); }
-    private static String clean(String v) { return v == null ? "" : v.trim(); }
-    private static String first(String... values) { if (values != null) for (String v : values) if (v != null && !v.trim().isEmpty()) return v.trim(); return ""; }
 }
