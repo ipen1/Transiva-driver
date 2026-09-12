@@ -79,11 +79,35 @@ public class WebRtcCallActivity extends WebRtcCallActivityLayer1 {
         }
 
         debug("Activity onCreate role=" + role + " incoming=" + incoming + " accepted=" + accepted + " call=" + callId);
-        IncomingCallAlertManager.stop(callId);
-        cancelOwnCallNotification();
-        registerCallStateReceiver();
-        setContentView(buildUi());
-        configureAudioRoute();
+        TransivaDiagnostics.event(this, "call", incoming ? "INCOMING_UI_CREATE" : "OUTGOING_UI_CREATE");
+
+        // Incoming-call intents originate from FCM/PendingIntent and can be delivered
+        // by aggressive OEM task managers with partially restored state. Never let a
+        // non-essential setup step crash the Activity before the user can answer.
+        try { IncomingCallAlertManager.stop(callId); }
+        catch (Throwable t) { TransivaDiagnostics.error(this, "call", "ALERT_STOP_FAILED", t); }
+        try { cancelOwnCallNotification(); }
+        catch (Throwable t) { TransivaDiagnostics.error(this, "call", "NOTIFICATION_CANCEL_FAILED", t); }
+        try { registerCallStateReceiver(); }
+        catch (Throwable t) { TransivaDiagnostics.error(this, "call", "STATE_RECEIVER_REGISTER_FAILED", t); }
+
+        try {
+            setContentView(buildUi());
+        } catch (Throwable t) {
+            TransivaDiagnostics.error(this, "call", "CALL_UI_BUILD_FAILED", t);
+            Toast.makeText(this, "Panggilan masuk gagal dibuka. Silakan coba lagi.", Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
+
+        // Do not switch to MODE_IN_COMMUNICATION while an incoming call is merely
+        // ringing. Several OEM audio stacks become unstable when ringtone playback
+        // and communication mode are activated simultaneously. Configure audio only
+        // once a call is accepted or when starting an outgoing call.
+        if (!incoming || accepted) {
+            try { configureAudioRoute(); }
+            catch (Throwable t) { TransivaDiagnostics.error(this, "call", "AUDIO_ROUTE_INIT_FAILED", t); }
+        }
 
         if (incoming) {
             if (accepted) {
@@ -299,6 +323,8 @@ public class WebRtcCallActivity extends WebRtcCallActivityLayer1 {
         if (accepted || callId.isEmpty()) return;
         accepted = true;
         stopRingtone();
+        try { configureAudioRoute(); }
+        catch (Throwable t) { TransivaDiagnostics.error(this, "call", "AUDIO_ROUTE_ACCEPT_FAILED", t); }
         acceptButton.setVisibility(View.GONE);
         endButton.setText("Akhiri");
         status("Menghubungkan audio...");

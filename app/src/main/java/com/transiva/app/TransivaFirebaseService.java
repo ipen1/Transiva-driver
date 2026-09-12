@@ -420,16 +420,26 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
                     this, requestCode + 2, rejectIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
-            // Android 12+ gives CallStyle incoming-call notifications the highest
-            // call-specific ranking and renders prominent Answer/Decline actions.
-            // This is also the closest platform-native behavior to WhatsApp/Phone.
-            Person caller = new Person.Builder()
-                    .setName(data != null ? first(data.get("caller_name"), "Customer") : "Customer")
-                    .setImportant(true)
-                    .build();
-            builder.setStyle(NotificationCompat.CallStyle.forIncomingCall(
-                            caller, rejectPendingIntent, acceptPendingIntent))
-                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
+            // Prefer the platform call style, but never let an OEM-specific
+            // Notification/CallStyle implementation crash the FCM process. If the
+            // style cannot be constructed, explicit Answer/Reject actions provide a
+            // stable fallback while preserving CATEGORY_CALL behavior.
+            try {
+                Person caller = new Person.Builder()
+                        .setName(data != null ? first(data.get("caller_name"), "Customer") : "Customer")
+                        .setImportant(true)
+                        .build();
+                builder.setStyle(NotificationCompat.CallStyle.forIncomingCall(
+                                caller, rejectPendingIntent, acceptPendingIntent))
+                        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
+            } catch (Throwable callStyleError) {
+                TransivaDiagnostics.error(this, "call", "CALL_STYLE_FAILED", callStyleError);
+                builder.addAction(android.R.drawable.ic_menu_close_clear_cancel,
+                                "Tolak", rejectPendingIntent)
+                        .addAction(android.R.drawable.sym_action_call,
+                                "Terima", acceptPendingIntent)
+                        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
+            }
 
             if (canUseFullScreenCallIntent()) {
                 // Use a dedicated immutable Activity PendingIntent for the lock-screen
@@ -485,9 +495,35 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
             return;
         }
 
-        NotificationManagerCompat
-                .from(this)
-                .notify(requestCode, builder.build());
+        try {
+            NotificationManagerCompat
+                    .from(this)
+                    .notify(requestCode, builder.build());
+        } catch (Throwable notificationError) {
+            // A malformed/OEM-specific incoming-call notification must never crash
+            // FirebaseMessagingService and therefore the driver process. Record the
+            // failure and fall back to a minimal high-priority notification.
+            TransivaDiagnostics.error(this, "call", "INCOMING_NOTIFICATION_FAILED", notificationError);
+            if (incomingCallNotification) {
+                try {
+                    NotificationCompat.Builder fallback = new NotificationCompat.Builder(this, CH_CALL)
+                            .setSmallIcon(getSmallIcon())
+                            .setContentTitle(first(title, "Panggilan Transiva"))
+                            .setContentText(first(body, "Customer memanggil Anda"))
+                            .setCategory(NotificationCompat.CATEGORY_CALL)
+                            .setPriority(NotificationCompat.PRIORITY_MAX)
+                            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                            .setOngoing(true)
+                            .setAutoCancel(false)
+                            .setContentIntent(pendingIntent);
+                    NotificationManagerCompat.from(this).notify(requestCode, fallback.build());
+                } catch (Throwable fallbackError) {
+                    TransivaDiagnostics.error(this, "call", "INCOMING_NOTIFICATION_FALLBACK_FAILED", fallbackError);
+                    // Keep the process alive. IncomingCallAlertManager is already
+                    // ringing and the next call-state push can still be processed.
+                }
+            }
+        }
 
         // Do not start an Activity directly from background FCM. The notification
         // is the sole entry point while backgrounded, so calls stay compliant with
