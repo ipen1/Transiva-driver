@@ -34,14 +34,18 @@ if 'android.permission.FOREGROUND_SERVICE_DATA_SYNC' in text:
 if text.count('android:foregroundServiceType=') != 1 or 'android:foregroundServiceType="location"' not in text:
     errors += fail('release manifest must expose exactly one foregroundServiceType: location')
 
-dashboard = read(ROOT / 'app/src/main/java/com/transiva/app/DriverDashboardActivity.java')
+def java_family(stem):
+    base=ROOT/'app/src/main/java/com/transiva/app'
+    return '\n'.join(read(p) for p in sorted(base.glob(stem+'*.java')))
+
+dashboard = java_family('DriverDashboardActivity')
 for phrase in ['data lokasi presisi', 'latar belakang', 'aplikasi ditutup atau tidak sedang digunakan', 'tidak digunakan untuk iklan']:
     if phrase not in dashboard:
         errors += fail(f'background-location prominent disclosure missing required concept: {phrase}')
 for rel in ['playstore/PLAY_CONSOLE_DECLARATIONS_FINAL.md','playstore/BACKGROUND_LOCATION_VIDEO_SCRIPT.md','playstore/DATA_SAFETY_FORM.md','playstore/APP_ACCESS_REVIEWER.md','playstore/privacy.html']:
     if not (ROOT/rel).exists(): errors += fail(f'missing Play submission artifact: {rel}')
 
-firebase = read(ROOT / 'app/src/main/java/com/transiva/app/TransivaFirebaseService.java')
+firebase = java_family('TransivaFirebaseService')
 # Full-screen intent is allowed only for the genuine WebRTC incoming-call path.
 if 'android.permission.USE_FULL_SCREEN_INTENT' not in text:
     errors += fail('incoming-call permission USE_FULL_SCREEN_INTENT missing')
@@ -57,8 +61,9 @@ if 'IncomingCallActionReceiver.ACTION_REJECT' not in firebase: errors += fail('i
 if 'NotificationCompat.CallStyle.forIncomingCall' not in firebase: errors += fail('incoming call does not use platform CallStyle')
 if 'fullScreenPendingIntent' not in firebase: errors += fail('dedicated full-screen PendingIntent missing')
 if 'acceptIntent.putExtra("auto_accept", true)' not in firebase: errors += fail('incoming call notification accept action missing')
-for rel in ['app/src/main/java/com/transiva/app/DriverChatRoomActivity.java', 'app/src/main/java/com/transiva/app/DriverTopUpActivity.java']:
-    if 'ACTION_OPEN_DOCUMENT' not in read(ROOT / rel): errors += fail(f'{rel} is not using the system document picker')
+if 'ACTION_OPEN_DOCUMENT' not in java_family('DriverChatRoomActivity'): errors += fail('DriverChatRoomActivity family is not using the system document picker')
+rel='app/src/main/java/com/transiva/app/DriverTopUpActivity.java'
+if 'ACTION_OPEN_DOCUMENT' not in read(ROOT / rel): errors += fail(f'{rel} is not using the system document picker')
 
 for rel in ['gradlew','gradlew.bat','gradle/wrapper/gradle-wrapper.jar','gradle/wrapper/gradle-wrapper.properties']:
     if not (ROOT/rel).exists(): errors += fail(f'missing Gradle wrapper component: {rel}')

@@ -14,11 +14,13 @@ def forbid(path, text, label):
     data=path.read_text(errors='ignore')
     if text in data: fail.append(f'{label}: forbidden {text}')
 
-chat=app/'DriverChatRoomActivity.java'
-need(chat,'DriverResponsiveUi.apply(this);','chat responsive/IME policy')
-need(chat,'DriverNetworkExecutor.execute','chat shared executor')
-need(chat,'private void postUi(Runnable action)','chat lifecycle callback guard')
-forbid(chat,'new Thread(() -> {','chat raw thread')
+def family(stem):
+    return '\n'.join(p.read_text(errors='ignore') for p in sorted(app.glob(stem+'*.java')))
+
+chat_text=family('DriverChatRoomActivity')
+for token,label in [('DriverResponsiveUi.apply(this);','chat responsive/IME policy'),('DriverNetworkExecutor.execute','chat shared executor'),('void postUi(Runnable action)','chat lifecycle callback guard')]:
+    if token not in chat_text: fail.append(f'{label}: missing {token}')
+if 'new Thread(() -> {' in chat_text: fail.append('chat raw thread: forbidden new Thread(() -> {')
 
 api=app/'driver/data/DriverApiClient.java'
 for code in ['SESSION_REPLACED','SESSION_EXPIRED','TOKEN_REVOKED','DEVICE_REVOKED']:

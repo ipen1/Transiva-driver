@@ -28,14 +28,16 @@ expected = {
 base = JAVA / "com/transiva/app"
 for activity, delegate in expected.items():
     p = base / activity
+    stem = activity[:-5]
+    family = '\n'.join(x.read_text(errors='ignore') for x in sorted(base.glob(stem+'*.java')))
     if not p.exists(): failures.append(f"{activity} missing")
-    elif delegate not in p.read_text(errors="ignore"):
+    elif delegate not in family:
         failures.append(f"{activity} is not delegating to {delegate}")
     if not (base / f"{delegate}.java").exists():
         failures.append(f"{delegate}.java missing")
 
 # Core order vocabulary must remain untouched.
-trip = (base / "DriverTripActivity.java").read_text(errors="ignore")
+trip = '\n'.join(x.read_text(errors='ignore') for x in sorted(base.glob('DriverTripActivity*.java')))
 for status in ["arrived_pickup", "on_delivery", "arrived_delivery", "finished"]:
     if status not in trip: failures.append(f"Trip core status missing: {status}")
 state = (base / "DriverOrderStateMachine.java").read_text(errors="ignore")

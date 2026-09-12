@@ -12,7 +12,13 @@ def must(cond,msg):
 manifest=(ROOT/'app/src/main/AndroidManifest.xml').read_text(encoding='utf-8')
 controller=(ROOT/'app/src/main/java/com/transiva/app/DriverServiceController.java').read_text(encoding='utf-8')
 location=(ROOT/'app/src/main/java/com/transiva/app/LocationService.java').read_text(encoding='utf-8')
-fcm=(ROOT/'app/src/main/java/com/transiva/app/TransivaFirebaseService.java').read_text(encoding='utf-8')
+
+def family(name):
+    base=ROOT/'app/src/main/java/com/transiva/app'
+    stem=name[:-5] if name.endswith('.java') else name
+    return '\n'.join(p.read_text(encoding='utf-8', errors='ignore') for p in sorted(base.glob(stem+'*.java')))
+
+fcm=family('TransivaFirebaseService.java')
 
 must('android:name=".LocationService"' in manifest, 'LocationService missing from Manifest')
 for legacy in ('TransivaDriverForegroundService','BackgroundSyncService'):
