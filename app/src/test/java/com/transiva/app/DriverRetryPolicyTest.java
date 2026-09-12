@@ -5,19 +5,21 @@ import static org.junit.Assert.*;
 
 public class DriverRetryPolicyTest {
     @Test
-    public void retryBackoffIsMonotonic() {
-        long[] delaysMs = {1000L, 2000L, 4000L, 8000L};
-        for (int i = 1; i < delaysMs.length; i++) {
-            assertTrue(delaysMs[i] > delaysMs[i - 1]);
-        }
+    public void nonRetryableClientErrorHasNoDelay() {
+        assertEquals(0L, DriverRetryPolicy.delayFor(400, 0, 0));
+        assertEquals(0L, DriverRetryPolicy.delayFor(404, 0, 2));
     }
 
     @Test
-    public void retryBackoffRemainsBounded() {
-        long maximumDelayMs = 30_000L;
-        long[] delaysMs = {1000L, 2000L, 4000L, 8000L};
-        for (long delay : delaysMs) {
-            assertTrue(delay <= maximumDelayMs);
-        }
+    public void retryAfterIsRespectedAndCapped() {
+        assertEquals(5_000L, DriverRetryPolicy.delayFor(429, 5, 0));
+        assertEquals(60_000L, DriverRetryPolicy.delayFor(429, 120, 0));
+    }
+
+    @Test
+    public void serverRetryDelayStaysWithinExpectedBounds() {
+        long delay = DriverRetryPolicy.delayFor(500, 0, 0);
+        assertTrue(delay >= 5_000L);
+        assertTrue(delay <= 6_000L);
     }
 }

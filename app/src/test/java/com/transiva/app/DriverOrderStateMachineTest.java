@@ -28,6 +28,16 @@ public class DriverOrderStateMachineTest {
         assertEquals("finishOrder.php", DriverOrderStateMachine.endpoint("finished", false));
     }
 
+    @Test public void onlyForwardOperationalTransitionsAreAllowed() {
+        assertTrue(DriverOrderStateMachine.canTransition("driver_accepted", "arrived_pickup"));
+        assertTrue(DriverOrderStateMachine.canTransition("arrived_pickup", "on_delivery"));
+        assertTrue(DriverOrderStateMachine.canTransition("on_delivery", "arrived_delivery"));
+        assertTrue(DriverOrderStateMachine.canTransition("arrived_delivery", "finished"));
+        assertFalse(DriverOrderStateMachine.canTransition("driver_accepted", "finished"));
+        assertFalse(DriverOrderStateMachine.canTransition("on_delivery", "arrived_pickup"));
+        assertFalse(DriverOrderStateMachine.canTransition("finished", "arrived_delivery"));
+    }
+
     @Test public void pickupUsesUnifiedEndpointForEveryStage() {
         assertEquals("driver_update_unified_status.php", DriverOrderStateMachine.endpoint("arrived_pickup", true));
         assertEquals("driver_update_unified_status.php", DriverOrderStateMachine.endpoint("finished", true));

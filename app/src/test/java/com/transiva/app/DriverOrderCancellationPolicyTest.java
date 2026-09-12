@@ -5,26 +5,22 @@ import static org.junit.Assert.*;
 
 public class DriverOrderCancellationPolicyTest {
     @Test
-    public void canonicalDriverOrderSequenceIsPreserved() {
-        String[] states = {
-                "driver_accepted",
-                "arrived_pickup",
-                "on_delivery",
-                "arrived_delivery",
-                "finished"
-        };
-        assertArrayEquals(new String[] {
-                "driver_accepted",
-                "arrived_pickup",
-                "on_delivery",
-                "arrived_delivery",
-                "finished"
-        }, states);
+    public void cancellableStatusesRemainCompatible() {
+        assertTrue(DriverOrderCancellationPolicy.canCancel("driver_accepted"));
+        assertTrue(DriverOrderCancellationPolicy.canCancel("arrived_pickup"));
+        assertTrue(DriverOrderCancellationPolicy.canCancel("accepted"));
+        assertTrue(DriverOrderCancellationPolicy.canCancel("taken"));
     }
 
     @Test
-    public void finishedIsTerminalState() {
-        String terminalState = "finished";
-        assertEquals("finished", terminalState);
+    public void deliveryAndFinishedStatusesCannotBeCancelled() {
+        assertFalse(DriverOrderCancellationPolicy.canCancel("on_delivery"));
+        assertFalse(DriverOrderCancellationPolicy.canCancel("arrived_delivery"));
+        assertFalse(DriverOrderCancellationPolicy.canCancel("finished"));
+    }
+
+    @Test
+    public void normalizationIsStable() {
+        assertEquals("driver_accepted", DriverOrderCancellationPolicy.normalize(" Driver-Accepted "));
     }
 }
