@@ -482,13 +482,7 @@ abstract class DriverDashboardActivityLayer1 extends Activity
         return value == null ? "" : value.trim();
     }
     // Cross-layer contracts keep the split type-safe without duplicating state.
-    protected abstract void onCreate(Bundle savedInstanceState);
     protected abstract void showOpportunityPromptIfNeeded(Intent intent);
-    protected abstract void onStart();
-    protected abstract void onStop();
-    protected abstract void onResume();
-    protected abstract void onPause();
-    protected abstract void onDestroy();
     protected abstract boolean validSession();
     protected abstract View buildScreen();
     protected abstract void buildHeader();
@@ -504,13 +498,13 @@ abstract class DriverDashboardActivityLayer1 extends Activity
     protected abstract int clusterAccent(int drivers);
     protected abstract void sendEmergency();
     protected abstract void buildOrderSections();
-    protected abstract void showLoading(boolean visible);
-    protected abstract void showDashboard(DriverDashboardState state);
+    public abstract void showLoading(boolean visible);
+    public abstract void showDashboard(DriverDashboardState state);
     protected abstract void playIncomingOrderEffect();
-    protected abstract void showActionLoading(String action, boolean visible);
-    protected abstract void showMessage(String message);
-    protected abstract void showSessionExpired();
-    protected abstract void openTrip(DriverOrder order);
+    public abstract void showActionLoading(String action, boolean visible);
+    public abstract void showMessage(String message);
+    public abstract void showSessionExpired();
+    public abstract void openTrip(DriverOrder order);
     protected abstract JSONObject foodPayload(JSONObject raw);
     protected abstract boolean isFoodOrder(DriverOrder order);
     protected abstract String merchantStatusLabel(String raw);

@@ -523,13 +523,10 @@ abstract class WebRtcCallActivityLayer1 extends Activity {
     protected GradientDrawable circle(String color) { GradientDrawable g=round(color,50);g.setShape(GradientDrawable.OVAL);return g; }
     protected int dp(int v) { return Math.round(v * getResources().getDisplayMetrics().density); }
     // Cross-layer contracts keep the split type-safe without duplicating state.
-    protected abstract void onCreate(Bundle savedInstanceState);
     protected abstract void readIntent();
-    protected abstract void onNewIntent(Intent intent);
     protected abstract View buildUi();
     protected abstract void ensureMicrophoneThenResume();
     protected abstract void ensureMicrophoneThenStart();
-    protected abstract void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults);
     protected abstract void startOutgoingCall();
     protected abstract void acceptIncoming();
     protected abstract void loadIceAndStartPeer();
