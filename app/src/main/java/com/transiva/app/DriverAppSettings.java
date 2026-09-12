@@ -58,7 +58,35 @@ public final class DriverAppSettings {
     }
 
     public static void setDarkMode(Context context, boolean enabled) {
+        boolean previous = isDarkMode(context);
         prefs(context).edit().putBoolean(KEY_DARK, enabled).apply();
+        if (previous != enabled) {
+            refreshTrackedActivities();
+        }
+    }
+
+    /**
+     * Refresh semua activity driver yang masih hidup ketika user mengganti tema.
+     * Sebelumnya perubahan baru terlihat setelah halaman dibuat ulang manual,
+     * sehingga Transaksi/Dashboard yang masih ada di back stack terlihat memakai
+     * tema lama. apply() sendiri akan mendeteksi perubahan dan recreate satu kali.
+     */
+    private static void refreshTrackedActivities() {
+        final Activity[] activities;
+        synchronized (APPLIED_ACTIVITY_THEMES) {
+            activities = APPLIED_ACTIVITY_THEMES.keySet().toArray(new Activity[0]);
+        }
+        for (Activity activity : activities) {
+            if (activity == null || activity.isFinishing()) continue;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1
+                    && activity.isDestroyed()) continue;
+            activity.runOnUiThread(() -> {
+                if (activity.isFinishing()) return;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1
+                        && activity.isDestroyed()) return;
+                apply(activity);
+            });
+        }
     }
 
     public static boolean isVibrationEnabled(Context context) {

@@ -93,10 +93,8 @@ public class DriverSettingsActivity extends Activity {
                 "Mode Malam",
                 "Aktifkan tema gelap pada seluruh halaman driver",
                 DriverAppSettings.isDarkMode(this),
-                (button, checked) -> {
-                    DriverAppSettings.setDarkMode(this, checked);
-                    recreate();
-                }
+                (button, checked) ->
+                        DriverAppSettings.setDarkMode(this, checked)
         ));
         root.addView(card);
 

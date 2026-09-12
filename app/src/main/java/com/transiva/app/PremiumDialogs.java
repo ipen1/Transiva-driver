@@ -19,6 +19,7 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -89,6 +90,11 @@ public final class PremiumDialogs {
                 list.setPadding(dp(context, 8), dp(context, 4), dp(context, 8), dp(context, 8));
                 list.setClipToPadding(false);
             }
+
+            // Custom EditText pada dialog harga/PIN sebelumnya tidak ikut tema
+            // PremiumDialogs, sehingga teks hitam berada di atas surface gelap.
+            // Terapkan palet input berdasarkan pilihan tema Transiva, bukan theme OEM.
+            if (window != null) styleCustomInputs(context, window.getDecorView());
 
             styleAction(context, dialog.getButton(AlertDialog.BUTTON_POSITIVE), Action.PRIMARY);
             styleAction(context, dialog.getButton(AlertDialog.BUTTON_NEGATIVE), Action.SECONDARY);
@@ -216,6 +222,30 @@ public final class PremiumDialogs {
 
         root.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         return root;
+    }
+
+    private static void styleCustomInputs(Context context, View view) {
+        if (view == null) return;
+        if (view instanceof EditText) {
+            EditText input = (EditText) view;
+            boolean dark = isNight(context);
+            input.setTextColor(dark ? Color.parseColor("#EEF5FF") : Color.parseColor("#0F172A"));
+            input.setHintTextColor(dark ? Color.parseColor("#8499B2") : Color.parseColor("#7B8A9D"));
+
+            GradientDrawable bg = new GradientDrawable();
+            bg.setColor(dark ? Color.parseColor("#0C1724") : Color.parseColor("#F8FAFC"));
+            bg.setStroke(dp(context, 1), dark ? Color.parseColor("#334B67") : Color.parseColor("#D8E4F2"));
+            bg.setCornerRadius(dp(context, 13));
+            input.setBackground(bg);
+            input.setPadding(dp(context, 14), input.getPaddingTop(), dp(context, 14), input.getPaddingBottom());
+            input.setMinHeight(dp(context, 50));
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                styleCustomInputs(context, group.getChildAt(i));
+            }
+        }
     }
 
     private static void styleAction(Context context, Button button, Action action) {
@@ -366,11 +396,26 @@ public final class PremiumDialogs {
     }
 
     private static boolean isNight(Context context) {
-        int mask = context.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
-        return mask == Configuration.UI_MODE_NIGHT_YES;
+        // Tema aplikasi adalah sumber kebenaran. Jangan mengikuti uiMode OEM karena
+        // toggle Mode Malam Transiva dapat berbeda dari tema sistem perangkat.
+        return DriverAppSettings.isDarkMode(context);
     }
 
     private static int color(Context context, int id) {
+        // values-night mengikuti uiMode sistem, sedangkan Transiva mempunyai toggle
+        // tema sendiri. Resolve palet dialog secara eksplisit agar dialog selalu
+        // sinkron dengan DriverAppSettings pada kedua arah (gelap <-> terang).
+        boolean dark = isNight(context);
+        if (id == R.color.transiva_dialog_surface)
+            return Color.parseColor(dark ? "#121E2E" : "#FFFFFF");
+        if (id == R.color.transiva_dialog_title)
+            return Color.parseColor(dark ? "#F4F8FF" : "#0B2F66");
+        if (id == R.color.transiva_dialog_text)
+            return Color.parseColor(dark ? "#B8C5D6" : "#56657A");
+        if (id == R.color.transiva_dialog_border)
+            return Color.parseColor(dark ? "#29405C" : "#DCE8F7");
+        if (id == R.color.transiva_dialog_button_secondary)
+            return Color.parseColor(dark ? "#BFD4EE" : "#34506F");
         return Build.VERSION.SDK_INT >= 23 ? context.getColor(id) : context.getResources().getColor(id);
     }
 
