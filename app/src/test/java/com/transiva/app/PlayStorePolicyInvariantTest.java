@@ -57,8 +57,15 @@ public class PlayStorePolicyInvariantTest {
 
     @Test
     public void firebaseServiceUsesGuardedFullScreenIntentOnlyForIncomingWebRtcCalls() throws Exception {
-        String source = readFromRepo(
-                "app/src/main/java/com/transiva/app/TransivaFirebaseService.java");
+        // The Firebase service is intentionally split into a small class-family after
+        // Stability 4.1 refactoring. Policy invariants belong to the runtime family,
+        // not only to the manifest-visible leaf class.
+        String source =
+                readFromRepo("app/src/main/java/com/transiva/app/TransivaFirebaseServiceLayer1.java")
+                + "\n"
+                + readFromRepo("app/src/main/java/com/transiva/app/TransivaFirebaseServiceLayer2.java")
+                + "\n"
+                + readFromRepo("app/src/main/java/com/transiva/app/TransivaFirebaseService.java");
 
         assertTrue(source.contains("transiva_call_channel_v6"));
         assertTrue(source.contains("incomingCallNotification"));
