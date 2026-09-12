@@ -10,12 +10,12 @@ import org.json.JSONObject;
 
 /** Owns the complete Trip cancellation UX/network flow. */
 public final class TripCancellationController {
-    private final DriverTripActivity host;
+    private final DriverTripActivityLayer1 host;
     private final JSONObject order;
     private final SessionManager session;
     private final Button cancelButton;
 
-    public TripCancellationController(DriverTripActivity host, JSONObject order,
+    public TripCancellationController(DriverTripActivityLayer1 host, JSONObject order,
                                       SessionManager session, Button cancelButton) {
         this.host = host;
         this.order = order;

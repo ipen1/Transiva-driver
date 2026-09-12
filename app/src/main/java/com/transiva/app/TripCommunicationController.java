@@ -15,7 +15,7 @@ import org.json.JSONObject;
 
 /** Customer/merchant chat and native-navigation launcher for DriverTripActivity. */
 public final class TripCommunicationController {
-    private final DriverTripActivity host;
+    private final DriverTripActivityLayer1 host;
     private final JSONObject order;
     private final String driverUsername;
     private final Button chatButton;
@@ -25,7 +25,7 @@ public final class TripCommunicationController {
         @Override public void onReceive(Context context, Intent intent) { refreshUnread(); }
     };
 
-    public TripCommunicationController(DriverTripActivity host, JSONObject order,
+    public TripCommunicationController(DriverTripActivityLayer1 host, JSONObject order,
                                        String driverUsername, Button chatButton) {
         this.host = host;
         this.order = order == null ? new JSONObject() : order;
