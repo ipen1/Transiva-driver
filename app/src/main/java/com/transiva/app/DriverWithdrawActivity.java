@@ -184,7 +184,7 @@ public class DriverWithdrawActivity extends Activity {
             public View getDropDownView(int position, View convertView, android.view.ViewGroup parent) {
                 TextView view = (TextView) super.getDropDownView(position, convertView, parent);
                 view.setTextSize(14);
-                view.setTextColor(DriverThemeTokens.color(this, "#0F172A"));
+                view.setTextColor(DriverThemeTokens.textPrimary(DriverWithdrawActivity.this));
                 view.setPadding(dp(14), dp(12), dp(14), dp(12));
                 return view;
             }
