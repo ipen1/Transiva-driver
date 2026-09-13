@@ -290,7 +290,7 @@ public class DriverChatActivity extends DriverChatActivityLayer1 {
         HttpURLConnection connection = null;
 
         try {
-            connection = DriverHttpTransport.open(endpoint);
+            connection = com.transiva.app.driver.data.DriverConnectionRepository.open(endpoint);
             connection.setRequestMethod("GET");
             connection.setConnectTimeout(20000);
             connection.setReadTimeout(20000);

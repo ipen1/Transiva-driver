@@ -55,7 +55,7 @@ public final class DriverMessageApi {
         HttpURLConnection connection = null;
 
         try {
-            connection = DriverHttpTransport.open(endpoint);
+            connection = com.transiva.app.driver.data.DriverConnectionRepository.open(endpoint);
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(TIMEOUT_MS);
             connection.setReadTimeout(TIMEOUT_MS);
@@ -123,7 +123,7 @@ public final class DriverMessageApi {
         String boundary = "----TransivaDriverVoice" + System.currentTimeMillis();
         HttpURLConnection connection = null;
         try {
-            connection = DriverHttpTransport.open(endpoint);
+            connection = com.transiva.app.driver.data.DriverConnectionRepository.open(endpoint);
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(TIMEOUT_MS);
             connection.setReadTimeout(TIMEOUT_MS);
@@ -163,7 +163,7 @@ public final class DriverMessageApi {
         HttpURLConnection connection = null;
 
         try {
-            connection = DriverHttpTransport.open(endpoint);
+            connection = com.transiva.app.driver.data.DriverConnectionRepository.open(endpoint);
             connection.setRequestMethod(method);
             connection.setConnectTimeout(TIMEOUT_MS);
             connection.setReadTimeout(TIMEOUT_MS);

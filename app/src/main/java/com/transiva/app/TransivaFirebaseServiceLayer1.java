@@ -227,7 +227,7 @@ abstract class TransivaFirebaseServiceLayer1 extends FirebaseMessagingService {
                 );
 
                 connection =
-                        DriverHttpTransport.open(url);
+                        com.transiva.app.driver.data.DriverConnectionRepository.open(url);
 
                 connection.setRequestMethod("POST");
                 connection.setConnectTimeout(15000);

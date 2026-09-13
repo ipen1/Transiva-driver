@@ -70,7 +70,7 @@ public class ApiClient {
 
                 URL url = new URL(fullUrl);
 
-                conn = DriverHttpTransport.open(url);
+                conn = com.transiva.app.driver.data.DriverConnectionRepository.open(url);
                 conn.setConnectTimeout(CONNECT_TIMEOUT);
                 conn.setReadTimeout(READ_TIMEOUT);
                 conn.setUseCaches(false);

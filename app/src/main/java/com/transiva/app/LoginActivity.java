@@ -376,7 +376,7 @@ public class LoginActivity extends LoginActivityLayer2 {
         HttpURLConnection connection = null;
 
         try {
-            connection = DriverHttpTransport.open(LOGIN_URL);
+            connection = com.transiva.app.driver.data.DriverConnectionRepository.open(LOGIN_URL);
 
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(TIMEOUT_MS);

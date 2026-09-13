@@ -19,7 +19,7 @@ public final class WebRtcSignalApi {
     public static JSONObject post(SessionManager session, JSONObject payload) throws Exception {
         HttpURLConnection connection = null;
         try {
-            connection = DriverHttpTransport.open(ENDPOINT);
+            connection = com.transiva.app.driver.data.DriverConnectionRepository.open(ENDPOINT);
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(TIMEOUT_MS);
             connection.setReadTimeout(TIMEOUT_MS);

@@ -456,7 +456,7 @@ public class BackgroundSyncService extends BackgroundSyncServiceLayer1 {
                     new URL(BASE_URL + cleanEndpoint(endpoint));
 
             conn =
-                    DriverHttpTransport.open(url);
+                    com.transiva.app.driver.data.DriverConnectionRepository.open(url);
 
             conn.setRequestMethod("POST");
             conn.setConnectTimeout(CONNECT_TIMEOUT);

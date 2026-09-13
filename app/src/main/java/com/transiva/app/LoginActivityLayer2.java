@@ -131,7 +131,7 @@ abstract class LoginActivityLayer2 extends LoginActivityLayer1 {
             HttpURLConnection connection = null;
 
             try {
-                connection = DriverHttpTransport.open(SAVE_FCM_URL);
+                connection = com.transiva.app.driver.data.DriverConnectionRepository.open(SAVE_FCM_URL);
 
                 String authToken = new SessionManager(this).getToken();
                 if (authToken != null && !authToken.trim().isEmpty()) {

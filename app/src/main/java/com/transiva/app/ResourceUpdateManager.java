@@ -126,7 +126,7 @@ public final class ResourceUpdateManager {
 
     private static ManifestInfo fetchManifest(int installed, int currentResource) throws Exception {
         URL u = new URL(ENDPOINT + "?role=driver&resource_version=" + currentResource + "&app_version_code=" + installed);
-        HttpURLConnection c = DriverHttpTransport.open(u);
+        HttpURLConnection c = com.transiva.app.driver.data.DriverConnectionRepository.open(u);
         c.setConnectTimeout(CONNECT_TIMEOUT_MS);
         c.setReadTimeout(READ_TIMEOUT_MS);
         c.setRequestMethod("GET");
@@ -162,7 +162,7 @@ public final class ResourceUpdateManager {
         long existing = out.isFile() ? out.length() : 0L;
         if (existing < 0 || existing > expectedSize) { out.delete(); existing = 0L; }
 
-        HttpURLConnection c = DriverHttpTransport.open(url);
+        HttpURLConnection c = com.transiva.app.driver.data.DriverConnectionRepository.open(url);
         c.setConnectTimeout(CONNECT_TIMEOUT_MS);
         c.setReadTimeout(READ_TIMEOUT_MS);
         c.setInstanceFollowRedirects(false);

@@ -444,7 +444,7 @@ public class DriverSettingsActivity extends Activity {
     private JSONObject requestDevice(String method, JSONObject body) throws Exception {
         HttpURLConnection conn = null;
         try {
-            conn = DriverHttpTransport.open(DEVICE_URL);
+            conn = com.transiva.app.driver.data.DriverConnectionRepository.open(DEVICE_URL);
             conn.setRequestMethod(method);
             conn.setConnectTimeout(15000);
             conn.setReadTimeout(20000);

@@ -79,7 +79,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         try {
             if (getActionBar() != null) getActionBar().hide();
             getWindow().setStatusBarColor(DriverThemeTokens.color(this, "#0B3A78"));
-            getWindow().setNavigationBarColor(Color.BLACK);
+            getWindow().setNavigationBarColor(DriverThemeTokens.background(this));
         } catch (Throwable t) {
             NavigationDiagnostics.error(this, "NAV_WINDOW_SETUP_FAILED", t);
         }
@@ -235,7 +235,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
 
         speedBadge = new TextView(this);
         speedBadge.setText("0 km/j\nRata-rata 0 km/j");
-        speedBadge.setTextColor(Color.WHITE);
+        speedBadge.setTextColor(DriverThemeTokens.onAccent(this));
         speedBadge.setTextSize(16);
         speedBadge.setPadding(dp(16), dp(10), dp(16), dp(10));
         speedBadge.setBackground(roundRect(DriverThemeTokens.color(this, "#E6071426"), 22));
@@ -322,7 +322,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         if (fallbackButton == null && navigationRoot != null) {
             fallbackButton = new TextView(this);
             fallbackButton.setText("Buka Google Maps");
-            fallbackButton.setTextColor(Color.WHITE);
+            fallbackButton.setTextColor(DriverThemeTokens.onAccent(this));
             fallbackButton.setTextSize(15);
             fallbackButton.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
             fallbackButton.setGravity(Gravity.CENTER);

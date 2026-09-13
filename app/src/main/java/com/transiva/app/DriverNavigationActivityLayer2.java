@@ -68,6 +68,8 @@ import static org.maplibre.android.style.layers.PropertyFactory.iconRotationAlig
 import static org.maplibre.android.style.layers.PropertyFactory.iconSize;
 import static org.maplibre.android.style.layers.Property.LINE_CAP_ROUND;
 import static org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND;
+/** Stability 4.2 Layer Retirement Phase 1: frozen compatibility layer; new logic belongs in controllers. */
+@Deprecated
 abstract class DriverNavigationActivityLayer2 extends DriverNavigationActivityLayer1 {
 
     protected double easeBearing(double current, double target, float alpha) {

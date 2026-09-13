@@ -60,6 +60,8 @@ import java.nio.charset.StandardCharsets;
 import java.text.NumberFormat;
 import java.util.Locale;
 import android.util.Base64;
+/** Stability 4.2 Layer Retirement Phase 1: frozen compatibility layer; new logic belongs in controllers. */
+@Deprecated
 abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
     protected JSONObject parseFoodNote(){
         try{ JSONObject d = new JSONObject(first(order.optString("note"), "{}")); return "food".equalsIgnoreCase(d.optString("type")) ? d : null; }catch(Exception e){ return null; }

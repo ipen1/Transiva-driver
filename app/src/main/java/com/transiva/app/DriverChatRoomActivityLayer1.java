@@ -198,7 +198,7 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
             InputStream inputStream = null;
 
             try {
-                connection = DriverHttpTransport.open(url);
+                connection = com.transiva.app.driver.data.DriverConnectionRepository.open(url);
                 connection.setConnectTimeout(20000);
                 connection.setReadTimeout(20000);
                 connection.setUseCaches(true);

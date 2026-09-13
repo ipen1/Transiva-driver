@@ -102,7 +102,7 @@ public class TransivaNotificationActionReceiver extends BroadcastReceiver {
         HttpURLConnection conn = null;
         try {
             URL url = new URL(endpoint);
-            conn = DriverHttpTransport.open(url);
+            conn = com.transiva.app.driver.data.DriverConnectionRepository.open(url);
             conn.setConnectTimeout(TIMEOUT_MS);
             conn.setReadTimeout(TIMEOUT_MS);
             conn.setUseCaches(false);

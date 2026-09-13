@@ -188,7 +188,7 @@ public class ChangePinActivity extends Activity {
     private ApiResult changePin(String oldPin, String newPin) {
         HttpURLConnection connection = null;
         try {
-            connection = DriverHttpTransport.open(CHANGE_PIN_URL);
+            connection = com.transiva.app.driver.data.DriverConnectionRepository.open(CHANGE_PIN_URL);
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(TIMEOUT_MS);
             connection.setReadTimeout(TIMEOUT_MS);

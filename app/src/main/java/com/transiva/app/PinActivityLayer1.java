@@ -125,7 +125,7 @@ abstract class PinActivityLayer1 extends FragmentActivity {
         HttpURLConnection conn = null;
 
         try {
-            conn = DriverHttpTransport.open(endpoint);
+            conn = com.transiva.app.driver.data.DriverConnectionRepository.open(endpoint);
             conn.setRequestMethod(payload == null ? "GET" : "POST");
             conn.setConnectTimeout(TIMEOUT_MS);
             conn.setReadTimeout(TIMEOUT_MS);

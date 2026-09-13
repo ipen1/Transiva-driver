@@ -374,7 +374,7 @@ abstract class DriverDashboardActivityLayer1 extends Activity
         Button button = new Button(this);
         button.setText(value);
         button.setAllCaps(false);
-        button.setTextColor(Color.WHITE);
+        button.setTextColor(DriverThemeTokens.onAccent(this));
         button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         button.setBackground(round("#0B7CFF", dp(14)));
         return button;

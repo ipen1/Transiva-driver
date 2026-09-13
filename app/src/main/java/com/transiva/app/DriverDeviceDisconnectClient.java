@@ -45,7 +45,7 @@ public final class DriverDeviceDisconnectClient {
                 JSONObject body = new JSONObject();
                 body.put("action", "disconnect_device");
 
-                conn = DriverHttpTransport.open(DEVICE_URL);
+                conn = com.transiva.app.driver.data.DriverConnectionRepository.open(DEVICE_URL);
                 conn.setRequestMethod("POST");
                 conn.setConnectTimeout(15000);
                 conn.setReadTimeout(20000);

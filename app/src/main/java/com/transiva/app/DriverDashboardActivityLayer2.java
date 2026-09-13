@@ -55,6 +55,8 @@ import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+/** Stability 4.2 Layer Retirement Phase 1: frozen compatibility layer; new logic belongs in controllers. */
+@Deprecated
 abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLayer1 {
 
     protected int clusterAccent(int drivers) {
