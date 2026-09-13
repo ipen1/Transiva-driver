@@ -1,7 +1,6 @@
 package com.transiva.app.driver.ui;
 
 import android.app.Activity;
-import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
@@ -18,6 +17,7 @@ import com.transiva.app.DriverEarningsActivity;
 import com.transiva.app.DriverProfileActivity;
 import com.transiva.app.DriverMessageUnreadRepository;
 import com.transiva.app.DevicePerformanceProfile;
+import com.transiva.app.DriverThemeTokens;
 
 /**
  * Satu-satunya sumber bottom navigation untuk seluruh halaman utama driver.
@@ -45,7 +45,7 @@ public final class DriverBottomNavigation {
         navigation.setOrientation(LinearLayout.HORIZONTAL);
         navigation.setGravity(Gravity.CENTER);
         navigation.setPadding(dp(activity, 5), dp(activity, 4), dp(activity, 5), dp(activity, 4));
-        navigation.setBackgroundColor(Color.WHITE);
+        navigation.setBackgroundColor(DriverThemeTokens.surface(activity));
         navigation.setElevation(dp(activity, 8));
 
         add(navigation, navItem(activity, "Beranda", "ic_nav_home",
@@ -113,7 +113,7 @@ public final class DriverBottomNavigation {
 
         if (active) {
             GradientDrawable bg = new GradientDrawable();
-            bg.setColor(Color.parseColor(ACTIVE_BG));
+            bg.setColor(DriverThemeTokens.color(activity, ACTIVE_BG));
             bg.setCornerRadius(dp(activity, 18));
             root.setBackground(bg);
             root.setScaleX(1.02f);
@@ -142,7 +142,7 @@ public final class DriverBottomNavigation {
         title.setTextSize(9f);
         title.setGravity(Gravity.CENTER);
         title.setIncludeFontPadding(false);
-        title.setTextColor(Color.parseColor(active ? ACTIVE_COLOR : INACTIVE_COLOR));
+        title.setTextColor(active ? DriverThemeTokens.accent(activity) : DriverThemeTokens.textSecondary(activity));
         title.setTypeface(Typeface.DEFAULT, active ? Typeface.BOLD : Typeface.NORMAL);
 
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
