@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Test-only host activity is compiled into the DEBUG target APK so ActivityScenario
+             can resolve and launch it from instrumentation on every supported API level. -->
+        <activity
+            android:name=".TestHarnessActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+    </application>
+</manifest>
