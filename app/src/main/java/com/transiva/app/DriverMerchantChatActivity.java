@@ -54,7 +54,7 @@ public class DriverMerchantChatActivity extends Activity {
     @Override protected void onPause(){super.onPause();stopped=true;main.removeCallbacks(refresh);}
 
     private void build(){
-        LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);page.setPadding(dp(14),dp(14),dp(14),dp(12));page.setBackgroundColor(Color.parseColor("#F4F8FD"));setContentView(page);
+        LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);page.setPadding(dp(14),dp(14),dp(14),dp(12));page.setBackgroundColor(DriverThemeTokens.color(this, "#F4F8FD"));setContentView(page); DriverAppSettings.apply(this);
         LinearLayout head=new LinearLayout(this);head.setGravity(Gravity.CENTER_VERTICAL);head.setPadding(dp(12),dp(10),dp(12),dp(10));head.setBackground(round("#FFFFFF",18));
         TextView back=text("←",26,"#0B7CFF",true);back.setGravity(Gravity.CENTER);back.setOnClickListener(v->finish());head.addView(back,new LinearLayout.LayoutParams(dp(44),dp(44)));
         LinearLayout info=new LinearLayout(this);info.setOrientation(LinearLayout.VERTICAL);info.setPadding(dp(8),0,0,0);info.addView(text(merchantName,17,"#0B3A78",true));status=text("Chat Merchant • Order #"+(orderId.isEmpty()?orderDbId:orderId),11,"#64748B",false);info.addView(status);head.addView(info,new LinearLayout.LayoutParams(0,-2,1));page.addView(head);

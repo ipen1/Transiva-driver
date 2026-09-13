@@ -14,7 +14,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 public class DriverEmergencyActivity extends Activity {
-    @Override protected void onCreate(Bundle b){ super.onCreate(b); getWindow().setStatusBarColor(Color.parseColor("#B91C1C")); setContentView(screen()); }
+    @Override protected void onCreate(Bundle b){ super.onCreate(b); getWindow().setStatusBarColor(Color.parseColor("#B91C1C")); setContentView(screen()); DriverAppSettings.apply(this); }
     private android.view.View screen(){
         Intent i=getIntent(); String name=first(i.getStringExtra("driver_name"),"Driver"); String user=first(i.getStringExtra("driver_username"),"");
         String lat=first(i.getStringExtra("latitude"),"0"), lng=first(i.getStringExtra("longitude"),"0");

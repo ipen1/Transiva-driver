@@ -128,9 +128,12 @@ abstract class DriverProfileActivityLayer1 extends Activity {
         String speed = clean(profile.optString("location_speed"));
         speedValue.setText(speed.isEmpty() ? "-" : speed + " m/s");
 
-        String driverPhoto = first(profile.optString("driver_photo"), profile.optString("profile_photo"));
-        String ktpPhoto = profile.optString("ktp_photo");
-        String vehiclePhoto = profile.optString("vehicle_photo");
+        String driverPhoto = DriverProfileMediaCache.resolve(
+                this, session, "driver_photo",
+                first(profile.optString("driver_photo"), profile.optString("profile_photo"), session == null ? "" : session.getDriverPhoto())
+        );
+        String ktpPhoto = DriverProfileMediaCache.resolve(this, session, "ktp_photo", profile.optString("ktp_photo"));
+        String vehiclePhoto = DriverProfileMediaCache.resolve(this, session, "vehicle_photo", profile.optString("vehicle_photo"));
 
         loadImage(avatarView, driverPhoto, drawableOrFallback("ic_nav_profile"));
         loadImage(ktpView, ktpPhoto, android.R.drawable.ic_menu_report_image);

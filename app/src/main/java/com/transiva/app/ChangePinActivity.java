@@ -61,6 +61,7 @@ public class ChangePinActivity extends Activity {
         }
 
         setContentView(buildScreen());
+        DriverAppSettings.apply(this);
     }
 
     private View buildScreen() {
