@@ -1,5 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Stability 4.1: full semantic night overrides for programmatic Java UI -->
+    <color name="transiva_bg">#0B1220</color>
+    <color name="transiva_soft_blue">#12233A</color>
+    <color name="transiva_card">#121E2E</color>
+    <color name="transiva_version_bg">#17263A</color>
+    <color name="transiva_text">#D8E8FF</color>
+    <color name="transiva_title">#F4F8FF</color>
+    <color name="transiva_subtitle">#B8C5D6</color>
+    <color name="transiva_muted">#9FB0C5</color>
+    <color name="transiva_hint">#8191A6</color>
+    <color name="transiva_border">#29405C</color>
+    <color name="transiva_divider">#24374E</color>
+    <color name="transiva_shadow">#52000000</color>
+    <color name="transiva_blue">#4A9BFF</color>
+    <color name="transiva_blue_dark">#2384FF</color>
+    <color name="transiva_blue_light">#73B4FF</color>
+    <color name="transiva_on_accent">#FFFFFFFF</color>
     <color name="transiva_dialog_surface">#121E2E</color>
     <color name="transiva_dialog_title">#F4F8FF</color>
     <color name="transiva_dialog_text">#B8C5D6</color>
