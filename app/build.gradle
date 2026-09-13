@@ -14,8 +14,8 @@ android {
         applicationId 'com.transiva.driver'
         minSdk 23
         targetSdk 36
-        versionCode 27
-        versionName '2.8.27'
+        versionCode 28
+        versionName '2.8.28'
     }
 
     signingConfigs {
@@ -59,6 +59,11 @@ android {
 
 dependencies {
     testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test:core:1.6.1'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test:rules:1.6.1'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
 
     // Native audio WebRTC (Maven Central)
     implementation 'io.github.webrtc-sdk:android:144.7559.09'
