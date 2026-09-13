@@ -10,6 +10,8 @@ if not rich.exists(): errors.append('Rich manager missing')
 if 'if (TransivaRichNotificationManager.isRichType(type))' not in service or 'return;' not in service[service.find('if (TransivaRichNotificationManager.isRichType(type))'):][:300]: errors.append('Rich FCM path is not isolated')
 if 'assembleDebugAndroidTest' not in workflow: errors.append('Instrumentation compile missing')
 if 'connectedDebugAndroidTest' not in workflow: errors.append('Connected test missing')
+if 'Clean stale instrumentation harness' not in workflow: errors.append('Stale harness cleanup missing from CI')
+if 'retrying once after emulator/app reset' not in workflow: errors.append('Instrumentation retry guard missing')
 for api in ('26','29','31','34','35'):
     if api not in workflow: errors.append('API '+api+' missing from emulator matrix')
 if not (root/'app/src/androidTest/java/com/transiva/app/RichNotificationInstrumentedTest.java').exists(): errors.append('Rich instrumentation missing')
