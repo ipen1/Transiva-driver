@@ -34,6 +34,7 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 
 import com.transiva.app.driver.data.DriverApiClient;
+import com.transiva.app.driver.data.DriverNetworkRepository;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapView;
 import com.google.android.gms.maps.MapsInitializer;
@@ -74,7 +75,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             if(Build.VERSION.SDK_INT >= 23) getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_WINDOW_SETUP_FAILED",e); }
         session = new SessionManager(this);
-        api = new DriverApiClient(session);
+        api = new DriverNetworkRepository(session);
         tripLocationController = new TripLocationController(this, new TripLocationController.Callback() {
             @Override public void onLocation(Location location) { onDriverLocationChanged(location); }
             @Override public void onPermissionRequired() {
@@ -167,7 +168,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         }
     }
     protected void buildBase(){
-        FrameLayout page = new FrameLayout(this); page.setBackgroundColor(Color.parseColor("#F3F8FF"));
+        FrameLayout page = new FrameLayout(this); page.setBackgroundColor(DriverThemeTokens.color(this, "#F3F8FF"));
         ScrollView scroll = new ScrollView(this); page.addView(scroll, new FrameLayout.LayoutParams(-1,-1));
         root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(18), dp(22), dp(18), dp(26));
         scroll.addView(root, new ScrollView.LayoutParams(-1,-2));

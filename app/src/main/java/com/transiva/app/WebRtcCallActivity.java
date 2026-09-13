@@ -155,7 +155,7 @@ public class WebRtcCallActivity extends WebRtcCallActivityLayer1 {
         cancelOwnCallNotification();
 
         String nextCallId = clean(intent.getStringExtra("call_id"));
-        if (!nextCallId.isEmpty() && !callId.isEmpty() && !nextCallId.equals(callId)) {
+        if (!WebRtcCallPolicy.sameCall(callId, nextCallId)) {
             // A notification for another call must NEVER terminate or mutate the
             // call that is already visible. Ignore it and let FCM create its own
             // incoming-call notification instead.
@@ -172,10 +172,10 @@ public class WebRtcCallActivity extends WebRtcCallActivityLayer1 {
         // Caller/callee role is immutable for the lifetime of one call. In the
         // old code, any WebRTC PendingIntent could turn an outgoing caller into
         // incoming=true after the peer accepted, preventing createOffer().
-        if (!hadActiveCall) {
-            incoming = intent.getBooleanExtra("incoming", false);
-        }
-        if (intent.getBooleanExtra("auto_accept", false) && incoming && !accepted) {
+        incoming = WebRtcCallPolicy.immutableIncoming(
+                hadActiveCall, incoming, intent.getBooleanExtra("incoming", false));
+        if (intent.getBooleanExtra("auto_accept", false)
+                && WebRtcCallPolicy.mayAutoAccept(incoming, accepted, ended, callId)) {
             autoAccept = true;
             IncomingCallAlertManager.stop(callId);
             main.post(this::acceptIncoming);

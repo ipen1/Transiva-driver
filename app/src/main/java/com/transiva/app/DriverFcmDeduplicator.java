@@ -10,10 +10,7 @@ public final class DriverFcmDeduplicator {
     private static final long TTL=120000L;
     private DriverFcmDeduplicator(){}
     public static synchronized boolean isDuplicate(Context c, String messageId, Map<String,String> data){
-        String key=messageId==null?"":messageId.trim();
-        if(key.isEmpty() && data!=null){
-            key=(safe(data.get("type"))+"|"+safe(data.get("event"))+"|"+safe(data.get("order_id"))+"|"+safe(data.get("call_id"))+"|"+safe(data.get("message_id")));
-        }
+        String key=DriverFcmPolicy.dedupeKey(messageId, data);
         if(key.isEmpty()) return false;
         String hash=Integer.toHexString(key.hashCode()); long now=System.currentTimeMillis();
         SharedPreferences p=c.getSharedPreferences(PREF,Context.MODE_PRIVATE); long prev=p.getLong(hash,0L);

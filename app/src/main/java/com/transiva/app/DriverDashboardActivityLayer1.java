@@ -136,7 +136,7 @@ abstract class DriverDashboardActivityLayer1 extends Activity
         button.setAllCaps(false);
         button.setTextSize(15);
         button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        button.setTextColor(Color.parseColor("#DC2626"));
+        button.setTextColor(DriverThemeTokens.color(this, "#DC2626"));
         button.setBackground(roundStroke(
                 "#FFF7F7", "#EF4444", dp(15), 1));
         return button;
@@ -365,7 +365,7 @@ abstract class DriverDashboardActivityLayer1 extends Activity
         TextView text = new TextView(this);
         text.setText(value);
         text.setTextSize(sp);
-        text.setTextColor(Color.parseColor(color));
+        text.setTextColor(DriverThemeTokens.color(this, color));
         if (bold) text.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         return text;
     }
@@ -384,7 +384,7 @@ abstract class DriverDashboardActivityLayer1 extends Activity
         Button button = new Button(this);
         button.setText(value);
         button.setAllCaps(false);
-        button.setTextColor(Color.parseColor("#0B7CFF"));
+        button.setTextColor(DriverThemeTokens.color(this, "#0B7CFF"));
         button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         button.setBackground(round("#FFFFFF", dp(13)));
         return button;
@@ -392,7 +392,7 @@ abstract class DriverDashboardActivityLayer1 extends Activity
 
     protected GradientDrawable round(String fill, int radius) {
         GradientDrawable shape = new GradientDrawable();
-        shape.setColor(Color.parseColor(fill));
+        shape.setColor(DriverThemeTokens.color(this, fill));
         shape.setCornerRadius(radius);
         return shape;
     }
@@ -400,7 +400,7 @@ abstract class DriverDashboardActivityLayer1 extends Activity
     protected GradientDrawable roundStroke(
             String fill, String stroke, int radius, int width) {
         GradientDrawable shape = round(fill, radius);
-        shape.setStroke(dp(width), Color.parseColor(stroke));
+        shape.setStroke(dp(width), DriverThemeTokens.color(this, stroke));
         return shape;
     }
 
@@ -426,8 +426,8 @@ abstract class DriverDashboardActivityLayer1 extends Activity
         GradientDrawable shape = new GradientDrawable(
                 GradientDrawable.Orientation.LEFT_RIGHT,
                 new int[]{
-                        Color.parseColor(start),
-                        Color.parseColor(end)
+                        DriverThemeTokens.color(this, start),
+                        DriverThemeTokens.color(this, end)
                 }
         );
         shape.setCornerRadius(radius);

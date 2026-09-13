@@ -12,7 +12,7 @@ import java.nio.charset.StandardCharsets;
 
 public final class WebRtcSignalApi {
     private static final int TIMEOUT_MS = 20000;
-    private static final String ENDPOINT = "https://transiva.my.id/server/webrtc_call.php";
+    private static final String ENDPOINT = DriverApiConfig.endpoint("webrtc_call.php");
 
     private WebRtcSignalApi() {}
 

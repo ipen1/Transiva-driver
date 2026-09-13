@@ -141,7 +141,7 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
 
             // SDP/candidate/ringing/update pushes are not UI launches. The active
             // call Activity already polls signaling from the backend.
-            if (!"incoming_call".equals(event)) {
+            if (!DriverFcmPolicy.shouldLaunchIncomingCall(type, data)) {
                 return;
             }
         }
@@ -155,10 +155,7 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
             return;
         }
 
-        if (type.equals("force_logout")
-                || type.equals("device_reset")
-                || type.equals("device_banned")
-                || "1".equals(data.get("force_logout"))) {
+        if (DriverFcmPolicy.isTerminalSessionEvent(type, data)) {
             String reason = first(
                     data.get("reason"),
                     data.get("code"),

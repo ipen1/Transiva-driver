@@ -38,6 +38,7 @@ import android.widget.Toast;
 
 import com.transiva.app.driver.data.DriverDashboardRepositoryImpl;
 import com.transiva.app.driver.data.DriverApiClient;
+import com.transiva.app.driver.data.DriverNetworkRepository;
 import com.transiva.app.driver.domain.DriverDashboardState;
 import com.transiva.app.driver.domain.DriverClusterStatus;
 import com.transiva.app.driver.domain.DriverOrder;
@@ -57,15 +58,15 @@ import java.util.Set;
 abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLayer1 {
 
     protected int clusterAccent(int drivers) {
-        if (drivers <= 2) return Color.parseColor("#16A34A");
-        if (drivers <= 6) return Color.parseColor("#0B7CFF");
-        if (drivers <= 15) return Color.parseColor("#F59E0B");
-        return Color.parseColor("#EF4444");
+        if (drivers <= 2) return DriverThemeTokens.color(this, "#16A34A");
+        if (drivers <= 6) return DriverThemeTokens.color(this, "#0B7CFF");
+        if (drivers <= 15) return DriverThemeTokens.color(this, "#F59E0B");
+        return DriverThemeTokens.color(this, "#EF4444");
     }
 
     protected void sendEmergency() {
         showLoading(true);
-        DriverApiClient api = new DriverApiClient(session);
+        DriverNetworkRepository api = new DriverNetworkRepository(session);
         api.executor().execute(() -> {
             try {
                 JSONObject body = session.getLastLocationJson();
@@ -110,7 +111,7 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         nameText.setText(first(state.displayName, state.username, "Driver"));
         verificationText.setText(
                 state.verified ? "✓ Terverifikasi" : "• Belum Terverifikasi");
-        verificationText.setTextColor(Color.parseColor(
+        verificationText.setTextColor(DriverThemeTokens.color(this, 
                 state.verified ? "#0E9F4B" : "#D97706"));
         verificationText.setBackground(round(
                 state.verified ? "#EAFBF1" : "#FFF7E6", dp(12)));
@@ -151,7 +152,7 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         renderClusterGrid(state);
 
         onlineLabel.setText(state.online ? "ONLINE" : "OFFLINE");
-        onlineLabel.setTextColor(Color.parseColor(
+        onlineLabel.setTextColor(DriverThemeTokens.color(this, 
                 state.online ? "#16A34A" : "#EF4444"));
         setSwitch(state.online);
 

@@ -78,7 +78,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
 
         try {
             if (getActionBar() != null) getActionBar().hide();
-            getWindow().setStatusBarColor(Color.parseColor("#0B3A78"));
+            getWindow().setStatusBarColor(DriverThemeTokens.color(this, "#0B3A78"));
             getWindow().setNavigationBarColor(Color.BLACK);
         } catch (Throwable t) {
             NavigationDiagnostics.error(this, "NAV_WINDOW_SETUP_FAILED", t);
@@ -180,7 +180,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
     protected void buildUiShell() {
         FrameLayout page = new FrameLayout(this);
         navigationRoot = page;
-        page.setBackgroundColor(Color.parseColor("#EAF4FF"));
+        page.setBackgroundColor(DriverThemeTokens.color(this, "#EAF4FF"));
 
         // FIX: kendaraan tidak lagi berupa ImageView Gravity.CENTER.
         // Marker kendaraan sekarang terikat ke LatLng di peta, sehingga saat pinch zoom
@@ -189,9 +189,9 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         backButton = new TextView(this);
         backButton.setText("‹");
         backButton.setTextSize(38);
-        backButton.setTextColor(Color.parseColor("#0B3A78"));
+        backButton.setTextColor(DriverThemeTokens.color(this, "#0B3A78"));
         backButton.setGravity(Gravity.CENTER);
-        backButton.setBackground(roundRect(Color.parseColor("#FCFFFFFF"), 20));
+        backButton.setBackground(roundRect(DriverThemeTokens.color(this, "#FCFFFFFF"), 20));
         backButton.setElevation(dp(8));
         backButton.setOnClickListener(v -> finish());
         FrameLayout.LayoutParams backLp = new FrameLayout.LayoutParams(dp(54), dp(54));
@@ -201,12 +201,12 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
 
         routeBadge = new TextView(this);
         routeBadge.setText(targetMode.equals("delivery") ? "Menyiapkan rute ke pengantaran…" : "Menyiapkan rute ke pickup…");
-        routeBadge.setTextColor(Color.parseColor("#082F63"));
+        routeBadge.setTextColor(DriverThemeTokens.color(this, "#082F63"));
         routeBadge.setTextSize(17);
         routeBadge.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         routeBadge.setGravity(Gravity.CENTER_VERTICAL);
         routeBadge.setPadding(dp(20), 0, dp(20), 0);
-        routeBadge.setBackground(roundRect(Color.parseColor("#FCFFFFFF"), 26));
+        routeBadge.setBackground(roundRect(DriverThemeTokens.color(this, "#FCFFFFFF"), 26));
         routeBadge.setElevation(dp(8));
         FrameLayout.LayoutParams routeLp = new FrameLayout.LayoutParams(-1, dp(62));
         routeLp.leftMargin = dp(84);
@@ -216,12 +216,12 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
 
         instructionBadge = new TextView(this);
         instructionBadge.setText("↑ Ikuti rute");
-        instructionBadge.setTextColor(Color.parseColor("#0A356C"));
+        instructionBadge.setTextColor(DriverThemeTokens.color(this, "#0A356C"));
         instructionBadge.setTextSize(15);
         instructionBadge.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         instructionBadge.setGravity(Gravity.CENTER_VERTICAL);
         instructionBadge.setPadding(dp(18), dp(8), dp(18), dp(8));
-        instructionBadge.setBackground(roundRect(Color.parseColor("#FAFFFFFF"), 20));
+        instructionBadge.setBackground(roundRect(DriverThemeTokens.color(this, "#FAFFFFFF"), 20));
         instructionBadge.setElevation(dp(6));
         FrameLayout.LayoutParams instructionLp = new FrameLayout.LayoutParams(-1, dp(54));
         instructionLp.leftMargin = dp(84);
@@ -238,7 +238,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         speedBadge.setTextColor(Color.WHITE);
         speedBadge.setTextSize(16);
         speedBadge.setPadding(dp(16), dp(10), dp(16), dp(10));
-        speedBadge.setBackground(roundRect(Color.parseColor("#E6071426"), 22));
+        speedBadge.setBackground(roundRect(DriverThemeTokens.color(this, "#E6071426"), 22));
         bottomActions.addView(speedBadge, new LinearLayout.LayoutParams(0, dp(58), 1.25f));
 
         messageButton = new TextView(this);
@@ -261,7 +261,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
 
         TextView attribution = new TextView(this);
         attribution.setText("© OpenStreetMap contributors");
-        attribution.setTextColor(Color.parseColor("#7A475569"));
+        attribution.setTextColor(DriverThemeTokens.color(this, "#7A475569"));
         attribution.setTextSize(8);
         FrameLayout.LayoutParams attrLp = new FrameLayout.LayoutParams(-2, -2);
         attrLp.gravity = Gravity.BOTTOM | Gravity.RIGHT;
@@ -327,7 +327,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
             fallbackButton.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
             fallbackButton.setGravity(Gravity.CENTER);
             fallbackButton.setPadding(dp(18), dp(10), dp(18), dp(10));
-            fallbackButton.setBackground(roundRect(Color.parseColor("#0B63CE"), 22));
+            fallbackButton.setBackground(roundRect(DriverThemeTokens.color(this, "#0B63CE"), 22));
             fallbackButton.setElevation(dp(8));
             fallbackButton.setOnClickListener(v -> openExternalNavigation());
             FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-2, dp(48));
@@ -369,7 +369,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
             // and dark basemaps without obscuring junction details.
             if (style.getLayer(ROUTE_GLOW_LAYER) == null) {
                 style.addLayer(new LineLayer(ROUTE_GLOW_LAYER, ROUTE_SOURCE).withProperties(
-                        lineColor(Color.parseColor("#48A8FF")),
+                        lineColor(DriverThemeTokens.color(this, "#48A8FF")),
                         lineOpacity(0.20f),
                         lineWidth(18f),
                         lineCap(LINE_CAP_ROUND),
@@ -378,7 +378,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
             }
             if (style.getLayer(ROUTE_CASE_LAYER) == null) {
                 style.addLayer(new LineLayer(ROUTE_CASE_LAYER, ROUTE_SOURCE).withProperties(
-                        lineColor(Color.parseColor("#073A71")),
+                        lineColor(DriverThemeTokens.color(this, "#073A71")),
                         lineOpacity(0.60f),
                         lineWidth(10f),
                         lineCap(LINE_CAP_ROUND),
@@ -387,7 +387,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
             }
             if (style.getLayer(ROUTE_LAYER) == null) {
                 style.addLayer(new LineLayer(ROUTE_LAYER, ROUTE_SOURCE).withProperties(
-                        lineColor(Color.parseColor("#087CFF")),
+                        lineColor(DriverThemeTokens.color(this, "#087CFF")),
                         lineOpacity(0.98f),
                         lineWidth(6f),
                         lineCap(LINE_CAP_ROUND),

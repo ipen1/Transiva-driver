@@ -34,6 +34,7 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 
 import com.transiva.app.driver.data.DriverApiClient;
+import com.transiva.app.driver.data.DriverNetworkRepository;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapView;
 import com.google.android.gms.maps.MapsInitializer;
@@ -97,7 +98,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected boolean updatingStatus = false;
     protected boolean mapReady = false;
     protected SessionManager session;
-    protected DriverApiClient api;
+    protected DriverNetworkRepository api;
     protected final SmoothLocationEngine smoothLocation = new SmoothLocationEngine(2500L);
     protected volatile boolean routeRequestInFlight = false;
     protected long lastRouteRequestAt = 0L;
@@ -394,7 +395,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
         button.setAllCaps(false);
         button.setTextSize(15);
         button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        button.setTextColor(Color.parseColor("#DC2626"));
+        button.setTextColor(DriverThemeTokens.color(this, "#DC2626"));
         button.setBackground(stroke("#FFF7F7", "#EF4444", dp(15), 1));
         return button;
     }
@@ -450,7 +451,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
     void tripInfo(String title,String message){ info(title,message); }
 
     protected JSONObject postJson(String urlText, JSONObject payload) throws Exception {
-        if (api == null) api = new DriverApiClient(session);
+        if (api == null) api = new DriverNetworkRepository(session);
         String endpoint = urlText == null ? "" : urlText.trim();
         if (endpoint.startsWith(BASE_URL)) endpoint = endpoint.substring(BASE_URL.length());
         if (endpoint.startsWith("/")) endpoint = endpoint.substring(1);
@@ -490,9 +491,9 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected int dp(int v){ return (int)(v * getResources().getDisplayMetrics().density + .5f); } protected void add(View v,int l,int t,int r,int b){ LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2); lp.setMargins(l,t,r,b); root.addView(v,lp); }
     protected LinearLayout.LayoutParams btnLp(int top){ LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(52)); lp.setMargins(0, dp(top), 0, 0); return lp; }
     protected LinearLayout card(){ LinearLayout v=new LinearLayout(this); v.setOrientation(LinearLayout.VERTICAL); v.setBackground(stroke("#FFFFFF", "#D7E6F8", dp(24), 1)); v.setElevation(dp(2)); return v; }
-    protected TextView text(String s,int sp,String color,boolean bold){ TextView t=new TextView(this); t.setText(s); t.setTextSize(sp); t.setTextColor(Color.parseColor(color)); if(bold)t.setTypeface(Typeface.DEFAULT_BOLD); return t; }
-    protected Button primary(String s){ Button b=new Button(this); b.setText(s); b.setAllCaps(false); b.setTextColor(Color.WHITE); b.setTextSize(14); b.setTypeface(Typeface.DEFAULT_BOLD); b.setBackground(gradient("#086BFF", "#2EA2FF", dp(18))); return b; } protected Button green(String s){ Button b=primary(s); b.setBackground(gradient("#10B981", "#059669", dp(18))); return b; } protected Button outline(String s){ Button b=new Button(this); b.setText(s); b.setAllCaps(false); b.setTextColor(Color.parseColor("#0B7CFF")); b.setTextSize(14); b.setTypeface(Typeface.DEFAULT_BOLD); b.setBackground(stroke("#FFFFFF", "#9DCAFF", dp(18), 1)); return b; }
-    protected GradientDrawable round(String color,int radius){ GradientDrawable g=new GradientDrawable(); g.setColor(Color.parseColor(color)); g.setCornerRadius(radius); return g; } protected GradientDrawable stroke(String color,String st,int radius,int sw){ GradientDrawable g=round(color,radius); g.setStroke(dp(sw), Color.parseColor(st)); return g; } protected GradientDrawable gradient(String c1,String c2,int radius){ GradientDrawable g=new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{Color.parseColor(c1), Color.parseColor(c2)}); g.setCornerRadius(radius); return g; }
+    protected TextView text(String s,int sp,String color,boolean bold){ TextView t=new TextView(this); t.setText(s); t.setTextSize(sp); t.setTextColor(DriverThemeTokens.color(this, color)); if(bold)t.setTypeface(Typeface.DEFAULT_BOLD); return t; }
+    protected Button primary(String s){ Button b=new Button(this); b.setText(s); b.setAllCaps(false); b.setTextColor(Color.WHITE); b.setTextSize(14); b.setTypeface(Typeface.DEFAULT_BOLD); b.setBackground(gradient("#086BFF", "#2EA2FF", dp(18))); return b; } protected Button green(String s){ Button b=primary(s); b.setBackground(gradient("#10B981", "#059669", dp(18))); return b; } protected Button outline(String s){ Button b=new Button(this); b.setText(s); b.setAllCaps(false); b.setTextColor(DriverThemeTokens.color(this, "#0B7CFF")); b.setTextSize(14); b.setTypeface(Typeface.DEFAULT_BOLD); b.setBackground(stroke("#FFFFFF", "#9DCAFF", dp(18), 1)); return b; }
+    protected GradientDrawable round(String color,int radius){ GradientDrawable g=new GradientDrawable(); g.setColor(DriverThemeTokens.color(this, color)); g.setCornerRadius(radius); return g; } protected GradientDrawable stroke(String color,String st,int radius,int sw){ GradientDrawable g=round(color,radius); g.setStroke(dp(sw), DriverThemeTokens.color(this, st)); return g; } protected GradientDrawable gradient(String c1,String c2,int radius){ GradientDrawable g=new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{DriverThemeTokens.color(this, c1), DriverThemeTokens.color(this, c2)}); g.setCornerRadius(radius); return g; }
     protected void setLoading(boolean b){ if(progressBar!=null) progressBar.setVisibility(b?View.VISIBLE:View.GONE); } protected void info(String t,String m){ try{ PremiumDialogs.builder(this).setTitle(t).setMessage(m).setPositiveButton("OK", null).show(); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } }
     // Cross-layer contracts keep the split type-safe without duplicating state.
     protected abstract void loadSession();

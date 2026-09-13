@@ -159,11 +159,11 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
     protected Drawable premiumSliderTrack() {
         GradientDrawable base = round("#DCEBFA", dp(18));
         base.setSize(dp(180), dp(26));
-        base.setStroke(dp(1), Color.parseColor("#BBD8F5"));
+        base.setStroke(dp(1), DriverThemeTokens.color(this, "#BBD8F5"));
 
         GradientDrawable fill = new GradientDrawable(
                 GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{Color.parseColor("#0878F9"), Color.parseColor("#29A8FF")}
+                new int[]{DriverThemeTokens.color(this, "#0878F9"), DriverThemeTokens.color(this, "#29A8FF")}
         );
         fill.setCornerRadius(dp(18));
         fill.setSize(dp(180), dp(26));
@@ -178,11 +178,11 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
     protected Drawable premiumSliderThumb() {
         GradientDrawable thumb = new GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
-                new int[]{Color.parseColor("#FFFFFF"), Color.parseColor("#EAF5FF")}
+                new int[]{DriverThemeTokens.color(this, "#FFFFFF"), DriverThemeTokens.color(this, "#EAF5FF")}
         );
         thumb.setShape(GradientDrawable.OVAL);
         thumb.setSize(dp(42), dp(42));
-        thumb.setStroke(dp(3), Color.parseColor("#0878F9"));
+        thumb.setStroke(dp(3), DriverThemeTokens.color(this, "#0878F9"));
         return thumb;
     }
 
@@ -310,8 +310,8 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
             if(pickupPolyline!=null) pickupPolyline.remove();
             if(deliveryPolyline!=null) deliveryPolyline.remove();
             boolean pickupDone="delivery".equals(routeTargetMode());
-            pickupPolyline=googleMap.addPolyline(new PolylineOptions().addAll(p).width(dp(5)).color(Color.parseColor(pickupDone?"#94A3B8":"#1683FF")).geodesic(true).zIndex(2f));
-            deliveryPolyline=googleMap.addPolyline(new PolylineOptions().addAll(d).width(dp(5)).color(Color.parseColor("#16A34A")).geodesic(true).zIndex(2f));
+            pickupPolyline=googleMap.addPolyline(new PolylineOptions().addAll(p).width(dp(5)).color(DriverThemeTokens.color(this, pickupDone?"#94A3B8":"#1683FF")).geodesic(true).zIndex(2f));
+            deliveryPolyline=googleMap.addPolyline(new PolylineOptions().addAll(d).width(dp(5)).color(DriverThemeTokens.color(this, "#16A34A")).geodesic(true).zIndex(2f));
             if(!overviewMapApplied){ fitNativeOverview(); overviewMapApplied=true; }
         }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
     }

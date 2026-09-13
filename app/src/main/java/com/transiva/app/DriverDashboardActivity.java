@@ -38,6 +38,7 @@ import android.widget.Toast;
 
 import com.transiva.app.driver.data.DriverDashboardRepositoryImpl;
 import com.transiva.app.driver.data.DriverApiClient;
+import com.transiva.app.driver.data.DriverNetworkRepository;
 import com.transiva.app.driver.domain.DriverDashboardState;
 import com.transiva.app.driver.domain.DriverClusterStatus;
 import com.transiva.app.driver.domain.DriverOrder;
@@ -225,7 +226,7 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
 
     protected View buildScreen() {
         page = new FrameLayout(this);
-        page.setBackgroundColor(Color.parseColor("#F7FAFF"));
+        page.setBackgroundColor(DriverThemeTokens.color(this, "#F7FAFF"));
 
         shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
@@ -485,7 +486,7 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
 
     protected void saveGrowthSettings(long goal, String mode, String label) {
         showLoading(true);
-        DriverApiClient api = new DriverApiClient(session);
+        DriverNetworkRepository api = new DriverNetworkRepository(session);
         api.executor().execute(() -> {
             try {
                 JSONObject body = new JSONObject();
