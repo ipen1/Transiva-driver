@@ -55,7 +55,7 @@ public class DriverSettingsActivity extends Activity {
     private LinearLayout buildScreen() {
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setBackgroundColor(Color.parseColor("#F5F8FD"));
+        shell.setBackgroundColor(DriverThemeTokens.color(this, "#F5F8FD"));
 
         ScrollView scroll = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
@@ -120,7 +120,7 @@ public class DriverSettingsActivity extends Activity {
         callCard.addView(overlayRow);
 
         View callDivider = new View(this);
-        callDivider.setBackgroundColor(Color.parseColor("#EEF2F7"));
+        callDivider.setBackgroundColor(DriverThemeTokens.color(this, "#EEF2F7"));
         LinearLayout.LayoutParams callDividerLp = new LinearLayout.LayoutParams(-1, dp(1));
         callDividerLp.setMargins(0, dp(12), 0, dp(12));
         callCard.addView(callDivider, callDividerLp);
@@ -137,7 +137,7 @@ public class DriverSettingsActivity extends Activity {
         callCard.addView(fullCallRow);
 
         View bubbleDivider = new View(this);
-        bubbleDivider.setBackgroundColor(Color.parseColor("#EEF2F7"));
+        bubbleDivider.setBackgroundColor(DriverThemeTokens.color(this, "#EEF2F7"));
         LinearLayout.LayoutParams bubbleDividerLp = new LinearLayout.LayoutParams(-1, dp(1));
         bubbleDividerLp.setMargins(0, dp(12), 0, dp(12));
         callCard.addView(bubbleDivider, bubbleDividerLp);
@@ -533,14 +533,14 @@ public class DriverSettingsActivity extends Activity {
         TextView view = new TextView(this);
         view.setText(value);
         view.setTextSize(sp);
-        view.setTextColor(Color.parseColor(color));
+        view.setTextColor(DriverThemeTokens.color(this, color));
         if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         return view;
     }
 
     private GradientDrawable round(String color, int radius) {
         GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(Color.parseColor(color));
+        drawable.setColor(DriverThemeTokens.color(this, color));
         drawable.setCornerRadius(radius);
         return drawable;
     }

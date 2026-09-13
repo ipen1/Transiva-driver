@@ -4,6 +4,7 @@ import android.app.AlertDialog;
 import android.content.Context;
 import android.graphics.drawable.GradientDrawable;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.EditText;
 import android.widget.TextView;
@@ -52,6 +53,24 @@ public final class DriverThemeEngine {
         if (activity == null) return;
         activity.getWindow().setStatusBarColor(DriverThemeTokens.background(activity));
         activity.getWindow().setNavigationBarColor(DriverThemeTokens.background(activity));
+    }
+
+
+    /** Theme Engine 2.1 safety pass for every programmatic Activity.
+     * It intentionally normalizes interactive text fields only; brand/status labels keep their semantic status colors. */
+    public static void applyAppWide(View root) {
+        if (root == null) return;
+        if (root instanceof EditText) applyInput((EditText) root);
+        if (root instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) root;
+            for (int i = 0; i < group.getChildCount(); i++) applyAppWide(group.getChildAt(i));
+        }
+    }
+
+    public static void applyAppWide(android.app.Activity activity) {
+        if (activity == null || activity.getWindow() == null) return;
+        View decor = activity.getWindow().getDecorView();
+        if (decor != null) applyAppWide(decor);
     }
 
     private static int dp(Context c, int v) {

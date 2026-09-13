@@ -229,12 +229,12 @@ public final class PremiumDialogs {
         if (view instanceof EditText) {
             EditText input = (EditText) view;
             boolean dark = isNight(context);
-            input.setTextColor(dark ? Color.parseColor("#EEF5FF") : Color.parseColor("#0F172A"));
-            input.setHintTextColor(dark ? Color.parseColor("#8499B2") : Color.parseColor("#7B8A9D"));
+            input.setTextColor(dark ? DriverThemeTokens.color(context, "#EEF5FF") : DriverThemeTokens.color(context, "#0F172A"));
+            input.setHintTextColor(dark ? DriverThemeTokens.color(context, "#8499B2") : DriverThemeTokens.color(context, "#7B8A9D"));
 
             GradientDrawable bg = new GradientDrawable();
-            bg.setColor(dark ? Color.parseColor("#0C1724") : Color.parseColor("#F8FAFC"));
-            bg.setStroke(dp(context, 1), dark ? Color.parseColor("#334B67") : Color.parseColor("#D8E4F2"));
+            bg.setColor(dark ? DriverThemeTokens.color(context, "#0C1724") : DriverThemeTokens.color(context, "#F8FAFC"));
+            bg.setStroke(dp(context, 1), dark ? DriverThemeTokens.color(context, "#334B67") : DriverThemeTokens.color(context, "#D8E4F2"));
             bg.setCornerRadius(dp(context, 13));
             input.setBackground(bg);
             input.setPadding(dp(context, 14), input.getPaddingTop(), dp(context, 14), input.getPaddingBottom());
@@ -274,7 +274,7 @@ public final class PremiumDialogs {
         if (primary) {
             int fill = destructive ? color(context, R.color.error) : color(context, R.color.transiva_blue);
             bg.setColor(fill);
-            button.setTextColor(Color.WHITE);
+            button.setTextColor(DriverThemeTokens.onAccent(context));
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) button.setElevation(dp(context, 2));
         } else if (action == Action.SECONDARY) {
             bg.setColor(Color.TRANSPARENT);

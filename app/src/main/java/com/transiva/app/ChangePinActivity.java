@@ -49,8 +49,8 @@ public class ChangePinActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        getWindow().setStatusBarColor(Color.parseColor("#0B7CFF"));
-        getWindow().setNavigationBarColor(Color.parseColor("#081423"));
+        getWindow().setStatusBarColor(DriverThemeTokens.color(this, "#0B7CFF"));
+        getWindow().setNavigationBarColor(DriverThemeTokens.color(this, "#081423"));
 
         session = new SessionManager(this);
         if (!session.isLoggedIn() || safe(session.getToken()).isEmpty()) {
@@ -66,7 +66,7 @@ public class ChangePinActivity extends Activity {
     private View buildScreen() {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
-        scroll.setBackgroundColor(Color.parseColor("#F4F8FF"));
+        scroll.setBackgroundColor(DriverThemeTokens.color(this, "#F4F8FF"));
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -127,7 +127,7 @@ public class ChangePinActivity extends Activity {
 
         saveButton = new Button(this);
         saveButton.setText("Simpan PIN Baru");
-        saveButton.setTextColor(Color.WHITE);
+        saveButton.setTextColor(DriverThemeTokens.onAccent(this));
         saveButton.setTextSize(15);
         saveButton.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         saveButton.setAllCaps(false);
@@ -249,7 +249,7 @@ public class ChangePinActivity extends Activity {
     private void showMessage(String message, boolean success) {
         messageView.setVisibility(View.VISIBLE);
         messageView.setText(message);
-        messageView.setTextColor(Color.parseColor(success ? "#166534" : "#B91C1C"));
+        messageView.setTextColor(DriverThemeTokens.color(this, success ? "#166534" : "#B91C1C"));
         messageView.setBackground(round(success ? "#DCFCE7" : "#FEE2E2", dp(12)));
     }
 
@@ -260,8 +260,8 @@ public class ChangePinActivity extends Activity {
     private EditText pinInput(String hint) {
         EditText input = new EditText(this);
         input.setHint(hint);
-        input.setHintTextColor(Color.parseColor("#A0AAB8"));
-        input.setTextColor(Color.parseColor("#0B3A78"));
+        input.setHintTextColor(DriverThemeTokens.color(this, "#A0AAB8"));
+        input.setTextColor(DriverThemeTokens.color(this, "#0B3A78"));
         input.setTextSize(16);
         input.setSingleLine(true);
         input.setGravity(Gravity.CENTER_VERTICAL);
@@ -287,21 +287,21 @@ public class ChangePinActivity extends Activity {
         TextView view = new TextView(this);
         view.setText(value);
         view.setTextSize(size);
-        view.setTextColor(Color.parseColor(color));
+        view.setTextColor(DriverThemeTokens.color(this, color));
         if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         return view;
     }
 
     private GradientDrawable round(String color, int radiusPx) {
         GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(Color.parseColor(color));
+        drawable.setColor(DriverThemeTokens.color(this, color));
         drawable.setCornerRadius(radiusPx);
         return drawable;
     }
 
     private GradientDrawable roundStroke(String fill, String stroke, int radiusPx, int strokeDp) {
         GradientDrawable drawable = round(fill, radiusPx);
-        drawable.setStroke(dp(strokeDp), Color.parseColor(stroke));
+        drawable.setStroke(dp(strokeDp), DriverThemeTokens.color(this, stroke));
         return drawable;
     }
 

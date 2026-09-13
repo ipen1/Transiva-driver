@@ -77,13 +77,13 @@ public class DriverTopUpActivity extends Activity {
 
     private void build() {
         try {
-            getWindow().setStatusBarColor(Color.WHITE);
-            getWindow().setNavigationBarColor(Color.WHITE);
+            getWindow().setStatusBarColor(DriverThemeTokens.background(this));
+            getWindow().setNavigationBarColor(DriverThemeTokens.background(this));
             if (android.os.Build.VERSION.SDK_INT >= 23) getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         } catch (Exception ignored) {}
 
         FrameLayout page = new FrameLayout(this);
-        page.setBackgroundColor(Color.parseColor("#F7FAFF"));
+        page.setBackgroundColor(DriverThemeTokens.color(this, "#F7FAFF"));
         ScrollView scroll = new ScrollView(this);
         page.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
         root = new LinearLayout(this);
@@ -130,7 +130,7 @@ public class DriverTopUpActivity extends Activity {
         activeHint = text("Pembayaran belum selesai. Anda dapat keluar dari halaman pembayaran dan melanjutkannya kapan saja.",12,"#475569",false); activeHint.setPadding(0,dp(10),0,dp(12)); activeCard.addView(activeHint);
 
         continueButton = button("Lanjutkan Pembayaran"); continueButton.setOnClickListener(v->openActivePayment()); activeCard.addView(continueButton,new LinearLayout.LayoutParams(-1,dp(52)));
-        cancelButton = outline("Batalkan Deposit"); cancelButton.setTextColor(Color.parseColor("#D92D20")); cancelButton.setBackground(stroke("#FFF7F7","#F2B8B5",18,1));
+        cancelButton = outline("Batalkan Deposit"); cancelButton.setTextColor(DriverThemeTokens.color(this, "#D92D20")); cancelButton.setBackground(stroke("#FFF7F7","#F2B8B5",18,1));
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1,dp(50)); clp.setMargins(0,dp(9),0,0); activeCard.addView(cancelButton,clp); cancelButton.setOnClickListener(v->confirmCancel());
     }
 
@@ -138,7 +138,7 @@ public class DriverTopUpActivity extends Activity {
         depositCard = card(); depositCard.setPadding(dp(16),dp(16),dp(16),dp(16)); add(depositCard,0,0,0,14);
         depositCard.addView(text("Deposit Otomatis",17,"#0B3A78",true));
         TextView sub = text("Bayar langsung melalui Midtrans",12,"#64748B",false); sub.setPadding(0,dp(5),0,dp(12)); depositCard.addView(sub);
-        amountInput = new EditText(this); amountInput.setSingleLine(true); amountInput.setTextSize(18); amountInput.setTypeface(Typeface.DEFAULT_BOLD); amountInput.setTextColor(Color.parseColor("#0F172A")); amountInput.setHint("Contoh: 50000"); amountInput.setHintTextColor(Color.parseColor("#94A3B8")); amountInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER); amountInput.setImeOptions(EditorInfo.IME_ACTION_DONE); amountInput.setPadding(dp(16),0,dp(16),0); amountInput.setBackground(stroke("#FFFFFF","#D7E6F8",18,1));
+        amountInput = new EditText(this); amountInput.setSingleLine(true); amountInput.setTextSize(18); amountInput.setTypeface(Typeface.DEFAULT_BOLD); amountInput.setTextColor(DriverThemeTokens.color(this, "#0F172A")); amountInput.setHint("Contoh: 50000"); amountInput.setHintTextColor(DriverThemeTokens.color(this, "#94A3B8")); amountInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER); amountInput.setImeOptions(EditorInfo.IME_ACTION_DONE); amountInput.setPadding(dp(16),0,dp(16),0); amountInput.setBackground(stroke("#FFFFFF","#D7E6F8",18,1));
         depositCard.addView(amountInput,new LinearLayout.LayoutParams(-1,dp(54)));
         LinearLayout q1 = new LinearLayout(this); q1.setOrientation(LinearLayout.HORIZONTAL); LinearLayout.LayoutParams qlp = new LinearLayout.LayoutParams(-1,-2); qlp.setMargins(0,dp(12),0,0); depositCard.addView(q1,qlp); quick(q1,20000); quick(q1,50000); quick(q1,100000);
         LinearLayout q2 = new LinearLayout(this); q2.setOrientation(LinearLayout.HORIZONTAL); LinearLayout.LayoutParams q2lp = new LinearLayout.LayoutParams(-1,-2); q2lp.setMargins(0,dp(8),0,0); depositCard.addView(q2,q2lp); quick(q2,200000); quick(q2,500000); quick(q2,1000000);
@@ -352,12 +352,12 @@ public class DriverTopUpActivity extends Activity {
     private String rupiah(double v){NumberFormat nf=NumberFormat.getCurrencyInstance(new Locale("id","ID"));nf.setMaximumFractionDigits(0);return nf.format(v).replace("Rp","Rp ");}
     private LinearLayout card(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);v.setBackground(stroke("#FFFFFF","#E2ECF8",22,1));v.setElevation(dp(2));return v;}
     private void add(View v,int l,int t,int r,int b){LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.setMargins(dp(l),dp(t),dp(r),dp(b));root.addView(v,lp);}
-    private TextView text(String s,int sp,String color,boolean bold){TextView t=new TextView(this);t.setText(s);t.setTextSize(sp);t.setTextColor(Color.parseColor(color));if(bold)t.setTypeface(Typeface.DEFAULT_BOLD);return t;}
-    private Button button(String s){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setTextColor(Color.WHITE);b.setTypeface(Typeface.DEFAULT_BOLD);b.setBackground(gradient("#086BFF","#2EA2FF",18));return b;}
-    private Button outline(String s){Button b=button(s);b.setTextColor(Color.parseColor("#0B7CFF"));b.setBackground(stroke("#FFFFFF","#9DCAFF",18,1));return b;}
-    private GradientDrawable round(String c,int r){GradientDrawable g=new GradientDrawable();g.setColor(Color.parseColor(c));g.setCornerRadius(dp(r));return g;}
-    private GradientDrawable stroke(String c,String s,int r,int w){GradientDrawable g=round(c,r);g.setStroke(dp(w),Color.parseColor(s));return g;}
-    private GradientDrawable gradient(String a,String b,int r){GradientDrawable g=new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,new int[]{Color.parseColor(a),Color.parseColor(b)});g.setCornerRadius(dp(r));return g;}
+    private TextView text(String s,int sp,String color,boolean bold){TextView t=new TextView(this);t.setText(s);t.setTextSize(sp);t.setTextColor(DriverThemeTokens.color(this, color));if(bold)t.setTypeface(Typeface.DEFAULT_BOLD);return t;}
+    private Button button(String s){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setTextColor(DriverThemeTokens.onAccent(this));b.setTypeface(Typeface.DEFAULT_BOLD);b.setBackground(gradient("#086BFF","#2EA2FF",18));return b;}
+    private Button outline(String s){Button b=button(s);b.setTextColor(DriverThemeTokens.color(this, "#0B7CFF"));b.setBackground(stroke("#FFFFFF","#9DCAFF",18,1));return b;}
+    private GradientDrawable round(String c,int r){GradientDrawable g=new GradientDrawable();g.setColor(DriverThemeTokens.color(this, c));g.setCornerRadius(dp(r));return g;}
+    private GradientDrawable stroke(String c,String s,int r,int w){GradientDrawable g=round(c,r);g.setStroke(dp(w),DriverThemeTokens.color(this, s));return g;}
+    private GradientDrawable gradient(String a,String b,int r){GradientDrawable g=new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,new int[]{DriverThemeTokens.color(this, a),DriverThemeTokens.color(this, b)});g.setCornerRadius(dp(r));return g;}
     private int dp(int v){return(int)(v*getResources().getDisplayMetrics().density+.5f);}
     private void info(String t,String m){try{PremiumDialogs.builder(this).setTitle(t).setMessage(m).setPositiveButton("OK",null).show();}catch(Exception ignored){}}
 }

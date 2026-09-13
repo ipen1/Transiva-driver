@@ -35,6 +35,7 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
     public void onCreate() {
         super.onCreate();
         createChannels();
+        TransivaRichNotificationManager.createChannel(this);
     }
 
     @Override
@@ -98,6 +99,13 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
                 data.get("category"),
                 "general"
         ).toLowerCase();
+
+        // Rich Notification 1.0 owns a completely separate path. Return immediately so
+        // promo/banner pushes cannot touch order, chat, call or session state machines.
+        if (TransivaRichNotificationManager.isRichType(type)) {
+            TransivaRichNotificationManager.show(this, data);
+            return;
+        }
 
         if ("driver_global_mention".equals(type)) {
             try {

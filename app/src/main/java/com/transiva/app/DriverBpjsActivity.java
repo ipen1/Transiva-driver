@@ -39,8 +39,8 @@ public class DriverBpjsActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().setStatusBarColor(Color.parseColor("#0B7CFF"));
-        getWindow().setNavigationBarColor(Color.parseColor("#071426"));
+        getWindow().setStatusBarColor(DriverThemeTokens.color(this, "#0B7CFF"));
+        getWindow().setNavigationBarColor(DriverThemeTokens.color(this, "#071426"));
 
         session = new SessionManager(this);
         if (!validDriverSession()) {
@@ -85,7 +85,7 @@ public class DriverBpjsActivity extends Activity {
 
     private View buildScreen() {
         FrameLayout page = new FrameLayout(this);
-        page.setBackgroundColor(Color.parseColor("#F6F9FE"));
+        page.setBackgroundColor(DriverThemeTokens.color(this, "#F6F9FE"));
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
@@ -316,7 +316,7 @@ public class DriverBpjsActivity extends Activity {
     private void bindProfile(JSONObject profile) {
         boolean active = readFlag(profile, "bpjs_active", "bpjs_is_active");
         statusBadge.setText(active ? "AKTIF" : "TIDAK AKTIF");
-        statusBadge.setTextColor(Color.parseColor(active ? "#0A8F4C" : "#C62828"));
+        statusBadge.setTextColor(DriverThemeTokens.color(this, active ? "#0A8F4C" : "#C62828"));
         statusBadge.setBackground(round(active ? "#E7FFF2" : "#FFECEC", 14));
 
         nikValue.setText(first(
@@ -375,7 +375,7 @@ public class DriverBpjsActivity extends Activity {
         TextView view = new TextView(this);
         view.setText(value);
         view.setTextSize(size);
-        view.setTextColor(Color.parseColor(color));
+        view.setTextColor(DriverThemeTokens.color(this, color));
         view.setIncludeFontPadding(false);
         if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         return view;
@@ -383,21 +383,21 @@ public class DriverBpjsActivity extends Activity {
 
     private GradientDrawable round(String fill, int radius) {
         GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(Color.parseColor(fill));
+        drawable.setColor(DriverThemeTokens.color(this, fill));
         drawable.setCornerRadius(dp(radius));
         return drawable;
     }
 
     private GradientDrawable roundStroke(String fill, String stroke, int radius, int width) {
         GradientDrawable drawable = round(fill, radius);
-        drawable.setStroke(dp(width), Color.parseColor(stroke));
+        drawable.setStroke(dp(width), DriverThemeTokens.color(this, stroke));
         return drawable;
     }
 
     private GradientDrawable gradient(String start, String end, int radius) {
         GradientDrawable drawable = new GradientDrawable(
                 GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{Color.parseColor(start), Color.parseColor(end)}
+                new int[]{DriverThemeTokens.color(this, start), DriverThemeTokens.color(this, end)}
         );
         drawable.setCornerRadius(dp(radius));
         return drawable;

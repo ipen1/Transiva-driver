@@ -64,8 +64,8 @@ public class DriverWithdrawActivity extends Activity {
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         try {
-            getWindow().setStatusBarColor(Color.WHITE);
-            getWindow().setNavigationBarColor(Color.WHITE);
+            getWindow().setStatusBarColor(DriverThemeTokens.background(this));
+            getWindow().setNavigationBarColor(DriverThemeTokens.background(this));
             if (Build.VERSION.SDK_INT >= 23) getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         } catch (Exception ignored) {}
 
@@ -84,7 +84,7 @@ public class DriverWithdrawActivity extends Activity {
 
     private void buildUi() {
         FrameLayout page = new FrameLayout(this);
-        page.setBackgroundColor(Color.parseColor("#F3F8FF"));
+        page.setBackgroundColor(DriverThemeTokens.color(this, "#F3F8FF"));
 
         ScrollView scroll = new ScrollView(this);
         page.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
@@ -173,9 +173,9 @@ public class DriverWithdrawActivity extends Activity {
             public View getView(int position, View convertView, android.view.ViewGroup parent) {
                 TextView view = (TextView) super.getView(position, convertView, parent);
                 view.setTextSize(14);
-                view.setTextColor(Color.parseColor(
-                        position == 0 ? "#94A3B8" : "#0F172A"
-                ));
+                view.setTextColor(position == 0
+                        ? DriverThemeTokens.hint(DriverWithdrawActivity.this)
+                        : DriverThemeTokens.textPrimary(DriverWithdrawActivity.this));
                 view.setPadding(dp(13), 0, dp(13), 0);
                 return view;
             }
@@ -184,7 +184,7 @@ public class DriverWithdrawActivity extends Activity {
             public View getDropDownView(int position, View convertView, android.view.ViewGroup parent) {
                 TextView view = (TextView) super.getDropDownView(position, convertView, parent);
                 view.setTextSize(14);
-                view.setTextColor(Color.parseColor("#0F172A"));
+                view.setTextColor(DriverThemeTokens.color(this, "#0F172A"));
                 view.setPadding(dp(14), dp(12), dp(14), dp(12));
                 return view;
             }
@@ -498,17 +498,17 @@ public class DriverWithdrawActivity extends Activity {
 
     private LinearLayout card() { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(dp(14), dp(14), dp(14), dp(14)); l.setBackground(roundStroke("#FFFFFF", "#D7E6F8", dp(22), 1)); return l; }
     private TextView label(String v) { TextView t = text(v, 12, "#0B3A78", true); t.setPadding(0, dp(12), 0, dp(6)); return t; }
-    private EditText input(String hint, int type) { EditText e = new EditText(this); e.setSingleLine(true); e.setTextSize(14); e.setTextColor(Color.parseColor("#0F172A")); e.setHintTextColor(Color.parseColor("#94A3B8")); e.setHint(hint); e.setInputType(type); e.setImeOptions(EditorInfo.IME_ACTION_DONE); e.setPadding(dp(13), 0, dp(13), 0); e.setBackground(roundStroke("#FFFFFF", "#D8E4F2", dp(15), 1)); return e; }
+    private EditText input(String hint, int type) { EditText e = new EditText(this); e.setSingleLine(true); e.setTextSize(14); e.setTextColor(DriverThemeTokens.color(this, "#0F172A")); e.setHintTextColor(DriverThemeTokens.color(this, "#94A3B8")); e.setHint(hint); e.setInputType(type); e.setImeOptions(EditorInfo.IME_ACTION_DONE); e.setPadding(dp(13), 0, dp(13), 0); e.setBackground(roundStroke("#FFFFFF", "#D8E4F2", dp(15), 1)); return e; }
     private LinearLayout.LayoutParams fieldLp() { LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(48)); lp.setMargins(0, 0, 0, dp(2)); return lp; }
     private TextView section(String v) { TextView t = text(v, 18, "#0B3A78", true); t.setPadding(0, dp(8), 0, dp(6)); return t; }
     private TextView empty(String msg) { TextView t = text(msg, 14, "#64748B", false); t.setGravity(Gravity.CENTER); t.setPadding(dp(14), dp(18), dp(14), dp(18)); t.setBackground(roundStroke("#FFFFFF", "#D7E6F8", dp(22), 1)); return t; }
-    private Button primaryButton(String s) { Button b = new Button(this); b.setText(s); b.setAllCaps(false); b.setTextSize(14); b.setTypeface(Typeface.DEFAULT_BOLD); b.setTextColor(Color.WHITE); b.setBackground(roundGradient("#086BFF", "#2EA2FF", dp(16))); return b; }
-    private Button outlineButton(String s) { Button b = primaryButton(s); b.setTextColor(Color.parseColor("#0B7CFF")); b.setBackground(roundStroke("#FFFFFF", "#9DCAFF", dp(16), 1)); return b; }
-    private TextView text(String s, int sp, String color, boolean bold) { TextView t = new TextView(this); t.setText(s); t.setTextSize(sp); t.setTextColor(Color.parseColor(color)); if (bold) t.setTypeface(Typeface.DEFAULT_BOLD); return t; }
+    private Button primaryButton(String s) { Button b = new Button(this); b.setText(s); b.setAllCaps(false); b.setTextSize(14); b.setTypeface(Typeface.DEFAULT_BOLD); b.setTextColor(DriverThemeTokens.onAccent(this)); b.setBackground(roundGradient("#086BFF", "#2EA2FF", dp(16))); return b; }
+    private Button outlineButton(String s) { Button b = primaryButton(s); b.setTextColor(DriverThemeTokens.color(this, "#0B7CFF")); b.setBackground(roundStroke("#FFFFFF", "#9DCAFF", dp(16), 1)); return b; }
+    private TextView text(String s, int sp, String color, boolean bold) { TextView t = new TextView(this); t.setText(s); t.setTextSize(sp); t.setTextColor(DriverThemeTokens.color(this, color)); if (bold) t.setTypeface(Typeface.DEFAULT_BOLD); return t; }
     private void add(LinearLayout p, View v, int l, int t, int r, int b) { LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2); lp.setMargins(l, t, r, b); p.addView(v, lp); }
-    private GradientDrawable round(String c, int r) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(c)); g.setCornerRadius(r); return g; }
-    private GradientDrawable roundStroke(String c, String s, int r, int w) { GradientDrawable g = round(c, r); g.setStroke(dp(w), Color.parseColor(s)); return g; }
-    private GradientDrawable roundGradient(String a, String b, int r) { GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{Color.parseColor(a), Color.parseColor(b)}); g.setCornerRadius(r); return g; }
+    private GradientDrawable round(String c, int r) { GradientDrawable g = new GradientDrawable(); g.setColor(DriverThemeTokens.color(this, c)); g.setCornerRadius(r); return g; }
+    private GradientDrawable roundStroke(String c, String s, int r, int w) { GradientDrawable g = round(c, r); g.setStroke(dp(w), DriverThemeTokens.color(this, s)); return g; }
+    private GradientDrawable roundGradient(String a, String b, int r) { GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{DriverThemeTokens.color(this, a), DriverThemeTokens.color(this, b)}); g.setCornerRadius(r); return g; }
     private String rupiah(long v) { return "Rp " + NumberFormat.getNumberInstance(new Locale("id", "ID")).format(v); }
     private String enc(String v) { try { return URLEncoder.encode(v == null ? "" : v, "UTF-8"); } catch (Exception e) { return ""; } }
     private String safe(String v) { return v == null ? "" : v.trim(); }

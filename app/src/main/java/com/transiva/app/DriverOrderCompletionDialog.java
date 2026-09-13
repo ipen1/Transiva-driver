@@ -41,13 +41,13 @@ public final class DriverOrderCompletionDialog {
         }
 
         final boolean dark = DriverAppSettings.isDarkMode(activity);
-        final int bg = Color.parseColor(dark ? "#101D2D" : "#FFFFFF");
-        final int text = Color.parseColor(dark ? "#F8FAFC" : "#0F172A");
-        final int muted = Color.parseColor(dark ? "#A9B7C8" : "#64748B");
-        final int line = Color.parseColor(dark ? "#263A50" : "#E2E8F0");
-        final int accent = Color.parseColor("#1477FF");
-        final int green = Color.parseColor("#16A34A");
-        final int gold = Color.parseColor("#F6C500");
+        final int bg = DriverThemeTokens.background(activity);
+        final int text = DriverThemeTokens.textPrimary(activity);
+        final int muted = DriverThemeTokens.textSecondary(activity);
+        final int line = DriverThemeTokens.border(activity);
+        final int accent = DriverThemeTokens.color(activity, "#1477FF");
+        final int green = DriverThemeTokens.color(activity, "#16A34A");
+        final int gold = DriverThemeTokens.color(activity, "#F6C500");
 
         JSONObject receipt = response == null ? null : response.optJSONObject("receipt");
         if (receipt == null) receipt = new JSONObject();
@@ -93,7 +93,7 @@ public final class DriverOrderCompletionDialog {
         LinearLayout earningCard = new LinearLayout(activity);
         earningCard.setOrientation(LinearLayout.VERTICAL);
         earningCard.setPadding(dp(activity, 18), dp(activity, 16), dp(activity, 18), dp(activity, 16));
-        earningCard.setBackground(round(dark ? Color.parseColor("#13283A") : Color.parseColor("#F0FDF4"), dp(activity, 20), dark ? Color.parseColor("#1E4652") : Color.parseColor("#BBF7D0"), dp(activity, 1)));
+        earningCard.setBackground(round(dark ? DriverThemeTokens.color(activity, "#13283A") : DriverThemeTokens.color(activity, "#F0FDF4"), dp(activity, 20), dark ? DriverThemeTokens.color(activity, "#1E4652") : DriverThemeTokens.color(activity, "#BBF7D0"), dp(activity, 1)));
         earningCard.addView(label(activity, "Pendapatan bersih Anda", 13, muted, false));
         TextView amount = label(activity, rupiah(earning), 30, green, true);
         amount.setPadding(0, dp(activity, 3), 0, dp(activity, 7));
@@ -124,13 +124,13 @@ public final class DriverOrderCompletionDialog {
         final TextView[] starViews = new TextView[5];
         for (int i = 0; i < 5; i++) {
             final int value = i + 1;
-            TextView star = label(activity, "★", 42, dark ? Color.parseColor("#425367") : Color.parseColor("#CBD5E1"), true);
+            TextView star = label(activity, "★", 42, dark ? DriverThemeTokens.color(activity, "#425367") : DriverThemeTokens.color(activity, "#CBD5E1"), true);
             star.setGravity(Gravity.CENTER);
             star.setContentDescription(value + " bintang");
             star.setOnClickListener(v -> {
                 selected[0] = value;
                 for (int j = 0; j < starViews.length; j++) {
-                    if (starViews[j] != null) starViews[j].setTextColor(j < value ? gold : (dark ? Color.parseColor("#425367") : Color.parseColor("#CBD5E1")));
+                    if (starViews[j] != null) starViews[j].setTextColor(j < value ? gold : (dark ? DriverThemeTokens.color(activity, "#425367") : DriverThemeTokens.color(activity, "#CBD5E1")));
                 }
             });
             starViews[i] = star;
@@ -140,14 +140,14 @@ public final class DriverOrderCompletionDialog {
 
         EditText review = new EditText(activity);
         review.setHint("Catatan opsional, misalnya: customer ramah dan mudah dihubungi");
-        review.setHintTextColor(dark ? Color.parseColor("#73859A") : Color.parseColor("#94A3B8"));
+        review.setHintTextColor(dark ? DriverThemeTokens.color(activity, "#73859A") : DriverThemeTokens.color(activity, "#94A3B8"));
         review.setTextColor(text);
         review.setTextSize(14);
         review.setGravity(Gravity.TOP | Gravity.START);
         review.setMinLines(3);
         review.setMaxLines(5);
         review.setPadding(dp(activity, 14), dp(activity, 12), dp(activity, 14), dp(activity, 12));
-        review.setBackground(round(dark ? Color.parseColor("#0C1724") : Color.parseColor("#F8FAFC"), dp(activity, 16), line, dp(activity, 1)));
+        review.setBackground(round(dark ? DriverThemeTokens.color(activity, "#0C1724") : DriverThemeTokens.color(activity, "#F8FAFC"), dp(activity, 16), line, dp(activity, 1)));
         card.addView(review, lp(-1, -2, 0, 0, 0, 16));
 
         TextView status = label(activity, "Pilih 1–5 bintang, atau Lewati jika tidak ingin menilai.", 11, muted, false);
@@ -157,8 +157,8 @@ public final class DriverOrderCompletionDialog {
         LinearLayout actions = new LinearLayout(activity);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         actions.setGravity(Gravity.CENTER);
-        Button skip = button(activity, "Lewati", dark ? Color.parseColor("#17283B") : Color.parseColor("#EEF2F7"), text);
-        Button save = button(activity, "Selesai", accent, Color.WHITE);
+        Button skip = button(activity, "Lewati", dark ? DriverThemeTokens.color(activity, "#17283B") : DriverThemeTokens.color(activity, "#EEF2F7"), text);
+        Button save = button(activity, "Selesai", accent, DriverThemeTokens.onAccent(activity));
         actions.addView(skip, new LinearLayout.LayoutParams(0, dp(activity, 52), 1f));
         LinearLayout.LayoutParams saveLp = new LinearLayout.LayoutParams(0, dp(activity, 52), 1.35f);
         saveLp.setMargins(dp(activity, 10), 0, 0, 0);
@@ -173,7 +173,7 @@ public final class DriverOrderCompletionDialog {
         save.setOnClickListener(v -> {
             if (selected[0] < 1) {
                 status.setText("Pilih jumlah bintang terlebih dahulu, atau tekan Lewati.");
-                status.setTextColor(Color.parseColor("#DC2626"));
+                status.setTextColor(DriverThemeTokens.color(activity, "#DC2626"));
                 return;
             }
             String note = review.getText() == null ? "" : review.getText().toString().trim();
@@ -197,7 +197,7 @@ public final class DriverOrderCompletionDialog {
                     skip.setEnabled(true);
                     save.setEnabled(true);
                     save.setText("Coba lagi");
-                    status.setTextColor(Color.parseColor("#DC2626"));
+                    status.setTextColor(DriverThemeTokens.color(activity, "#DC2626"));
                     status.setText(first(message, "Penilaian belum tersimpan. Coba lagi atau Lewati."));
                 }
             }));

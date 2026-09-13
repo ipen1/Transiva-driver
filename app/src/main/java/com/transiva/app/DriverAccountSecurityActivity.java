@@ -52,7 +52,7 @@ public class DriverAccountSecurityActivity extends Activity {
 
     private ScrollView build() {
         boolean usernameMode = MODE_USERNAME.equals(mode);
-        ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(Color.parseColor("#F5F8FD"));
+        ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(DriverThemeTokens.color(this, "#F5F8FD"));
         LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(20),dp(22),dp(20),dp(30)); scroll.addView(root);
 
         TextView back=text("‹  Kembali",14,"#0B7CFF",true); back.setPadding(0,dp(6),0,dp(16)); back.setOnClickListener(v->finish()); root.addView(back);
@@ -76,7 +76,7 @@ public class DriverAccountSecurityActivity extends Activity {
         }
 
         save=new Button(this); save.setAllCaps(false); save.setText(usernameMode?"Simpan Username":"Simpan Password");
-        save.setTextColor(Color.WHITE); save.setTypeface(Typeface.DEFAULT,Typeface.BOLD); save.setTextSize(15);
+        save.setTextColor(DriverThemeTokens.onAccent(this)); save.setTypeface(Typeface.DEFAULT,Typeface.BOLD); save.setTextSize(15);
         save.setBackground(round("#0B7CFF",15)); save.setOnClickListener(v->submit());
         card.addView(save,new LinearLayout.LayoutParams(-1,dp(54)));
         return scroll;
@@ -147,11 +147,11 @@ public class DriverAccountSecurityActivity extends Activity {
         try(BufferedReader r=new BufferedReader(new InputStreamReader(is,StandardCharsets.UTF_8))){String line;while((line=r.readLine())!=null)o.append(line);}
         return o.toString();
     }
-    private void show(String m,boolean ok){message.setVisibility(TextView.VISIBLE);message.setText(m);message.setTextColor(Color.parseColor(ok?"#166534":"#B91C1C"));message.setPadding(dp(10),dp(9),dp(10),dp(9));}
+    private void show(String m,boolean ok){message.setVisibility(TextView.VISIBLE);message.setText(m);message.setTextColor(DriverThemeTokens.color(this, ok?"#166534":"#B91C1C"));message.setPadding(dp(10),dp(9),dp(10),dp(9));}
     private EditText input(String hint,boolean password){EditText e=new EditText(this);e.setHint(hint);e.setSingleLine(true);e.setTextSize(15);e.setPadding(dp(12),0,dp(12),0);e.setBackground(round("#F7FAFE",13));if(password)e.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);return e;}
     private LinearLayout.LayoutParams lp(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(54));p.setMargins(0,0,0,dp(13));return p;}
-    private TextView text(String v,int sp,String color,boolean bold){TextView t=new TextView(this);t.setText(v);t.setTextSize(sp);t.setTextColor(Color.parseColor(color));if(bold)t.setTypeface(Typeface.DEFAULT,Typeface.BOLD);return t;}
-    private GradientDrawable round(String color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(Color.parseColor(color));d.setCornerRadius(dp(radius));return d;}
+    private TextView text(String v,int sp,String color,boolean bold){TextView t=new TextView(this);t.setText(v);t.setTextSize(sp);t.setTextColor(DriverThemeTokens.color(this, color));if(bold)t.setTypeface(Typeface.DEFAULT,Typeface.BOLD);return t;}
+    private GradientDrawable round(String color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(DriverThemeTokens.color(this, color));d.setCornerRadius(dp(radius));return d;}
     private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
     private String safe(String v){return v==null?"":v.trim();}
     private static final class Result{final boolean ok;final String message,username;Result(boolean o,String m,String u){ok=o;message=m;username=u;}}

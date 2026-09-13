@@ -42,7 +42,7 @@ public class DriverGlobalChatActivity extends Activity {
 
     @Override protected void onCreate(Bundle b){
         super.onCreate(b);
-        getWindow().setStatusBarColor(Color.parseColor("#071426")); getWindow().setNavigationBarColor(Color.parseColor("#071426"));
+        getWindow().setStatusBarColor(DriverThemeTokens.color(this, "#071426")); getWindow().setNavigationBarColor(DriverThemeTokens.color(this, "#071426"));
         myUsername=new SessionManager(this).getUsername(); jumpId=getIntent().getLongExtra("jump_message_id",0L);
         setContentView(build()); DriverGlobalChatBubble.detach(this); DriverAppSettings.apply(this); load(true); main.postDelayed(refresh,DriverPollingCoordinator.interval(this,12000L));
     }
@@ -52,7 +52,7 @@ public class DriverGlobalChatActivity extends Activity {
     @Override public void finish(){super.finish();overridePendingTransition(R.anim.global_chat_hold,R.anim.global_chat_exit_to_left);}
 
     private View build(){
-        FrameLayout page=new FrameLayout(this); page.setBackgroundColor(Color.parseColor("#F4F7FB"));
+        FrameLayout page=new FrameLayout(this); page.setBackgroundColor(DriverThemeTokens.color(this, "#F4F7FB"));
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(12),dp(10),dp(12),dp(10));page.addView(root,new FrameLayout.LayoutParams(-1,-1));
         LinearLayout head=new LinearLayout(this);head.setGravity(Gravity.CENTER_VERTICAL);head.setPadding(dp(10),dp(9),dp(10),dp(9));head.setBackground(round("#FFFFFF",18));
         TextView back=t("‹",34,"#0B3A78",true);back.setGravity(Gravity.CENTER);back.setOnClickListener(v->finish());head.addView(back,new LinearLayout.LayoutParams(dp(46),dp(46)));
@@ -66,11 +66,11 @@ public class DriverGlobalChatActivity extends Activity {
 
         LinearLayout composer=new LinearLayout(this);composer.setGravity(Gravity.BOTTOM|Gravity.CENTER_VERTICAL);composer.setPadding(dp(8),dp(7),dp(7),dp(7));composer.setBackground(round("#FFFFFF",20));
         TextView at=t("@",20,"#0B7CFF",true);at.setGravity(Gravity.CENTER);at.setBackground(round("#EAF4FF",15));at.setOnClickListener(v->{int p=input.getSelectionStart();input.getText().insert(Math.max(0,p),"@");input.requestFocus();showSuggestions(mentionPrefix());});composer.addView(at,new LinearLayout.LayoutParams(dp(42),dp(42)));
-        input=new EditText(this);input.setHint("Ngobrol dengan driver lain…");input.setTextSize(14);input.setTextColor(Color.parseColor("#14263A"));input.setHintTextColor(Color.parseColor("#93A0AE"));input.setBackgroundColor(Color.TRANSPARENT);input.setSingleLine(false);input.setMaxLines(4);input.setImeOptions(EditorInfo.IME_ACTION_SEND);
+        input=new EditText(this);input.setHint("Ngobrol dengan driver lain…");input.setTextSize(14);input.setTextColor(DriverThemeTokens.color(this, "#14263A"));input.setHintTextColor(DriverThemeTokens.color(this, "#93A0AE"));input.setBackgroundColor(Color.TRANSPARENT);input.setSingleLine(false);input.setMaxLines(4);input.setImeOptions(EditorInfo.IME_ACTION_SEND);
         input.setOnEditorActionListener((v,a,e)->{if(a==EditorInfo.IME_ACTION_SEND){send();return true;}return false;});
         input.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int c,int a){}public void onTextChanged(CharSequence s,int st,int b,int c){main.removeCallbacks(suggestRunnable);main.postDelayed(suggestRunnable,160);}public void afterTextChanged(Editable e){}});
         composer.addView(input,new LinearLayout.LayoutParams(0,-2,1));
-        Button send=new Button(this);send.setText("Kirim");send.setTextColor(Color.WHITE);send.setTextSize(12);send.setTypeface(Typeface.DEFAULT_BOLD);send.setAllCaps(false);send.setBackground(round("#0B7CFF",16));send.setOnClickListener(v->send());composer.addView(send,new LinearLayout.LayoutParams(dp(76),dp(46)));root.addView(composer,new LinearLayout.LayoutParams(-1,-2));
+        Button send=new Button(this);send.setText("Kirim");send.setTextColor(DriverThemeTokens.onAccent(this));send.setTextSize(12);send.setTypeface(Typeface.DEFAULT_BOLD);send.setAllCaps(false);send.setBackground(round("#0B7CFF",16));send.setOnClickListener(v->send());composer.addView(send,new LinearLayout.LayoutParams(dp(76),dp(46)));root.addView(composer,new LinearLayout.LayoutParams(-1,-2));
         return page;
     }
 
@@ -120,9 +120,9 @@ public class DriverGlobalChatActivity extends Activity {
     private void jumpTo(long id,boolean mark){for(MessageRef r:refs){if(r.id==id){scroll.post(()->{scroll.smoothScrollTo(0,Math.max(0,r.view.getTop()-dp(100)));r.view.animate().alpha(0.45f).setDuration(160).withEndAction(()->r.view.animate().alpha(1f).setDuration(260).start()).start();});if(mark)DriverGlobalChatApi.readMention(this,id,new DriverGlobalChatApi.Callback(){public void onResult(JSONObject j){load(false);}public void onError(String m){}});return;}}}
 
     private String shortDisplayName(String raw){String v=raw==null?"":raw.trim();if(v.isEmpty())v="Driver";return v.length()<=10?v:v.substring(0,7)+"...";}
-    private TextView t(String s,int size,String color,boolean bold){TextView v=new TextView(this);v.setText(s);v.setTextSize(size);v.setTextColor(Color.parseColor(color));if(bold)v.setTypeface(Typeface.DEFAULT_BOLD);return v;}
-    private TextView tSpan(String s,int size,String color){TextView v=t(s,size,color,false);SpannableString sp=new SpannableString(s);String lower=s.toLowerCase(Locale.ROOT);String me="@"+(myUsername==null?"":myUsername.toLowerCase(Locale.ROOT));int p=me.length()>1?lower.indexOf(me):-1;if(p>=0)sp.setSpan(new ForegroundColorSpan(Color.parseColor("#0B7CFF")),p,p+me.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);v.setText(sp);return v;}
-    private GradientDrawable round(String c,int radius){GradientDrawable g=new GradientDrawable();g.setColor(Color.parseColor(c));g.setCornerRadius(dp(radius));return g;}
+    private TextView t(String s,int size,String color,boolean bold){TextView v=new TextView(this);v.setText(s);v.setTextSize(size);v.setTextColor(DriverThemeTokens.color(this, color));if(bold)v.setTypeface(Typeface.DEFAULT_BOLD);return v;}
+    private TextView tSpan(String s,int size,String color){TextView v=t(s,size,color,false);SpannableString sp=new SpannableString(s);String lower=s.toLowerCase(Locale.ROOT);String me="@"+(myUsername==null?"":myUsername.toLowerCase(Locale.ROOT));int p=me.length()>1?lower.indexOf(me):-1;if(p>=0)sp.setSpan(new ForegroundColorSpan(DriverThemeTokens.color(this, "#0B7CFF")),p,p+me.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);v.setText(sp);return v;}
+    private GradientDrawable round(String c,int radius){GradientDrawable g=new GradientDrawable();g.setColor(DriverThemeTokens.color(this, c));g.setCornerRadius(dp(radius));return g;}
     private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
     private String shortTime(String raw){try{Date d=new SimpleDateFormat("yyyy-MM-dd HH:mm:ss",Locale.US).parse(raw);return new SimpleDateFormat("HH:mm",Locale.getDefault()).format(d);}catch(Exception e){return raw;}}
     private static class MessageRef{final long id;final boolean mention;final View view;MessageRef(long i,boolean m,View v){id=i;mention=m;view=v;}}

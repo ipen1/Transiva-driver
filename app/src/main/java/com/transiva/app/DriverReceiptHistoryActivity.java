@@ -54,15 +54,15 @@ public class DriverReceiptHistoryActivity extends Activity {
 
     private void setupBars() {
         try {
-            getWindow().setStatusBarColor(Color.WHITE);
-            getWindow().setNavigationBarColor(Color.WHITE);
+            getWindow().setStatusBarColor(DriverThemeTokens.background(this));
+            getWindow().setNavigationBarColor(DriverThemeTokens.background(this));
             if (Build.VERSION.SDK_INT >= 23) getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         } catch (Exception ignored) {}
     }
 
     private void buildUi() {
         FrameLayout page = new FrameLayout(this);
-        page.setBackgroundColor(Color.parseColor("#F3F8FF"));
+        page.setBackgroundColor(DriverThemeTokens.color(this, "#F3F8FF"));
         ScrollView scroll = new ScrollView(this);
         page.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
 
@@ -247,7 +247,7 @@ public class DriverReceiptHistoryActivity extends Activity {
 
     private View transactionDivider() {
         View divider = new View(this);
-        divider.setBackgroundColor(Color.parseColor("#E2E8F0"));
+        divider.setBackgroundColor(DriverThemeTokens.color(this, "#E2E8F0"));
         LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(-1, dp(1));
         dlp.setMargins(0, dp(12), 0, dp(10));
         divider.setLayoutParams(dlp);
@@ -328,10 +328,10 @@ public class DriverReceiptHistoryActivity extends Activity {
     private String enc(String v) { try { return URLEncoder.encode(v == null ? "" : v, "UTF-8"); } catch (Exception e) { return ""; } }
     private void showInfo(String title, String msg) { try { PremiumDialogs.builder(this).setTitle(title).setMessage(msg).setPositiveButton("OK", null).show(); } catch (Exception ignored) {} }
     private LinearLayout card() { LinearLayout c = new LinearLayout(this); c.setOrientation(LinearLayout.VERTICAL); c.setBackground(roundStroke("#FFFFFF", "#D7E6F8", dp(24), 1)); c.setElevation(dp(2)); LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2); lp.setMargins(0, 0, 0, dp(10)); c.setLayoutParams(lp); return c; }
-    private TextView text(String s, int sp, String color, boolean bold) { TextView t = new TextView(this); t.setText(s); t.setTextSize(sp); t.setTextColor(Color.parseColor(color)); if (bold) t.setTypeface(Typeface.DEFAULT_BOLD); return t; }
-    private Button outlineButton(String s) { Button b = new Button(this); b.setText(s); b.setAllCaps(false); b.setTextColor(Color.parseColor("#0B7CFF")); b.setTextSize(14); b.setTypeface(Typeface.DEFAULT_BOLD); b.setBackground(roundStroke("#FFFFFF", "#9DCAFF", dp(17), 1)); return b; }
-    private GradientDrawable roundStroke(String c, String s, int r, int w) { GradientDrawable g = new GradientDrawable(); g.setColor(Color.parseColor(c)); g.setCornerRadius(r); g.setStroke(dp(w), Color.parseColor(s)); return g; }
-    private GradientDrawable roundGradient(String a, String b, int r) { GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{Color.parseColor(a), Color.parseColor(b)}); g.setCornerRadius(r); return g; }
+    private TextView text(String s, int sp, String color, boolean bold) { TextView t = new TextView(this); t.setText(s); t.setTextSize(sp); t.setTextColor(DriverThemeTokens.color(this, color)); if (bold) t.setTypeface(Typeface.DEFAULT_BOLD); return t; }
+    private Button outlineButton(String s) { Button b = new Button(this); b.setText(s); b.setAllCaps(false); b.setTextColor(DriverThemeTokens.color(this, "#0B7CFF")); b.setTextSize(14); b.setTypeface(Typeface.DEFAULT_BOLD); b.setBackground(roundStroke("#FFFFFF", "#9DCAFF", dp(17), 1)); return b; }
+    private GradientDrawable roundStroke(String c, String s, int r, int w) { GradientDrawable g = new GradientDrawable(); g.setColor(DriverThemeTokens.color(this, c)); g.setCornerRadius(r); g.setStroke(dp(w), DriverThemeTokens.color(this, s)); return g; }
+    private GradientDrawable roundGradient(String a, String b, int r) { GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{DriverThemeTokens.color(this, a), DriverThemeTokens.color(this, b)}); g.setCornerRadius(r); return g; }
     private String rupiah(double v) { return "Rp " + NumberFormat.getNumberInstance(new Locale("id", "ID")).format((long) v); }
     private String firstNonEmpty(String... vals) { if (vals == null) return ""; for (String v: vals) if (v != null && v.trim().length() > 0 && !"null".equalsIgnoreCase(v.trim())) return v.trim(); return ""; }
     private int dp(int v) { return (int)(v * getResources().getDisplayMetrics().density + 0.5f); }

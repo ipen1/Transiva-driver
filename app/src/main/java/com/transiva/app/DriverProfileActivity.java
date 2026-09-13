@@ -30,8 +30,8 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().setStatusBarColor(Color.parseColor("#0B7CFF"));
-        getWindow().setNavigationBarColor(Color.parseColor("#071426"));
+        getWindow().setStatusBarColor(DriverThemeTokens.color(this, "#0B7CFF"));
+        getWindow().setNavigationBarColor(DriverThemeTokens.color(this, "#071426"));
 
         session = new SessionManager(this);
         if (!validDriverSession()) {
@@ -79,7 +79,7 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
 
     protected View buildScreen() {
         FrameLayout page = new FrameLayout(this);
-        page.setBackgroundColor(Color.parseColor("#F6F9FE"));
+        page.setBackgroundColor(DriverThemeTokens.color(this, "#F6F9FE"));
 
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
@@ -147,8 +147,8 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
         FrameLayout avatarFrame = new FrameLayout(this);
         GradientDrawable border = new GradientDrawable();
         border.setShape(GradientDrawable.OVAL);
-        border.setColor(Color.WHITE);
-        border.setStroke(dp(3), Color.WHITE);
+        border.setColor(DriverThemeTokens.surface(this));
+        border.setStroke(dp(3), DriverThemeTokens.surface(this));
         avatarFrame.setBackground(border);
         avatarFrame.setElevation(dp(5));
 
@@ -157,7 +157,7 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
         avatarView.setImageResource(drawableOrFallback("ic_nav_profile"));
         GradientDrawable mask = new GradientDrawable();
         mask.setShape(GradientDrawable.OVAL);
-        mask.setColor(Color.parseColor("#EAF4FF"));
+        mask.setColor(DriverThemeTokens.color(this, "#EAF4FF"));
         avatarView.setBackground(mask);
         avatarView.setClipToOutline(true);
         avatarView.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
@@ -286,7 +286,7 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
 
     protected void stylePerformanceButton(Button button, boolean active) {
         if (button == null) return;
-        button.setTextColor(Color.parseColor(active ? "#FFFFFF" : "#0B3A78"));
+        button.setTextColor(active ? DriverThemeTokens.onAccent(this) : DriverThemeTokens.textPrimary(this));
         button.setBackground(active
                 ? gradient("#0B7CFF", "#2EA2FF", 13)
                 : roundStroke("#F8FBFF", "#D7E6F8", 13, 1));

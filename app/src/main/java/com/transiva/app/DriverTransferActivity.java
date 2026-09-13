@@ -31,7 +31,7 @@ public class DriverTransferActivity extends FragmentActivity {
     @Override protected void onCreate(Bundle b){ super.onCreate(b); session=new SessionManager(this); if(!session.isLoggedIn()){finish();return;} setContentView(screen()); DriverAppSettings.apply(this); }
 
     private View screen(){
-        ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(Color.parseColor("#F6F9FE"));
+        ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(DriverThemeTokens.color(this, "#F6F9FE"));
         LinearLayout c=new LinearLayout(this); c.setOrientation(LinearLayout.VERTICAL); c.setPadding(dp(18),dp(18),dp(18),dp(28)); scroll.addView(c,new ScrollView.LayoutParams(-1,-2));
         TextView back=text("‹  Transfer Antar Driver",24,"#0B3A78",true); back.setOnClickListener(v->finish()); c.addView(back);
         c.addView(text("Kirim saldo Transpay ke driver lain. Gratis 5 kali setiap bulan, transfer berikutnya dikenakan biaya admin sesuai aturan customer.",13,"#64748B",false),lp(0,8,0,16));
@@ -181,10 +181,10 @@ public class DriverTransferActivity extends FragmentActivity {
     }
     private void loading(boolean x){submit.setEnabled(!x);submit.setText(x?"Memproses...":"Periksa & Transfer");}
     private void info(String m){PremiumDialogs.builder(this).setTitle("Informasi").setMessage(m==null?"Terjadi kesalahan":m).setPositiveButton("OK",null).show();}
-    private LinearLayout card(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);v.setPadding(dp(16),dp(16),dp(16),dp(16));GradientDrawable g=new GradientDrawable();g.setColor(Color.WHITE);g.setCornerRadius(dp(18));v.setBackground(g);v.setElevation(dp(2));return v;}
-    private EditText input(String h,int type){EditText e=new EditText(this);e.setHint(h);e.setTextSize(14);e.setInputType(type);e.setPadding(dp(13),0,dp(13),0);GradientDrawable g=new GradientDrawable();g.setColor(Color.parseColor("#F8FAFC"));g.setStroke(dp(1),Color.parseColor("#DCE6F2"));g.setCornerRadius(dp(12));e.setBackground(g);e.setSingleLine(true);e.setMinHeight(dp(48));return e;}
-    private Button button(String s){Button b=new Button(this);b.setText(s);b.setTextColor(Color.WHITE);b.setTextSize(14);b.setAllCaps(false);b.setTypeface(Typeface.DEFAULT_BOLD);GradientDrawable g=new GradientDrawable();g.setColor(Color.parseColor("#0B7CFF"));g.setCornerRadius(dp(14));b.setBackground(g);return b;}
-    private TextView text(String s,int z,String color,boolean bold){TextView t=new TextView(this);t.setText(s);t.setTextSize(z);t.setTextColor(Color.parseColor(color));t.setTypeface(Typeface.DEFAULT,bold?Typeface.BOLD:Typeface.NORMAL);return t;}
+    private LinearLayout card(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);v.setPadding(dp(16),dp(16),dp(16),dp(16));GradientDrawable g=new GradientDrawable();g.setColor(DriverThemeTokens.surface(this));g.setCornerRadius(dp(18));v.setBackground(g);v.setElevation(dp(2));return v;}
+    private EditText input(String h,int type){EditText e=new EditText(this);e.setHint(h);e.setTextSize(14);e.setInputType(type);e.setPadding(dp(13),0,dp(13),0);GradientDrawable g=new GradientDrawable();g.setColor(DriverThemeTokens.color(this, "#F8FAFC"));g.setStroke(dp(1),DriverThemeTokens.color(this, "#DCE6F2"));g.setCornerRadius(dp(12));e.setBackground(g);e.setSingleLine(true);e.setMinHeight(dp(48));return e;}
+    private Button button(String s){Button b=new Button(this);b.setText(s);b.setTextColor(DriverThemeTokens.onAccent(this));b.setTextSize(14);b.setAllCaps(false);b.setTypeface(Typeface.DEFAULT_BOLD);GradientDrawable g=new GradientDrawable();g.setColor(DriverThemeTokens.color(this, "#0B7CFF"));g.setCornerRadius(dp(14));b.setBackground(g);return b;}
+    private TextView text(String s,int z,String color,boolean bold){TextView t=new TextView(this);t.setText(s);t.setTextSize(z);t.setTextColor(DriverThemeTokens.color(this, color));t.setTypeface(Typeface.DEFAULT,bold?Typeface.BOLD:Typeface.NORMAL);return t;}
     private LinearLayout.LayoutParams lp(int l,int t,int r,int b){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(dp(l),dp(t),dp(r),dp(b));return p;}
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);} private long parse(String s){try{return Long.parseLong(s.replaceAll("[^0-9]",""));}catch(Exception e){return 0;}} private String money(long n){return NumberFormat.getCurrencyInstance(new Locale("id","ID")).format(n).replace(",00","");}
 }

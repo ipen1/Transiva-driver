@@ -24,6 +24,19 @@ public final class DriverThemeTokens {
     public static int accent(Context c) { return ContextCompat.getColor(c, R.color.transiva_blue); }
     public static int onAccent(Context c) { return ContextCompat.getColor(c, R.color.transiva_on_accent); }
 
+
+    // Theme Engine 2.1 app-wide semantic roles. Status/brand colors remain intentional,
+    // while readable surfaces/text always resolve against current uiMode resources.
+    public static int inputBackground(Context c) { return surface(c); }
+    public static int dialogBackground(Context c) { return surface(c); }
+    public static int navigationBackground(Context c) { return surface(c); }
+    public static int divider(Context c) { return border(c); }
+    public static int disabledText(Context c) { return hint(c); }
+    public static int iconPrimary(Context c) { return textPrimary(c); }
+    public static int positive(Context c) { return color(c, "#16A34A"); }
+    public static int warning(Context c) { return color(c, "#F59E0B"); }
+    public static int danger(Context c) { return color(c, "#DC2626"); }
+
     /** Maps legacy programmatic hex colors onto semantic resources in dark mode. */
     public static int color(Context c, String legacyHex) {
         String h = legacyHex == null ? "" : legacyHex.trim().toUpperCase(Locale.US);
@@ -31,8 +44,9 @@ public final class DriverThemeTokens {
             case "#FFFFFF": case "#FFFFFFFF": case "#FCFFFFFF": case "#FAFFFFFF":
                 return surface(c);
             case "#F7FAFF": case "#F7FBFF": case "#F3F8FF": case "#EAF4FF":
+            case "#F8FAFC": case "#F1F5F9": case "#EEF6FF": case "#F5F9FF":
                 return background(c);
-            case "#0F172A": case "#123D7C": case "#0B3675": case "#0B3A78": case "#082F63": case "#0A356C":
+            case "#0F172A": case "#111827": case "#1E293B": case "#123D7C": case "#0B3675": case "#0B3A78": case "#082F63": case "#0A356C":
                 return textPrimary(c);
             case "#64748B": case "#68758A": case "#475569": case "#7A475569":
                 return textSecondary(c);

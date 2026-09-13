@@ -51,6 +51,7 @@ public class TransivaDriverApplication extends Application implements Applicatio
         // Re-apply after resume because OEMs can change navigation-bar insets
         // when switching gesture/3-button mode, PiP, keyboard, or immersive screens.
         try { DriverResponsiveUi.apply(activity); } catch (Throwable ignored) { }
+        try { DriverThemeEngine.applyAppWide(activity); } catch (Throwable ignored) { }
     }
 
     /**
