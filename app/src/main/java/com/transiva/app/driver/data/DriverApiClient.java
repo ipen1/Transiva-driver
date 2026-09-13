@@ -44,7 +44,7 @@ public final class DriverApiClient {
     }
 
     private static final String TAG = "DriverApiClient";
-    private static final String BASE_URL = "https://transiva.my.id/server/";
+    private static final String BASE_URL = com.transiva.app.DriverApiConfig.BASE_URL;
     private static final int MAX_ATTEMPTS = 4;
     private final SessionManager session;
     private final Context appContext;
