@@ -77,7 +77,7 @@ public final class TransivaRichNotificationManager {
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(R.drawable.ic_notification_bell)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
@@ -107,7 +107,7 @@ public final class TransivaRichNotificationManager {
             try {
                 Uri uri = Uri.parse(actionUrl.trim());
                 String scheme = uri.getScheme();
-                if ("https".equalsIgnoreCase(scheme) || "http".equalsIgnoreCase(scheme)) {
+                if ("https".equalsIgnoreCase(scheme)) {
                     Intent external = new Intent(Intent.ACTION_VIEW, uri);
                     external.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     return external;
