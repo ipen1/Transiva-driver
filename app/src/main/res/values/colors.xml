@@ -5,6 +5,7 @@
     <color name="transparent">#00000000</color>
 
     <color name="transiva_blue">#1677FF</color>
+    <color name="transiva_on_accent">#FFFFFFFF</color>
     <color name="transiva_blue_dark">#0057D9</color>
     <color name="transiva_blue_light">#5AA8FF</color>
     <color name="transiva_orange">#FF8A00</color>
