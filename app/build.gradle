@@ -16,6 +16,7 @@ android {
         targetSdk 36
         versionCode 29
         versionName '2.8.29'
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
