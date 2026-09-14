@@ -46,12 +46,25 @@ public final class StableRouteEngine {
     }
 
     public static Result fetch(double fromLat, double fromLng, double toLat, double toLng) throws Exception {
+        return fetch(fromLat, fromLng, toLat, toLng, false);
+    }
+
+    /**
+     * Fetch a route, optionally bypassing the short-lived origin cache.
+     * A forced/off-route reroute MUST bypass cache; otherwise a driver that takes
+     * a different road within the old cache radius can be handed the stale route
+     * again and appear to be snapped back to the previous road.
+     */
+    public static Result fetch(double fromLat, double fromLng, double toLat, double toLng,
+                               boolean bypassCache) throws Exception {
         if (!valid(fromLat, fromLng) || !valid(toLat, toLng)) {
             throw new IllegalArgumentException("Invalid route coordinates");
         }
 
-        Result cached = getCached(fromLat, fromLng, toLat, toLng);
-        if (cached != null) return cached;
+        if (!bypassCache) {
+            Result cached = getCached(fromLat, fromLng, toLat, toLng);
+            if (cached != null) return cached;
+        }
 
         Exception last = null;
         for (int attempt = 0; attempt < 2; attempt++) {
@@ -175,7 +188,9 @@ public final class StableRouteEngine {
     private static Result getCached(double fromLat, double fromLng, double toLat, double toLng) {
         Result r = cacheResult;
         if (r == null || System.currentTimeMillis() - cacheAt > CACHE_TTL_MS) return null;
-        if (meters(fromLat, fromLng, cacheFromLat, cacheFromLng) > 80d) return null;
+        // Reuse only when the origin is essentially the same GPS position.
+        // A wide radius here breaks real rerouting on nearby parallel/alternate roads.
+        if (meters(fromLat, fromLng, cacheFromLat, cacheFromLng) > 15d) return null;
         if (meters(toLat, toLng, cacheToLat, cacheToLng) > 30d) return null;
         return r;
     }

@@ -167,7 +167,9 @@ abstract class DriverNavigationActivityLayer2 extends DriverNavigationActivityLa
 
         routeExecutor.execute(() -> {
             try {
-                StableRouteEngine.Result r = StableRouteEngine.fetch(fromLat, fromLng, toLat, toLng);
+                // Forced reroutes always bypass StableRouteEngine cache. This is
+                // essential when the driver deliberately chooses an alternate road.
+                StableRouteEngine.Result r = StableRouteEngine.fetch(fromLat, fromLng, toLat, toLng, force);
                 main.post(() -> { if (routeScheduler != null) routeScheduler.updateProgress(72); });
 
                 pendingRouteGeoJson = routeGeoJson(r.pointsJson());
@@ -254,8 +256,10 @@ abstract class DriverNavigationActivityLayer2 extends DriverNavigationActivityLa
         if (!Double.isFinite(deviation) ||
                 (accuracy > 85f && deviation < NavigationRoutePolicy.OFF_ROUTE_HARD_DISTANCE_M + 30d) ||
                 deviation < trigger) {
+            // Healthy route: keep the current geometry. Previously this called
+            // requestRoute(false), which rebuilt the route every ~35 m / 15 s and
+            // could make navigation flip between equally valid roads.
             resetOffRouteConfirmation();
-            requestRoute(false);
             return;
         }
 
@@ -272,9 +276,9 @@ abstract class DriverNavigationActivityLayer2 extends DriverNavigationActivityLa
                 ? meters(offRouteStartLat, offRouteStartLng, driverLat, driverLng) : 0d;
         long duration = now - offRouteStartedAt;
 
-        int requiredFixes = accuracy >= 55f ? 5 : (accuracy >= 30f ? 4 : 3);
-        long requiredMs = accuracy >= 55f ? 8000L : NavigationRoutePolicy.OFF_ROUTE_CONFIRM_MS;
-        double requiredTravel = accuracy >= 55f ? 35d : NavigationRoutePolicy.OFF_ROUTE_MIN_TRAVEL_M;
+        int requiredFixes = accuracy >= 55f ? 5 : (accuracy >= 30f ? 3 : 2);
+        long requiredMs = accuracy >= 55f ? 6500L : NavigationRoutePolicy.OFF_ROUTE_CONFIRM_MS;
+        double requiredTravel = accuracy >= 55f ? 28d : NavigationRoutePolicy.OFF_ROUTE_MIN_TRAVEL_M;
         boolean hardDeviation = deviation >= NavigationRoutePolicy.OFF_ROUTE_HARD_DISTANCE_M && offRouteFixCount >= 2;
         boolean confirmed = offRouteFixCount >= requiredFixes &&
                 duration >= requiredMs && traveled >= requiredTravel;
@@ -287,8 +291,8 @@ abstract class DriverNavigationActivityLayer2 extends DriverNavigationActivityLa
             return;
         }
 
-        // Keep the stable current route while confirmation is in progress.
-        requestRoute(false);
+        // Keep the stable current route while confirmation is in progress. Do not
+        // launch a normal cached refresh here; only the confirmed branch reroutes.
     }
 
     protected void resetOffRouteConfirmation() {
