@@ -540,4 +540,16 @@ abstract class DriverTripActivityLayer1 extends Activity {
 
 
     protected void renderEcosystemFeatures(){ if(order==null)return; DriverEcosystemFeatures f=DriverEcosystemFeatures.from(order); if(distanceHint!=null && !f.summary().isEmpty()){String old=String.valueOf(distanceHint.getText()); if(!old.contains("Guardian")) distanceHint.setText(old+f.summary());} }
+
+    // Ecosystem hook is declared in the shared layer so Layer2 can call it safely.
+    // DriverTripActivity overrides this with the full network-backed implementation.
+    protected void loadEcosystemFeatures(){
+        if(order==null||session==null)return;
+        final String oid=orderId();
+        DriverEcosystemApi.load(session,oid,e->{
+            if(e==null)return;
+            try{order.put("ecosystem",e);}catch(Exception ignored){}
+            renderEcosystemFeatures();
+        });
+    }
 }
