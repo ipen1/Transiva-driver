@@ -538,4 +538,6 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected abstract void refreshButtons();
     protected abstract void hideAction(View b);
 
+
+    protected void renderEcosystemFeatures(){ if(order==null)return; DriverEcosystemFeatures f=DriverEcosystemFeatures.from(order); if(distanceHint!=null && !f.summary().isEmpty()){String old=String.valueOf(distanceHint.getText()); if(!old.contains("Guardian")) distanceHint.setText(old+f.summary());} }
 }

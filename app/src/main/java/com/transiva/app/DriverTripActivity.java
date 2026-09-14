@@ -86,8 +86,10 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         tripSnapshotStore = new TripOrderSnapshotStore(this);
         loadOrder();
         buildBase();
-        if(order == null){ renderEmpty(); return; }
+        if(order == null){ renderEmpty();
+            renderEcosystemFeatures(); return; }
         renderOrder();
+        loadEcosystemFeatures();
         refreshButtons();
         startLocationWatch();
 
@@ -383,5 +385,12 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             b.append(label);
         }
         return b.toString();
+    }
+
+    protected void renderEcosystemFeatures(){ if(order==null)return; DriverEcosystemFeatures f=DriverEcosystemFeatures.from(order); if(distanceHint!=null && !f.summary().isEmpty()){String old=String.valueOf(distanceHint.getText()); if(!old.contains("Guardian")) distanceHint.setText(old+f.summary());} }
+
+    protected void loadEcosystemFeatures(){
+        if(order==null||session==null)return; final String oid=orderId();
+        DriverEcosystemApi.load(session,oid,e->{ if(e==null)return; try{order.put("ecosystem",e);}catch(Exception ignored){} renderEcosystemFeatures(); });
     }
 }

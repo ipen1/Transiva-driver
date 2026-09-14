@@ -104,8 +104,9 @@ public final class TripCommunicationController {
     public void openNavigation(boolean pickup, double driverLat, double driverLng) {
         double lat = pickup ? host.tripCoord("pickup_lat", "user_lat") : host.tripCoord("delivery_lat", "destination_lat");
         double lng = pickup ? host.tripCoord("pickup_lng", "user_lng") : host.tripCoord("delivery_lng", "destination_lng");
-        if (!host.tripValid(lat, lng)) { host.tripInfo("Lokasi", "Koordinat belum tersedia."); return; }
         String mode = pickup ? "pickup" : "delivery";
+        if(!pickup){ DriverEcosystemFeatures eco=DriverEcosystemFeatures.from(order); org.json.JSONObject wp=eco.nextPendingWaypoint(); if(wp!=null){double wl=wp.optDouble("latitude",0),wn=wp.optDouble("longitude",0);if(host.tripValid(wl,wn)){lat=wl;lng=wn;mode="waypoint_"+wp.optInt("sequence",1);}} }
+        if (!host.tripValid(lat, lng)) { host.tripInfo("Lokasi", "Koordinat belum tersedia."); return; }
         try { host.tripFitNativeOverview(); }
         catch (Throwable t) { TransivaDiagnostics.error(host, "navigation", "TRIP_OVERVIEW_FIT_FAILED", t); }
 

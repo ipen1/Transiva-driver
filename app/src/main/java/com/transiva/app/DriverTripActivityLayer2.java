@@ -122,6 +122,8 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
 
         arrivedPickupBtn = slideAction("📍 Geser • Tiba di Penjemputan", () -> updateStatus("arrived_pickup")); c.addView(arrivedPickupBtn, slideLp(8));
         startDeliveryBtn = slideAction(orderKind.equals("pickup") ? "📦 Geser • Paket Diambil, Mulai Antar" : vehicleEmoji() + " Geser • Mulai Perjalanan", () -> updateStatus("on_delivery")); c.addView(startDeliveryBtn, slideLp(8));
+        DriverEcosystemFeatures ecoNow=DriverEcosystemFeatures.from(order); JSONObject pendingStop=ecoNow.nextPendingWaypoint();
+        if(isDeliveryPhase(status()) && pendingStop!=null){ int seq=pendingStop.optInt("sequence",1); SlideActionView stopBtn=slideAction("📍 Geser • Tiba di Stop "+seq, () -> markCurrentWaypointArrived(seq)); c.addView(stopBtn, slideLp(8)); }
         arrivedDeliveryBtn = slideAction("🏁 Geser • Tiba di Pengantaran", () -> updateStatus("arrived_delivery")); c.addView(arrivedDeliveryBtn, slideLp(8));
         finishBtn = slideAction("✅ Geser • Selesaikan Order", () -> { if (isPickupOrder()) showPickupOtpDialog(); else updateStatus("finished"); }); c.addView(finishBtn, slideLp(8));
         updatePriceBtn = outline("💰 Update Total"); updatePriceBtn.setOnClickListener(v -> showUpdatePriceDialog()); c.addView(updatePriceBtn, btnLp(8));
@@ -394,5 +396,12 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         b.setVisibility(View.GONE);
         b.setEnabled(false);
         b.setAlpha(1f);
+    }
+
+    protected void renderEcosystemFeatures(){ if(order==null)return; DriverEcosystemFeatures f=DriverEcosystemFeatures.from(order); if(distanceHint!=null && !f.summary().isEmpty()){String old=String.valueOf(distanceHint.getText()); if(!old.contains("Guardian")) distanceHint.setText(old+f.summary());} }
+
+    protected void markCurrentWaypointArrived(int sequence){
+        if(session==null||order==null)return; if(progressBar!=null)progressBar.setVisibility(View.VISIBLE);
+        DriverNetworkExecutor.execute(()->{try{JSONObject body=new JSONObject().put("action","arrive_waypoint").put("order_id",orderId()).put("sequence",sequence); new com.transiva.app.driver.data.DriverApiClient(session).post("ride_ecosystem_order.php",body); mainHandler.post(()->{loadEcosystemFeatures(); if(progressBar!=null)progressBar.setVisibility(View.GONE); renderOrder(); refreshButtons();});}catch(Exception e){mainHandler.post(()->{if(progressBar!=null)progressBar.setVisibility(View.GONE);tripInfo("Multi Destination","Gagal menandai pemberhentian. Coba lagi.");});}});
     }
 }

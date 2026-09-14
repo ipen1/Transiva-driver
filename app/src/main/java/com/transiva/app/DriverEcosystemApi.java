@@ -1,0 +1,3 @@
+package com.transiva.app;
+import com.transiva.app.driver.data.DriverApiClient;import org.json.JSONObject;
+public final class DriverEcosystemApi{public interface Callback{void done(JSONObject x);}private DriverEcosystemApi(){} public static void load(SessionManager s,String orderId,Callback cb){if(s==null||orderId==null||orderId.trim().isEmpty())return;DriverNetworkExecutor.execute(()->{JSONObject out=new JSONObject();try{DriverApiClient.Result r=new DriverApiClient(s).post("ride_ecosystem_order.php",new JSONObject().put("action","get").put("order_id",orderId));out=r.body.optJSONObject("ecosystem");if(out==null)out=r.body;}catch(Exception ignored){}JSONObject f=out;new android.os.Handler(android.os.Looper.getMainLooper()).post(()->{if(cb!=null)cb.done(f);});});}}
