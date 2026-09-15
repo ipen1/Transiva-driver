@@ -81,6 +81,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected MapView mapView;
     protected GoogleMap googleMap;
     protected Marker driverMarker, pickupMarker, deliveryMarker;
+    protected final java.util.ArrayList<Marker> waypointMarkers = new java.util.ArrayList<>();
     protected Polyline pickupPolyline, deliveryPolyline;
     protected SlideActionView arrivedPickupBtn, startDeliveryBtn, arrivedDeliveryBtn, finishBtn;
     protected Button updatePriceBtn, cancelOrderBtn, customerChatBtn;
@@ -417,25 +418,6 @@ abstract class DriverTripActivityLayer1 extends Activity {
             }catch(Exception e){ info("Harga","Nominal tidak valid."); }
         }).show();
     }
-    protected void quoteExtraFare(){
-        if(order==null || !valid(lastDriverLat,lastDriverLng)){ info("Ongkir Tambahan","Lokasi GPS driver belum tersedia."); return; }
-        setLoading(true); DriverNetworkExecutor.execute(()->{ try{
-            JSONObject p=new JSONObject().put("action","quote").put("source",isPickupOrder()?"pickup_orders":"orders").put("id",Integer.parseInt(internalId())).put("driver_lat",lastDriverLat).put("driver_lng",lastDriverLng);
-            JSONObject r=postJson(BASE_URL+"driver_request_extra_fare.php",p); boolean ok=r.optBoolean("success",false);
-            mainHandler.post(()->{setLoading(false); if(!ok){info("Ongkir Tambahan",first(r.optString("message"),"Tidak dapat menghitung ongkir tambahan."));return;}
-                double extra=r.optDouble("extra_fare",0), km=r.optDouble("extra_distance_km",0), total=r.optDouble("new_price",0);
-                PremiumDialogs.builder(this).setTitle("Ajukan Ongkir Tambahan").setMessage("Jarak terlewat ±"+String.format(Locale.US,"%.2f",km)+" km\nTambahan: "+rupiah(extra)+"\nTotal baru: "+rupiah(total)+"\n\nCustomer harus menyetujui sebelum perjalanan dapat diselesaikan.").setNegativeButton("Batal",null).setPositiveButton("Ajukan",(d,w)->requestExtraFare()).show();
-            });
-        }catch(Exception e){mainHandler.post(()->{setLoading(false);info("Ongkir Tambahan","Koneksi server bermasalah.");});}});
-    }
-    protected void requestExtraFare(){
-        setLoading(true); DriverNetworkExecutor.execute(()->{ try{
-            JSONObject p=new JSONObject().put("action","request").put("source",isPickupOrder()?"pickup_orders":"orders").put("id",Integer.parseInt(internalId())).put("driver_lat",lastDriverLat).put("driver_lng",lastDriverLng);
-            JSONObject r=postJson(BASE_URL+"driver_request_extra_fare.php",p); boolean ok=r.optBoolean("success",false); String m=first(r.optString("message"),ok?"Pengajuan dikirim":"Pengajuan gagal");
-            mainHandler.post(()->{setLoading(false);info(ok?"Menunggu Customer":"Gagal",m); if(ok){try{order.put("price_change_status","pending");order.put("price_change_requested",r.optDouble("new_price",0));order.put("price_change_reason",r.optString("reason","Ongkir tambahan"));}catch(Exception ignored){} renderOrder();refreshButtons();}});
-        }catch(Exception e){mainHandler.post(()->{setLoading(false);info("Gagal","Koneksi server bermasalah.");});}});
-    }
-
     protected void requestPriceChange(double value,String reason){
         setLoading(true); DriverNetworkExecutor.execute(()->{ try{
             JSONObject p=new JSONObject(); p.put("source",isPickupOrder()?"pickup_orders":"orders"); p.put("id",Integer.parseInt(internalId())); p.put("driver",driverUsername); p.put("new_price",value); p.put("reason",reason);
@@ -571,4 +553,33 @@ abstract class DriverTripActivityLayer1 extends Activity {
             renderEcosystemFeatures();
         });
     }
+    protected void requestExtraFareForMissedDistance(){
+        if(order==null||session==null){ info("Ongkir Tambahan","Order belum siap."); return; }
+        if(!valid(lastDriverLat,lastDriverLng)){ info("Ongkir Tambahan","GPS driver belum akurat. Tunggu lokasi terbaca lalu coba lagi."); return; }
+        setLoading(true);
+        DriverNetworkExecutor.execute(()->{ try{
+            JSONObject q=new JSONObject().put("action","quote").put("source",isPickupOrder()?"pickup_orders":"orders")
+                    .put("id",Integer.parseInt(internalId())).put("driver_lat",lastDriverLat).put("driver_lng",lastDriverLng);
+            com.transiva.app.driver.data.DriverApiClient client=new com.transiva.app.driver.data.DriverApiClient(session);
+            com.transiva.app.driver.data.DriverApiClient.Result rr=client.post("driver_request_extra_fare.php",q); JSONObject r=rr.body;
+            double km=r.optDouble("extra_distance_km",0), extra=r.optDouble("extra_fare",0), total=r.optDouble("new_price",0); String target=first(r.optString("target_label"),"tujuan");
+            mainHandler.post(()->{ setLoading(false); PremiumDialogs.builder(this).setTitle("Ajukan Ongkir Tambahan")
+                .setMessage("Jarak terlewat ±"+one(km)+" km menuju "+target+".\nTambahan "+rupiah(extra)+"\nTotal baru "+rupiah(total)+"\n\nHarga hanya berubah setelah customer menyetujui.")
+                .setNegativeButton("Batal",null).setPositiveButton("Ajukan",(d,w)->sendExtraFareRequest()).show(); });
+        }catch(com.transiva.app.driver.data.DriverApiClient.ApiException e){ mainHandler.post(()->{setLoading(false);info("Ongkir Tambahan", first(e.getMessage(),"Permintaan ditolak server."));}); }
+        catch(Exception e){ mainHandler.post(()->{setLoading(false);info("Ongkir Tambahan","Gagal memproses permintaan: "+first(e.getMessage(),"kesalahan tidak diketahui"));}); } });
+    }
+
+    private void sendExtraFareRequest(){
+        if(order==null||session==null||!valid(lastDriverLat,lastDriverLng))return; setLoading(true);
+        DriverNetworkExecutor.execute(()->{ try{
+            JSONObject q=new JSONObject().put("action","request").put("source",isPickupOrder()?"pickup_orders":"orders")
+                    .put("id",Integer.parseInt(internalId())).put("driver_lat",lastDriverLat).put("driver_lng",lastDriverLng);
+            com.transiva.app.driver.data.DriverApiClient.Result rr=new com.transiva.app.driver.data.DriverApiClient(session).post("driver_request_extra_fare.php",q);
+            String m=first(rr.body.optString("message"),"Pengajuan dikirim ke customer.");
+            mainHandler.post(()->{setLoading(false);info("Ongkir Tambahan",m);});
+        }catch(com.transiva.app.driver.data.DriverApiClient.ApiException e){mainHandler.post(()->{setLoading(false);info("Ongkir Tambahan",first(e.getMessage(),"Permintaan ditolak server."));});}
+        catch(Exception e){mainHandler.post(()->{setLoading(false);info("Ongkir Tambahan","Gagal mengirim: "+first(e.getMessage(),"kesalahan tidak diketahui"));});} });
+    }
+
 }

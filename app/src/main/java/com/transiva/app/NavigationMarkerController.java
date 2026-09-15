@@ -5,6 +5,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 
 import org.json.JSONObject;
+import org.json.JSONArray;
 import org.maplibre.android.annotations.Icon;
 import org.maplibre.android.annotations.IconFactory;
 import org.maplibre.android.annotations.Marker;
@@ -18,6 +19,7 @@ public final class NavigationMarkerController {
     private final JSONObject order;
     private Marker pickupMarker;
     private Marker deliveryMarker;
+    private final java.util.ArrayList<Marker> waypointMarkers = new java.util.ArrayList<>();
 
     public NavigationMarkerController(Activity activity, JSONObject order) {
         this.activity = activity;
@@ -41,6 +43,11 @@ public final class NavigationMarkerController {
                         .icon(icon(f, "map_destination_pin", android.R.drawable.ic_menu_mylocation, 34, 34)));
             }
         } catch (Throwable t) { TransivaDiagnostics.error(activity, "navigation", "NAV_DELIVERY_MARKER_FAILED", t); }
+        try {
+            for(Marker m:waypointMarkers){ try{map.removeMarker(m);}catch(Throwable ignored){} } waypointMarkers.clear();
+            JSONObject eco=order.optJSONObject("ecosystem"); JSONArray a=eco==null?order.optJSONArray("waypoints"):eco.optJSONArray("waypoints");
+            if(a!=null) for(int i=0;i<a.length();i++){ JSONObject w=a.optJSONObject(i); if(w==null)continue; double lat=w.optDouble("latitude",0),lng=w.optDouble("longitude",0); if(!valid(lat,lng))continue; int seq=w.optInt("sequence",i+1); String note=first(w.optString("note"),w.optString("address")); Marker m=map.addMarker(new MarkerOptions().position(new LatLng(lat,lng)).title("Stop "+seq+(note.isEmpty()?"":" • "+note)).icon(f.defaultMarker())); if(m!=null)waypointMarkers.add(m); }
+        } catch(Throwable t){ TransivaDiagnostics.error(activity,"navigation","NAV_WAYPOINT_MARKERS_FAILED",t); }
     }
 
     private Icon icon(IconFactory factory, String name, int fallback, int wDp, int hDp) {

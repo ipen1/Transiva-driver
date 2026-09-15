@@ -126,12 +126,8 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         if(isDeliveryPhase(status()) && pendingStop!=null){ int seq=pendingStop.optInt("sequence",1); SlideActionView stopBtn=slideAction("📍 Geser • Tiba di Stop "+seq, () -> markCurrentWaypointArrived(seq)); c.addView(stopBtn, slideLp(8)); }
         arrivedDeliveryBtn = slideAction("🏁 Geser • Tiba di Pengantaran", () -> updateStatus("arrived_delivery")); c.addView(arrivedDeliveryBtn, slideLp(8));
         finishBtn = slideAction("✅ Geser • Selesaikan Order", () -> { if (isPickupOrder()) showPickupOtpDialog(); else updateStatus("finished"); }); c.addView(finishBtn, slideLp(8));
-        if (isDeliveryPhase(status())) {
-            Button extraFareBtn = outline("🛣 Ajukan Ongkir Jarak Terlewat");
-            extraFareBtn.setOnClickListener(v -> quoteExtraFare());
-            c.addView(extraFareBtn, btnLp(8));
-        }
         updatePriceBtn = outline("💰 Update Total"); updatePriceBtn.setOnClickListener(v -> showUpdatePriceDialog()); c.addView(updatePriceBtn, btnLp(8));
+        if(isDeliveryPhase(status())){ Button extraFare=outline("🛣 Ajukan Ongkir Jarak Terlewat"); extraFare.setOnClickListener(v->requestExtraFareForMissedDistance()); c.addView(extraFare,btnLp(8)); }
         cancelOrderBtn = dangerOutlineButton("Batalkan Order");
         cancellationController = new TripCancellationController(this, order, session, cancelOrderBtn);
         cancelOrderBtn.setOnClickListener(v -> cancellationController.show());
@@ -407,6 +403,6 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
 
     protected void markCurrentWaypointArrived(int sequence){
         if(session==null||order==null)return; if(progressBar!=null)progressBar.setVisibility(View.VISIBLE);
-        DriverNetworkExecutor.execute(()->{try{JSONObject body=new JSONObject().put("action","arrive_waypoint").put("order_id",orderId()).put("sequence",sequence); new com.transiva.app.driver.data.DriverApiClient(session).post("ride_ecosystem_order.php",body); mainHandler.post(()->{loadEcosystemFeatures(); if(progressBar!=null)progressBar.setVisibility(View.GONE); renderOrder(); refreshButtons();});}catch(Exception e){mainHandler.post(()->{if(progressBar!=null)progressBar.setVisibility(View.GONE);tripInfo("Multi Destination","Gagal menandai pemberhentian. Coba lagi.");});}});
+        DriverNetworkExecutor.execute(()->{try{JSONObject body=new JSONObject().put("action","arrive_waypoint").put("order_id",orderId()).put("sequence",sequence); new com.transiva.app.driver.data.DriverApiClient(session).post("ride_ecosystem_order.php",body); mainHandler.post(()->{loadEcosystemFeatures(); if(progressBar!=null)progressBar.setVisibility(View.GONE); renderOrder(); refreshButtons();});}catch(Exception e){mainHandler.post(()->{if(progressBar!=null)progressBar.setVisibility(View.GONE);tripInfo("Multi Destination",first(e.getMessage(),"Gagal menandai pemberhentian. Coba lagi."));});}});
     }
 }

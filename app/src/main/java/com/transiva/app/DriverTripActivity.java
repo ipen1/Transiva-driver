@@ -62,6 +62,9 @@ import java.text.NumberFormat;
 import java.util.Locale;
 import android.util.Base64;
 public class DriverTripActivity extends DriverTripActivityLayer2 {
+    private boolean realtimeTripRunning=false;
+    private String realtimeSignature="";
+    private final Runnable realtimeTripPoll=new Runnable(){ public void run(){ if(!realtimeTripRunning||order==null||session==null)return; refreshTripRealtime(); mainHandler.postDelayed(this,3000L); } };
 
 
     @Override protected void onCreate(Bundle b){
@@ -99,10 +102,22 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             if(valid(lastDriverLat,lastDriverLng)) requestStableRoute(true);
         }, 250L);
     }
-    @Override protected void onResume(){ super.onResume(); try{ if(mapView!=null) mapView.onResume(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_RESUME_FAILED",e); } if(order != null) startLocationWatch(); if(communicationController!=null) communicationController.onStart(); }
-    @Override protected void onPause(){ if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView!=null) mapView.onPause(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_PAUSE_FAILED",e); } super.onPause(); }
+    @Override protected void onResume(){ super.onResume(); realtimeTripRunning=true; mainHandler.removeCallbacks(realtimeTripPoll); mainHandler.post(realtimeTripPoll); try{ if(mapView!=null) mapView.onResume(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_RESUME_FAILED",e); } if(order != null) startLocationWatch(); if(communicationController!=null) communicationController.onStart(); }
+    @Override protected void onPause(){ realtimeTripRunning=false; mainHandler.removeCallbacks(realtimeTripPoll); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView!=null) mapView.onPause(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_PAUSE_FAILED",e); } super.onPause(); }
     @Override protected void onDestroy(){ if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView != null) mapView.onDestroy(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_DESTROY_FAILED",e); } super.onDestroy(); }
     @Override public void onLowMemory(){ super.onLowMemory(); try{ if(mapView!=null) mapView.onLowMemory(); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } }
+
+    private void refreshTripRealtime(){
+        final String key=orderId();
+        DriverNetworkExecutor.execute(()->{ try{
+            JSONObject q=new JSONObject().put("order_id",key);
+            com.transiva.app.driver.data.DriverApiClient.Result rr=new com.transiva.app.driver.data.DriverApiClient(session).post("driver_trip_realtime.php",q);
+            JSONObject fresh=rr.body.optJSONObject("order"); if(fresh==null)return;
+            String sig=fresh.optString("status")+"|"+fresh.optString("price")+"|"+String.valueOf(fresh.optJSONObject("ecosystem"))+"|"+String.valueOf(fresh.optJSONObject("extra_fare_request"));
+            if(sig.equals(realtimeSignature))return; realtimeSignature=sig;
+            mainHandler.post(()->{ try{ order=fresh; saveActiveOrder(); renderOrder(); refreshButtons(); }catch(Exception ignored){} });
+        }catch(Exception ignored){} });
+    }
 
     protected void loadSession(){
         try{
@@ -267,7 +282,10 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         double pLat=coord("pickup_lat","user_lat"), pLng=coord("pickup_lng","user_lng");
         double dLat=coord("delivery_lat","destination_lat"), dLng=coord("delivery_lng","destination_lng");
         if(valid(pLat,pLng) && pickupMarker==null) pickupMarker=googleMap.addMarker(new MarkerOptions().position(new LatLng(pLat,pLng)).title("Pickup").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)));
-        if(valid(dLat,dLng) && deliveryMarker==null) deliveryMarker=googleMap.addMarker(new MarkerOptions().position(new LatLng(dLat,dLng)).title("Delivery").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)));
+        if(valid(dLat,dLng) && deliveryMarker==null) deliveryMarker=googleMap.addMarker(new MarkerOptions().position(new LatLng(dLat,dLng)).title("Tujuan Akhir").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)));
+        for(Marker m:waypointMarkers){ try{m.remove();}catch(Exception ignored){} } waypointMarkers.clear();
+        DriverEcosystemFeatures eco=DriverEcosystemFeatures.from(order);
+        for(int i=0;i<eco.waypoints.length();i++){ JSONObject w=eco.waypoints.optJSONObject(i); if(w==null)continue; double wl=w.optDouble("latitude",0),wn=w.optDouble("longitude",0); if(!valid(wl,wn))continue; int seq=w.optInt("sequence",i+1); String note=first(w.optString("note"),w.optString("address"),""); Marker m=googleMap.addMarker(new MarkerOptions().position(new LatLng(wl,wn)).title("Stop "+seq+(note.isEmpty()?"":" • "+note)).icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE))); if(m!=null)waypointMarkers.add(m); }
         fitNativeOverview();
     }
 
@@ -283,6 +301,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             LatLngBounds.Builder b=new LatLngBounds.Builder(); int n=0;
             if(pickupMarker!=null){b.include(pickupMarker.getPosition());n++;}
             if(deliveryMarker!=null){b.include(deliveryMarker.getPosition());n++;}
+            for(Marker m:waypointMarkers){ if(m!=null){b.include(m.getPosition());n++;} }
             if(driverMarker!=null){b.include(driverMarker.getPosition());n++;}
             for(LatLng p:parseRoutePoints(pendingPickupRoutePoints)){b.include(p);n++;}
             for(LatLng p:parseRoutePoints(pendingDeliveryRoutePoints)){b.include(p);n++;}
@@ -391,6 +410,6 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
 
     protected void loadEcosystemFeatures(){
         if(order==null||session==null)return; final String oid=orderId();
-        DriverEcosystemApi.load(session,oid,e->{ if(e==null)return; try{order.put("ecosystem",e);}catch(Exception ignored){} renderEcosystemFeatures(); });
+        DriverEcosystemApi.load(session,oid,e->{ if(e==null)return; try{order.put("ecosystem",e);}catch(Exception ignored){} renderEcosystemFeatures(); if(googleMap!=null){initNativeTripMarkers();} });
     }
 }

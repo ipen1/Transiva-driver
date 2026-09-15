@@ -323,6 +323,7 @@ abstract class DriverNavigationActivityLayer1 extends Activity {
     // NavigationActivity hanya memproses lokasi untuk UI/rute/kamera.
 
     protected double targetLat() {
+        if(targetMode != null && targetMode.startsWith("waypoint_") && valid(explicitTargetLat, explicitTargetLng)) return explicitTargetLat;
         double fromOrder = targetMode.equals("delivery") ?
                 coord("delivery_lat", "destination_lat") :
                 coord("pickup_lat", "user_lat");
@@ -330,6 +331,7 @@ abstract class DriverNavigationActivityLayer1 extends Activity {
     }
 
     protected double targetLng() {
+        if(targetMode != null && targetMode.startsWith("waypoint_") && valid(explicitTargetLat, explicitTargetLng)) return explicitTargetLng;
         double fromOrder = targetLngFromOrder();
         double fromLat = targetMode.equals("delivery") ?
                 coord("delivery_lat", "destination_lat") :
