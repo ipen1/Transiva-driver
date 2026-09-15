@@ -48,6 +48,7 @@ import com.transiva.app.driver.ui.DriverBottomNavigation;
 import com.transiva.app.driver.ui.DriverPageTransition;
 
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 import java.text.NumberFormat;
 import java.util.HashMap;
@@ -538,7 +539,20 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         add(card, serviceExplain, 0, dp(6), 0, 0);
         add(card, text("Penjemputan:\n" + order.pickupAddress,
                 13, "#334155", false), 0, dp(8), 0, 0);
-        add(card, text("Pengantaran:\n" + order.destinationAddress,
+        JSONObject ecoPayload = order.raw == null ? null : order.raw.optJSONObject("ecosystem");
+        JSONArray routeStops = ecoPayload == null ? null : ecoPayload.optJSONArray("waypoints");
+        if (routeStops != null) {
+            for (int i = 0; i < routeStops.length(); i++) {
+                JSONObject stop = routeStops.optJSONObject(i);
+                if (stop == null) continue;
+                int seq = stop.optInt("sequence", i + 1);
+                String address = firstNonEmpty(stop.optString("address", ""), "Titik Stop " + seq);
+                String note = firstNonEmpty(stop.optString("note", ""));
+                String stopLine = "Stop " + seq + ":\n" + address + (note.isEmpty() ? "" : "\n📝 " + note);
+                add(card, text(stopLine, 13, "#B45309", true), 0, dp(6), 0, 0);
+            }
+        }
+        add(card, text("Tujuan akhir:\n" + order.destinationAddress,
                 13, "#334155", false), 0, dp(6), 0, 0);
 
         String meta = "Pendapatan " + rupiah(order.driverEarning) + " • " + ("balance".equalsIgnoreCase(order.paymentMethod) ? "💳 TransPay" : "💵 Tunai");

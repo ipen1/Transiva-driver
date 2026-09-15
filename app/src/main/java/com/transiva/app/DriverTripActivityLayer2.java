@@ -126,6 +126,11 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         if(isDeliveryPhase(status()) && pendingStop!=null){ int seq=pendingStop.optInt("sequence",1); SlideActionView stopBtn=slideAction("📍 Geser • Tiba di Stop "+seq, () -> markCurrentWaypointArrived(seq)); c.addView(stopBtn, slideLp(8)); }
         arrivedDeliveryBtn = slideAction("🏁 Geser • Tiba di Pengantaran", () -> updateStatus("arrived_delivery")); c.addView(arrivedDeliveryBtn, slideLp(8));
         finishBtn = slideAction("✅ Geser • Selesaikan Order", () -> { if (isPickupOrder()) showPickupOtpDialog(); else updateStatus("finished"); }); c.addView(finishBtn, slideLp(8));
+        if (isDeliveryPhase(status())) {
+            Button extraFareBtn = outline("🛣 Ajukan Ongkir Jarak Terlewat");
+            extraFareBtn.setOnClickListener(v -> quoteExtraFare());
+            c.addView(extraFareBtn, btnLp(8));
+        }
         updatePriceBtn = outline("💰 Update Total"); updatePriceBtn.setOnClickListener(v -> showUpdatePriceDialog()); c.addView(updatePriceBtn, btnLp(8));
         cancelOrderBtn = dangerOutlineButton("Batalkan Order");
         cancellationController = new TripCancellationController(this, order, session, cancelOrderBtn);
