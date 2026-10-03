@@ -86,7 +86,7 @@ public class DriverActivityHistoryActivity extends Activity {
         todayTrips=metric(metrics,"Trip hari ini");onlineTime=metric(metrics,"Waktu online");todayDistance=metric(metrics,"Jarak hari ini");
         hero.addView(metrics);content.addView(hero,sectionLp());
         LinearLayout stats=card();TextView toggle=text("Statistik lainnya  ▾",13,"#0B3A78",true);stats.addView(toggle);
-        extraStats=new LinearLayout(this);extraStats.setOrientation(1);extraStats.setVisibility(View.GONE);
+        extraStats=new LinearLayout(this);extraStats.setOrientation(LinearLayout.VERTICAL);extraStats.setVisibility(View.GONE);
         rating=stat(extraStats,"Rating");runningCount=stat(extraStats,"Total berjalan");
         finishedCount=stat(extraStats,"Total selesai");canceledCount=stat(extraStats,"Total dibatalkan");
         stats.addView(extraStats);toggle.setOnClickListener(v->{boolean open=extraStats.getVisibility()!=View.VISIBLE;extraStats.setVisibility(open?View.VISIBLE:View.GONE);toggle.setText(open?"Statistik lainnya  ▴":"Statistik lainnya  ▾");});
@@ -97,7 +97,7 @@ public class DriverActivityHistoryActivity extends Activity {
         HorizontalScrollView ds=new HorizontalScrollView(this);ds.setHorizontalScrollBarEnabled(false);ds.addView(dateRow);content.addView(ds,sectionLp());buildFilters();
         stateText=text("Menghubungkan ke database…",11,"#64748B",false);content.addView(stateText,sectionLp());
         progress=new ProgressBar(this);progress.setVisibility(View.GONE);content.addView(progress,new LinearLayout.LayoutParams(-1,dp(24)));
-        listBox=new LinearLayout(this);listBox.setOrientation(1);content.addView(listBox);
+        listBox=new LinearLayout(this);listBox.setOrientation(LinearLayout.VERTICAL);content.addView(listBox);
         moreButton=text("Muat 10 aktivitas berikutnya  ↓",13,"#0B7CFF",true);moreButton.setGravity(Gravity.CENTER);moreButton.setPadding(dp(8),dp(12),dp(8),dp(12));moreButton.setVisibility(View.GONE);
         moreButton.setOnClickListener(v->{visibleCount+=10;renderList();});content.addView(moreButton,sectionLp());
         shell.addView(DriverBottomNavigation.build(this, DriverBottomNavigation.ActiveItem.ACTIVITY),new LinearLayout.LayoutParams(-1,dp(62)));
@@ -113,7 +113,7 @@ public class DriverActivityHistoryActivity extends Activity {
     private View statContainer(TextView v){ return (View)v.getTag(); }
 
     private TextView metric(LinearLayout row,String label){
-        LinearLayout cell=new LinearLayout(this);cell.setOrientation(1);
+        LinearLayout cell=new LinearLayout(this);cell.setOrientation(LinearLayout.VERTICAL);
         TextView value=text("0",15,"#FFFFFF",true);cell.addView(value);cell.addView(text(label,10,"#EAF4FF",false));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.topMargin=dp(7);row.addView(cell,lp);return value;
     }
@@ -222,7 +222,7 @@ public class DriverActivityHistoryActivity extends Activity {
         c.addView(text((price>0?rupiah(price)+"  •  ":"")+time,12,"#0B7CFF",true));
         c.addView(text("Dari: "+first(o.optString("pickup_address"),"-"),12,"#334155",false));
         c.addView(text("Tujuan: "+first(o.optString("destination_address"),o.optString("delivery_address"),"-"),12,"#334155",false));
-        LinearLayout detail=new LinearLayout(this);detail.setOrientation(1);detail.setVisibility(View.GONE);
+        LinearLayout detail=new LinearLayout(this);detail.setOrientation(LinearLayout.VERTICAL);detail.setVisibility(View.GONE);
         detail.addView(text("Order #"+first(o.optString("order_id"),o.optString("id"),"-"),11,"#64748B",false));
         String note=customerNote(o);if(!note.isEmpty())detail.addView(text("📝 Catatan customer: "+note,12,"#7C2D12",true));
         detail.addView(text("Status: "+statusLabel(status)+" • "+time,11,"#64748B",false));c.addView(detail);
