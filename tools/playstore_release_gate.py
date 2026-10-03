@@ -31,8 +31,25 @@ for p in REQUIRED:
     if p not in text: errors += fail(f'required driver location permission missing: {p}')
 if 'android.permission.FOREGROUND_SERVICE_DATA_SYNC' in text:
     errors += fail('unused FOREGROUND_SERVICE_DATA_SYNC remains; Play release should declare only active location FGS')
-if text.count('android:foregroundServiceType=') != 1 or 'android:foregroundServiceType="location"' not in text:
-    errors += fail('release manifest must expose exactly one foregroundServiceType: location')
+# Validate each foreground-service declaration independently. Voice calls legitimately
+# require a microphone FGS in addition to the existing driver location FGS.
+import xml.etree.ElementTree as ET
+android_ns = '{http://schemas.android.com/apk/res/android}'
+try:
+    root = ET.fromstring(text)
+    services = root.findall('./application/service')
+    fgs = [(s.get(android_ns + 'name', ''), s.get(android_ns + 'foregroundServiceType', ''))
+           for s in services if s.get(android_ns + 'foregroundServiceType')]
+    # Existing location service name may differ; require one location service and
+    # exactly one named microphone service, with no unexpected FGS types.
+    location = [(name, kind) for name, kind in fgs if kind == 'location']
+    microphone = [(name, kind) for name, kind in fgs if kind == 'microphone']
+    if len(location) != 1 or microphone != [('.WebRtcCallForegroundService', 'microphone')] or len(fgs) != 2:
+        errors += fail('release manifest must declare exactly one location FGS and WebRtcCallForegroundService as microphone FGS')
+    if 'android.permission.FOREGROUND_SERVICE_MICROPHONE' not in text or 'android.permission.RECORD_AUDIO' not in text:
+        errors += fail('voice call foreground service requires microphone permissions')
+except ET.ParseError as exc:
+    errors += fail(f'invalid AndroidManifest.xml: {exc}')
 
 def java_family(stem):
     base=ROOT/'app/src/main/java/com/transiva/app'
