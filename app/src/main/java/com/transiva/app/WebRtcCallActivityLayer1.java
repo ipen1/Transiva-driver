@@ -469,7 +469,6 @@ abstract class WebRtcCallActivityLayer1 extends Activity {
         pendingRemoteCandidates.clear();
     }
 
-    @Override
     @SuppressLint("MissingSuperCall")
     private void startCallForeground() {
         if (android.os.Build.VERSION.SDK_INT >= 23 &&
