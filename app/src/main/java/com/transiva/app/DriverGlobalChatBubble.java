@@ -30,7 +30,7 @@ public final class DriverGlobalChatBubble {
 
         TextView bubble=new TextView(activity);
         bubble.setTag(TAG_KEY);
-        bubble.setText(">");
+        bubble.setText("›");
         bubble.setTextSize(24);
         bubble.setTypeface(Typeface.DEFAULT_BOLD);
         bubble.setGravity(Gravity.CENTER);
@@ -44,8 +44,9 @@ public final class DriverGlobalChatBubble {
             activity.startActivity(i);
             activity.overridePendingTransition(R.anim.global_chat_enter_from_left,R.anim.global_chat_hold);
         });
-        FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(dp(activity,28),dp(activity,58),Gravity.START|Gravity.CENTER_VERTICAL);
-        lp.leftMargin=0;
+        FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(dp(activity,32),dp(activity,40),Gravity.END|Gravity.TOP);
+        lp.rightMargin=dp(activity,5);
+        lp.topMargin=dp(activity,68);
         if(root instanceof FrameLayout) ((FrameLayout)root).addView(bubble,lp);
         else root.addView(bubble,new ViewGroup.LayoutParams(dp(activity,28),dp(activity,58)));
         current=new WeakReference<>(bubble);
@@ -62,12 +63,12 @@ public final class DriverGlobalChatBubble {
     public static void refreshCurrent(){
         TextView b=current.get(); if(b==null)return;
         int unread=DriverGlobalChatStore.getUnreadMentions(b.getContext());
-        b.setText(">"); b.setTextSize(24);
+        b.setText("›"); b.setTextSize(22);
         b.setTextColor(Color.WHITE);
         b.setBackground(bg(unread>0?"#B3F59E0B":"#990B7CFF","#CCFFFFFF"));
         b.setContentDescription(unread>0?"Chat global, ada "+unread+" mention baru":"Buka chat global driver");
     }
 
-    private static GradientDrawable bg(String fill,String stroke){ GradientDrawable g=new GradientDrawable(); g.setColor(Color.parseColor(fill)); g.setCornerRadii(new float[]{0,0,26,26,26,26,0,0}); g.setStroke(1,Color.parseColor(stroke)); return g; }
+    private static GradientDrawable bg(String fill,String stroke){ GradientDrawable g=new GradientDrawable(); g.setColor(Color.parseColor(fill)); g.setCornerRadius(22); g.setStroke(1,Color.parseColor(stroke)); return g; }
     private static int dp(Activity a,int v){return Math.round(v*a.getResources().getDisplayMetrics().density);}
 }

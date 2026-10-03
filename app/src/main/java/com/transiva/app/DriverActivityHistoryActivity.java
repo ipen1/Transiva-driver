@@ -77,9 +77,9 @@ public class DriverActivityHistoryActivity extends Activity {
         LinearLayout shell = new LinearLayout(this); shell.setOrientation(LinearLayout.VERTICAL); page.addView(shell, new FrameLayout.LayoutParams(-1,-1));
         ScrollView scroll = new ScrollView(this); mainScroll=scroll; scroll.setFillViewport(true); shell.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setPadding(dp(14),dp(14),dp(14),dp(24)); scroll.addView(content,new ScrollView.LayoutParams(-1,-2));
-        content.addView(header("Aktivitas", "Statistik hari ini dan riwayat perjalanan"));
-
         LinearLayout hero=card();hero.setBackground(gradient("#086BFF","#2EA2FF",20));
+        hero.setPadding(dp(14),dp(12),dp(14),dp(12));
+        hero.addView(text("Aktivitas",20,"#FFFFFF",true));
         hero.addView(text("Pendapatan hari ini",12,"#EAF4FF",false));
         todayEarning=text("Rp0",25,"#FFFFFF",true);hero.addView(todayEarning);
         LinearLayout metrics=new LinearLayout(this);
@@ -94,7 +94,9 @@ public class DriverActivityHistoryActivity extends Activity {
         content.addView(text("Riwayat perjalanan",17,"#0B3A78",true));
         filterRow=new LinearLayout(this);dateRow=new LinearLayout(this);
         HorizontalScrollView fs=new HorizontalScrollView(this);fs.setHorizontalScrollBarEnabled(false);fs.addView(filterRow);content.addView(fs,sectionLp());
-        HorizontalScrollView ds=new HorizontalScrollView(this);ds.setHorizontalScrollBarEnabled(false);ds.addView(dateRow);content.addView(ds,sectionLp());buildFilters();
+        HorizontalScrollView ds=new HorizontalScrollView(this);ds.setHorizontalScrollBarEnabled(false);
+        ds.setFillViewport(false);ds.addView(dateRow);content.addView(ds,sectionLp());buildFilters();
+        ds.setContentDescription("Geser horizontal untuk memilih tanggal lainnya");
         stateText=text("Menghubungkan ke database…",11,"#64748B",false);content.addView(stateText,sectionLp());
         progress=new ProgressBar(this);progress.setVisibility(View.GONE);content.addView(progress,new LinearLayout.LayoutParams(-1,dp(24)));
         listBox=new LinearLayout(this);listBox.setOrientation(LinearLayout.VERTICAL);content.addView(listBox);
@@ -212,7 +214,7 @@ public class DriverActivityHistoryActivity extends Activity {
     }
 
     private View activityCard(JSONObject o){
-        LinearLayout c=card();LinearLayout top=new LinearLayout(this);top.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout c=card();c.setPadding(dp(12),dp(9),dp(12),dp(9));LinearLayout top=new LinearLayout(this);top.setGravity(Gravity.CENTER_VERTICAL);
         TextView service=text(first(o.optString("service_name"),o.optString("order_type"),"Order"),15,"#0B3A78",true);
         top.addView(service,new LinearLayout.LayoutParams(0,-2,1));
         String status=first(o.optString("activity_kind"),o.optString("status"));
