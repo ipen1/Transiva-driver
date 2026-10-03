@@ -202,7 +202,18 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: ./gradlew connectedDebugAndroidTest --stacktrace
+          script: |
+            adb logcat -c || true
+            ./gradlew connectedDebugAndroidTest --stacktrace --info --console=plain
+      - name: Print instrumentation failure details
+        if: failure()
+        shell: bash
+        run: |
+          echo "=== Test XML failure details ==="
+          find app/build/outputs/androidTest-results/connected -name '*.xml' -type f -print -exec grep -n -E '<failure|<error|testsuite|Caused by:' {} \; 2>/dev/null || true
+          echo "=== Instrumentation reports ==="
+          find app/build/reports/androidTests/connected -type f 2>/dev/null | head -40 || true
+
       - name: Upload instrumentation reports on failure
         if: failure()
         uses: actions/upload-artifact@v6
