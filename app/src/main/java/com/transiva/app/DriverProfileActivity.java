@@ -26,6 +26,29 @@ import org.json.JSONObject;
 import java.text.NumberFormat;
 import java.util.Locale;
 public class DriverProfileActivity extends DriverProfileActivityLayer1 {
+    private LinearLayout performanceOptions, accountDetails, locationDetails, documentDetails;
+    private ScrollView profileScroll;
+    private boolean hasProfile;
+    private boolean expandedPerformance, expandedAccount, expandedLocation, expandedDocuments;
+
+    private void toggle(LinearLayout target, boolean show) { if(target!=null) target.setVisibility(show?View.VISIBLE:View.GONE); }
+    private TextView expandLink(String label, LinearLayout target, int which) {
+        TextView link=text(label+"  ▾",12,"#0B7CFF",true);
+        link.setPadding(0,dp(9),0,dp(3));
+        link.setOnClickListener(v->{
+            boolean open=target.getVisibility()!=View.VISIBLE;
+            toggle(target,open);link.setText(label+(open?"  ▴":"  ▾"));
+            if(which==0)expandedPerformance=open;
+            if(which==1)expandedAccount=open;
+            if(which==2)expandedLocation=open;
+            if(which==3)expandedDocuments=open;
+            getPreferences(MODE_PRIVATE).edit().putBoolean("expanded_"+which,open).apply();
+        });
+        boolean initial=getPreferences(MODE_PRIVATE).getBoolean("expanded_"+which,false);
+        toggle(target,initial);link.setText(label+(initial?"  ▴":"  ▾"));
+        return link;
+    }
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -85,14 +108,14 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
         shell.setOrientation(LinearLayout.VERTICAL);
         page.addView(shell, new FrameLayout.LayoutParams(-1, -1));
 
-        ScrollView scroll = new ScrollView(this);
+        ScrollView scroll = new ScrollView(this); profileScroll=scroll;
         scroll.setFillViewport(true);
         scroll.setClipToPadding(false);
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(14), dp(14), dp(14), dp(24));
+        content.setPadding(dp(14), dp(10), dp(14), dp(18));
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
 
         content.addView(buildHeader());
@@ -137,64 +160,38 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
     }
 
     protected View buildIdentityCard() {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setGravity(Gravity.CENTER_HORIZONTAL);
-        card.setPadding(dp(18), dp(22), dp(18), dp(20));
-        card.setBackground(gradient("#075EF4", "#22A4FF", 22));
-        card.setElevation(dp(3));
-
-        FrameLayout avatarFrame = new FrameLayout(this);
-        GradientDrawable border = new GradientDrawable();
-        border.setShape(GradientDrawable.OVAL);
-        border.setColor(DriverThemeTokens.surface(this));
-        border.setStroke(dp(3), DriverThemeTokens.surface(this));
-        avatarFrame.setBackground(border);
-        avatarFrame.setElevation(dp(5));
-
-        avatarView = new ImageView(this);
-        avatarView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        LinearLayout card=new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(14),dp(13),dp(14),dp(13));
+        card.setBackground(gradient("#075EF4","#22A4FF",20));
+        FrameLayout frame=new FrameLayout(this);
+        frame.setBackground(roundStroke("#FFFFFF","#FFFFFF",40,2));
+        avatarView=new ImageView(this);avatarView.setScaleType(ImageView.ScaleType.CENTER_CROP);
         avatarView.setImageResource(drawableOrFallback("ic_nav_profile"));
-        GradientDrawable mask = new GradientDrawable();
-        mask.setShape(GradientDrawable.OVAL);
-        mask.setColor(DriverThemeTokens.color(this, "#EAF4FF"));
-        avatarView.setBackground(mask);
+        avatarView.setBackground(round("#EAF4FF",40));
         avatarView.setClipToOutline(true);
-        avatarView.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
-        FrameLayout.LayoutParams avatarLp = new FrameLayout.LayoutParams(dp(94), dp(94));
-        avatarLp.gravity = Gravity.CENTER;
-        avatarFrame.addView(avatarView, avatarLp);
-        card.addView(avatarFrame, new LinearLayout.LayoutParams(dp(102), dp(102)));
-
-        nameView = text(first(session.getName(), session.getUsername(), "Driver"), 21, "#FFFFFF", true);
-        nameView.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(-1, -2);
-        nameLp.setMargins(0, dp(12), 0, 0);
-        card.addView(nameView, nameLp);
-
-        usernameView = text("@" + first(session.getUsername(), "driver"), 11, "#EAF5FF", false);
-        usernameView.setGravity(Gravity.CENTER);
-        card.addView(usernameView);
-
-        LinearLayout badges = new LinearLayout(this);
-        badges.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams badgesLp = new LinearLayout.LayoutParams(-1, -2);
-        badgesLp.setMargins(0, dp(12), 0, 0);
-        card.addView(badges, badgesLp);
-
-        verificationBadge = badge("Memuat status", "#FFFFFF", "#0B7CFF");
-        badges.addView(verificationBadge);
-
-        driverTypeBadge = badge("Driver", "#FFE08A", "#5C3A00");
-        LinearLayout.LayoutParams typeLp = new LinearLayout.LayoutParams(-2, -2);
-        typeLp.setMargins(dp(7), 0, 0, 0);
-        badges.addView(driverTypeBadge, typeLp);
+        frame.addView(avatarView,new FrameLayout.LayoutParams(-1,-1));
+        card.addView(frame,new LinearLayout.LayoutParams(dp(70),dp(70)));
+        LinearLayout info=new LinearLayout(this);info.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams ilp=new LinearLayout.LayoutParams(0,-2,1);ilp.leftMargin=dp(12);
+        card.addView(info,ilp);
+        nameView=text(first(session.getName(),session.getUsername(),"Driver"),19,"#FFFFFF",true);
+        nameView.setSingleLine(false);info.addView(nameView);
+        usernameView=text("@"+first(session.getUsername(),"driver"),11,"#EAF5FF",false);
+        info.addView(usernameView);
+        LinearLayout badges=new LinearLayout(this);badges.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams blp=new LinearLayout.LayoutParams(-1,-2);blp.topMargin=dp(6);
+        info.addView(badges,blp);
+        verificationBadge=badge("Memuat","#FFFFFF","#0B7CFF");badges.addView(verificationBadge);
+        driverTypeBadge=badge("Driver","#FFE08A","#5C3A00");
+        LinearLayout.LayoutParams tlp=new LinearLayout.LayoutParams(-2,-2);tlp.leftMargin=dp(5);
+        badges.addView(driverTypeBadge,tlp);
         return card;
     }
 
     protected View buildPerformanceCard() {
         LinearLayout card = whiteCard();
-        card.addView(sectionTitle("Performa Aplikasi", "Auto detect menyesuaikan rendering, GPS, FPS, gambar, dan polling dengan kemampuan perangkat"));
+        card.addView(sectionTitle("Performa Aplikasi", "Mode aktif dan rekomendasi perangkat"));
 
         performanceModeValue = text("Mendeteksi perangkat…", 14, "#0B3A78", true);
         card.addView(performanceModeValue);
@@ -203,6 +200,10 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
         recLp.setMargins(0, dp(4), 0, dp(11));
         card.addView(performanceRecommendedValue, recLp);
 
+        performanceOptions=new LinearLayout(this);
+        performanceOptions.setOrientation(LinearLayout.VERTICAL);
+        card.addView(expandLink("Ubah pengaturan",performanceOptions,0));
+        card.addView(performanceOptions);
         LinearLayout row1 = new LinearLayout(this);
         row1.setGravity(Gravity.CENTER_VERTICAL);
         performanceAutoButton = performanceButton("Auto");
@@ -211,7 +212,7 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
         LinearLayout.LayoutParams lowLp = new LinearLayout.LayoutParams(0, dp(46), 1);
         lowLp.setMargins(dp(8), 0, 0, 0);
         row1.addView(performanceLowButton, lowLp);
-        card.addView(row1);
+        performanceOptions.addView(row1);
 
         LinearLayout row2 = new LinearLayout(this);
         row2.setGravity(Gravity.CENTER_VERTICAL);
@@ -223,7 +224,7 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
         row2.addView(performanceHighButton, highLp);
         LinearLayout.LayoutParams row2Lp = new LinearLayout.LayoutParams(-1, -2);
         row2Lp.setMargins(0, dp(8), 0, 0);
-        card.addView(row2, row2Lp);
+        performanceOptions.addView(row2, row2Lp);
 
         performanceAutoButton.setOnClickListener(v -> selectPerformanceMode(DevicePerformanceProfile.UserMode.AUTO));
         performanceLowButton.setOnClickListener(v -> selectPerformanceMode(DevicePerformanceProfile.UserMode.LOW));
@@ -294,7 +295,7 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
 
     protected View buildRatingCard() {
         LinearLayout card = whiteCard();
-        card.addView(sectionTitle("Rating Driver", "Dihitung otomatis dari seluruh pesanan yang telah dinilai customer"));
+        card.addView(sectionTitle("Rating Driver", "Ulasan customer"));
 
         LinearLayout summary = new LinearLayout(this);
         summary.setGravity(Gravity.CENTER_VERTICAL);
@@ -302,7 +303,7 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
 
         LinearLayout scoreBox = new LinearLayout(this);
         scoreBox.setOrientation(LinearLayout.VERTICAL);
-        ratingValue = text("0.0", 34, "#0B3A78", true);
+        ratingValue = text("0.0", 25, "#0B3A78", true);
         ratingValue.setGravity(Gravity.CENTER);
         scoreBox.addView(ratingValue);
         ratingCountValue = text("Belum ada penilaian", 10, "#718096", false);
@@ -310,7 +311,7 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
         scoreBox.addView(ratingCountValue);
         summary.addView(scoreBox, new LinearLayout.LayoutParams(0, -2, 1));
 
-        ratingStarsValue = text("☆☆☆☆☆", 26, "#FFB300", true);
+        ratingStarsValue = text("☆☆☆☆☆", 21, "#FFB300", true);
         ratingStarsValue.setGravity(Gravity.CENTER);
         summary.addView(ratingStarsValue, new LinearLayout.LayoutParams(0, -2, 1));
         card.addView(summary);
@@ -323,28 +324,33 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
     }
 
     protected View buildDriverInfoCard() {
-        LinearLayout card = whiteCard();
-        card.addView(sectionTitle("Informasi Driver", "Data akun dan kendaraan utama"));
-        emailValue = addInfoRow(card, "Email", "-");
-        phoneValue = addInfoRow(card, "Nomor HP", "-");
-        plateValue = addInfoRow(card, "Nomor Polisi", "-");
-        statusValue = addInfoRow(card, "Status Verifikasi", "-");
-        verifiedAtValue = addInfoRow(card, "Terverifikasi Sejak", "-");
-        balanceValue = addInfoRow(card, "Saldo Driver", "Rp0");
-        noteValue = addInfoRow(card, "Catatan Verifikasi", "-");
+        LinearLayout card=whiteCard();
+        card.addView(sectionTitle("Informasi Driver","Identitas dan kendaraan"));
+        phoneValue=addInfoRow(card,"Nomor HP","-");
+        plateValue=addInfoRow(card,"Nomor Polisi","-");
+        statusValue=addInfoRow(card,"Verifikasi","-");
+        accountDetails=new LinearLayout(this);accountDetails.setOrientation(LinearLayout.VERTICAL);
+        emailValue=addInfoRow(accountDetails,"Email","-");
+        verifiedAtValue=addInfoRow(accountDetails,"Terverifikasi Sejak","-");
+        balanceValue=addInfoRow(accountDetails,"Saldo Driver","Rp0");
+        noteValue=addInfoRow(accountDetails,"Catatan Verifikasi","-");
+        card.addView(expandLink("Detail akun",accountDetails,1));
+        card.addView(accountDetails);
         return card;
     }
-
     protected View buildStatusCard() {
-        LinearLayout card = whiteCard();
-        card.addView(sectionTitle("Status Kerja", "Informasi operasional driver saat ini"));
-        onlineValue = addInfoRow(card, "Status", "Offline");
-        busyValue = addInfoRow(card, "Ketersediaan", "Tersedia");
-        onlineSinceValue = addInfoRow(card, "Online Sejak", "-");
-        lastOrderValue = addInfoRow(card, "Order Terakhir", "-");
-        locationValue = addInfoRow(card, "Lokasi Terakhir", "-");
-        accuracyValue = addInfoRow(card, "Akurasi Lokasi", "-");
-        speedValue = addInfoRow(card, "Kecepatan", "-");
+        LinearLayout card=whiteCard();
+        card.addView(sectionTitle("Status & Lokasi","Informasi operasional saat ini"));
+        onlineValue=addInfoRow(card,"Status","Offline");
+        busyValue=addInfoRow(card,"Ketersediaan","Tersedia");
+        accuracyValue=addInfoRow(card,"Akurasi GPS","-");
+        locationDetails=new LinearLayout(this);locationDetails.setOrientation(LinearLayout.VERTICAL);
+        onlineSinceValue=addInfoRow(locationDetails,"Online Sejak","-");
+        lastOrderValue=addInfoRow(locationDetails,"Order Terakhir","-");
+        locationValue=addInfoRow(locationDetails,"Koordinat","-");
+        speedValue=addInfoRow(locationDetails,"Kecepatan","-");
+        card.addView(expandLink("Detail lokasi",locationDetails,2));
+        card.addView(locationDetails);
         return card;
     }
 
@@ -352,9 +358,10 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
         LinearLayout card = whiteCard();
         card.setClickable(true);
         card.setFocusable(true);
-        card.addView(sectionTitle("BPJS Ketenagakerjaan", "Perlindungan kepesertaan driver Transiva"));
+        card.addView(sectionTitle("BPJS Ketenagakerjaan", "Status kepesertaan"));
         bpjsStatusValue = addInfoRow(card, "Status Kepesertaan", "Tidak Aktif");
-        bpjsSummaryValue = addInfoRow(card, "Nomor BPJS", "Belum diisi");
+        bpjsSummaryValue = text("Belum diisi",10,"#718096",false);
+        bpjsSummaryValue.setVisibility(View.GONE);card.addView(bpjsSummaryValue);
 
         TextView open = text("Lihat kartu & detail BPJS  ›", 11, "#0B7CFF", true);
         open.setPadding(0, dp(13), 0, 0);
@@ -371,20 +378,19 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
     }
 
     protected View buildDocumentCard() {
-        LinearLayout card = whiteCard();
-        card.addView(sectionTitle("Kendaraan & Dokumen", "Preview dokumen yang tersimpan di server"));
-
-        LinearLayout images = new LinearLayout(this);
-        images.setOrientation(LinearLayout.HORIZONTAL);
-        ktpView = documentImage("Foto KTP");
-        images.addView(documentBox(ktpView, "KTP"), documentLp(false));
-        vehicleView = documentImage("Foto Kendaraan");
-        images.addView(documentBox(vehicleView, "Kendaraan"), documentLp(true));
-        card.addView(images);
-
-        TextView hint = text("Ketuk foto untuk melihat ukuran penuh.", 9, "#718096", false);
-        hint.setPadding(0, dp(10), 0, 0);
-        card.addView(hint);
+        LinearLayout card=whiteCard();
+        card.addView(sectionTitle("Kendaraan & Dokumen","Dokumen tersimpan di server"));
+        documentDetails=new LinearLayout(this);documentDetails.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout images=new LinearLayout(this);images.setOrientation(LinearLayout.HORIZONTAL);
+        ktpView=documentImage("Foto KTP");
+        images.addView(documentBox(ktpView,"KTP"),documentLp(false));
+        vehicleView=documentImage("Foto Kendaraan");
+        images.addView(documentBox(vehicleView,"Kendaraan"),documentLp(true));
+        documentDetails.addView(images);
+        TextView hint=text("Ketuk foto untuk melihat ukuran penuh.",9,"#718096",false);
+        documentDetails.addView(hint);
+        card.addView(expandLink("Lihat dokumen",documentDetails,3));
+        card.addView(documentDetails);
         return card;
     }
 
