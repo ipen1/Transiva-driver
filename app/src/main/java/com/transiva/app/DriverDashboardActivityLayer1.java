@@ -490,6 +490,7 @@ abstract class DriverDashboardActivityLayer1 extends Activity
     protected abstract void buildDriverLocationMenu();
     protected abstract void buildWalletAndPerformance();
     protected abstract TextView stat(LinearLayout parent, String value, String label);
+    protected android.widget.ProgressBar growthProgress;
     protected abstract void buildDriverGrowth();
     protected abstract void showGrowthSettings();
     protected abstract void saveGrowthSettings(long goal, String mode, String label);

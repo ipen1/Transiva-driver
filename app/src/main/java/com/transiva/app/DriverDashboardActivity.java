@@ -238,7 +238,7 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
 
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(14), dp(14), dp(14), dp(20));
+        content.setPadding(dp(12), dp(10), dp(12), dp(16));
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
 
         buildHeader();
@@ -248,8 +248,6 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         content.addView(homeSections);
 
         buildStatusAndEmergency();
-        buildDriverLocationMenu();
-
         // Order menjadi prioritas visual. Panel hanya muncul bila ada
         // order aktif/tawaran dan posisinya selalu tepat di bawah status.
         orderSections = new LinearLayout(this);
@@ -259,8 +257,9 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         buildOrderSections();
 
         buildWalletAndPerformance();
-        buildDriverGrowth();
+        buildDriverLocationMenu();
         buildSmartAssistant();
+        buildDriverGrowth();
 
         bottomNavigationView = DriverBottomNavigation.build(
                 this, DriverBottomNavigation.ActiveItem.HOME);
@@ -329,8 +328,8 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         onlineLabel = text("OFFLINE", 13, "#EF4444", true);
         statusLine.addView(onlineLabel, new LinearLayout.LayoutParams(0, -2, 1));
         onlineSwitch = new Switch(this);
-        onlineSwitch.setScaleX(.82f);
-        onlineSwitch.setScaleY(.82f);
+        onlineSwitch.setScaleX(1f);
+        onlineSwitch.setScaleY(1f);
         onlineSwitch.setOnCheckedChangeListener((button, checked) -> {
             if (suppressSwitch) return;
             if (checked && !ensureLocationReady()) { setSwitch(false); return; }
@@ -351,12 +350,12 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
                 .setPositiveButton("KIRIM SOS", (d, w) -> sendEmergency())
                 .show());
 
-        LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, dp(76), 1);
-        LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(0, dp(76), 1);
+        LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, dp(72), 1.6f);
+        LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(0, dp(72), 0.8f);
         right.setMargins(dp(9), 0, 0, 0);
         row.addView(status, left);
         row.addView(sosButton, right);
-        add(homeSections, row, 0, dp(16), 0, 0);
+        add(homeSections, row, 0, dp(10), 0, 0);
     }
 
 
@@ -364,7 +363,7 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         LinearLayout card = card();
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
-        card.setPadding(dp(15), dp(13), dp(15), dp(13));
+        card.setPadding(dp(12), dp(9), dp(12), dp(9));
 
         TextView icon = text("📍", 24, "#0B7CFF", true);
         icon.setGravity(Gravity.CENTER);
@@ -373,7 +372,7 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         LinearLayout info = new LinearLayout(this);
         info.setOrientation(LinearLayout.VERTICAL);
         info.addView(text("Lokasi Driver", 16, "#0B3A78", true));
-        info.addView(text("Lihat driver online & idle dalam radius 20 km", 10, "#64748B", false));
+        info.addView(text("Driver online & idle • radius 20 km", 10, "#64748B", false));
         LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(0, -2, 1);
         ip.setMargins(dp(7), 0, dp(6), 0);
         card.addView(info, ip);
@@ -390,21 +389,30 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
     protected void buildWalletAndPerformance() {
         LinearLayout wallet = new LinearLayout(this);
         wallet.setOrientation(LinearLayout.VERTICAL);
-        wallet.setPadding(dp(17), dp(15), dp(17), dp(15));
+        wallet.setPadding(dp(16), dp(13), dp(16), dp(13));
         wallet.setBackground(gradient("#086BFF", "#2EA2FF", dp(22)));
 
         wallet.addView(text("Saldo Driver", 13, "#EAF4FF", true));
         balanceText = text("Rp 0", 27, "#FFFFFF", true);
         add(wallet, balanceText, 0, dp(3), 0, 0);
 
-        TextView walletHint = text(
-                "Ketuk untuk melihat pendapatan, deposit, withdraw, dan mutasi.",
-                10,
-                "#EAF5FF",
-                false
-        );
-
-        add(wallet, walletHint, 0, dp(8), 0, 0);
+        LinearLayout metrics = new LinearLayout(this);
+        metrics.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout earningColumn = new LinearLayout(this);
+        earningColumn.setOrientation(LinearLayout.VERTICAL);
+        earningColumn.addView(text("Pendapatan hari ini", 10, "#EAF5FF", false));
+        earningText = text("Rp0", 16, "#FFFFFF", true);
+        earningColumn.addView(earningText);
+        metrics.addView(earningColumn, new LinearLayout.LayoutParams(0, -2, 1));
+        LinearLayout tripsColumn = new LinearLayout(this);
+        tripsColumn.setOrientation(LinearLayout.VERTICAL);
+        tripsColumn.addView(text("Order selesai", 10, "#EAF5FF", false));
+        tripText = text("0", 16, "#FFFFFF", true);
+        tripsColumn.addView(tripText);
+        metrics.addView(tripsColumn, new LinearLayout.LayoutParams(0, -2, 1));
+        add(wallet, metrics, 0, dp(11), 0, 0);
+        TextView walletHint = text("Ketuk untuk Top Up, Withdraw & Mutasi  ›", 11, "#EAF5FF", true);
+        add(wallet, walletHint, 0, dp(9), 0, 0);
 
         wallet.setOnClickListener(
                 view -> DriverPageTransition.open(
@@ -418,8 +426,6 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         add(homeSections, wallet, 0, dp(12), 0, 0);
 
         // Statistik dipindahkan ke menu Aktivitas agar dashboard lebih fokus.
-        earningText = new TextView(this);
-        tripText = new TextView(this);
         ratingText = new TextView(this);
         onlineMinutesText = new TextView(this);
         distanceText = new TextView(this);
@@ -441,17 +447,20 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
 
     protected void buildDriverGrowth() {
         LinearLayout card = card();
-        card.addView(text("🏆 Driver Growth", 17, "#0B3A78", true));
+        card.addView(text("🏆 Driver Growth  ›", 15, "#0B3A78", true));
         growthScoreText = text("Driver Score 70/100 • Good", 15, "#0B7CFF", true);
-        add(card, growthScoreText, 0, dp(10), 0, 0);
+        add(card, growthScoreText, 0, dp(6), 0, 0);
         growthGoalText = text("Target hari ini Rp 0 / Rp 200.000", 13, "#334155", true);
         add(card, growthGoalText, 0, dp(7), 0, 0);
         growthRateText = text("Pendapatan/jam Rp 0", 12, "#64748B", false);
         add(card, growthRateText, 0, dp(5), 0, 0);
         destinationModeText = text("🏠 Mode tujuan: Nonaktif", 12, "#475569", true);
         add(card, destinationModeText, 0, dp(8), 0, 0);
-        TextView hint = text("Ketuk untuk mengatur target pendapatan dan Mode Pulang/Area. Score tidak mengubah urutan status order.", 10, "#64748B", false);
-        add(card, hint, 0, dp(7), 0, 0);
+        growthProgress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        growthProgress.setMax(100);
+        growthProgress.setProgress(0);
+        add(card, growthProgress, 0, dp(7), 0, 0);
+        add(card, text("Ketuk untuk atur target & Mode Pulang", 10, "#64748B", false), 0, dp(6), 0, 0);
         card.setOnClickListener(v -> showGrowthSettings());
         add(homeSections, card, 0, dp(12), 0, 0);
     }
@@ -512,17 +521,17 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         LinearLayout card = card();
         LinearLayout titleRow = new LinearLayout(this);
         titleRow.setGravity(Gravity.CENTER_VERTICAL);
-        titleRow.addView(text("🔥 Area Ramai & AI Assistant", 17, "#0B3A78", true), new LinearLayout.LayoutParams(0, -2, 1));
+        titleRow.addView(text("🔥 Smart Area & Antrean", 15, "#0B3A78", true), new LinearLayout.LayoutParams(0, -2, 1));
         TextView badge = text("LIVE", 10, "#FFFFFF", true);
         badge.setPadding(dp(9), dp(4), dp(9), dp(4));
         badge.setBackground(round("#16A34A", dp(12)));
         titleRow.addView(badge);
         card.addView(titleRow);
 
-        hotspotText = text("Area sekitar Anda • NORMAL", 14, "#D97706", true);
+        hotspotText = text("Area sekitar Anda • NORMAL", 12, "#D97706", true);
         add(card, hotspotText, 0, dp(12), 0, 0);
 
-        clusterCurrentText = text("📍 Cluster: mendeteksi lokasi...", 14, "#0B3A78", true);
+        clusterCurrentText = text("📍 Cluster: mendeteksi lokasi...", 12, "#0B3A78", true);
         add(card, clusterCurrentText, 0, dp(10), 0, 0);
 
         android.widget.HorizontalScrollView clusterScroll = new android.widget.HorizontalScrollView(this);
@@ -539,7 +548,7 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         clusterListText.setVisibility(View.GONE);
 
         assistantTitleText = text("Asisten Transiva", 14, "#0B3A78", true);
-        add(card, assistantTitleText, 0, dp(12), 0, 0);
+        add(card, assistantTitleText, 0, dp(8), 0, 0);
         assistantMessageText = text("Memuat rekomendasi…", 12, "#475569", false);
         add(card, assistantMessageText, 0, dp(5), 0, 0);
 
@@ -551,7 +560,7 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         queueDetailText = text("Antrean dihitung otomatis dan adil.", 11, "#64748B", false);
         queueBox.addView(queueText);
         queueBox.addView(queueDetailText);
-        add(card, queueBox, 0, dp(12), 0, 0);
+        add(card, queueBox, 0, dp(8), 0, 0);
         add(homeSections, card, 0, dp(12), 0, 0);
     }
 
@@ -592,10 +601,10 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
             int fill = mixWithWhite(accent, current ? 0.87f : 0.94f);
             box.setBackground(roundStrokeColor(fill, accent, dp(14), current ? 2 : 1));
 
-            TextView number = text(String.valueOf(row.id), 9, "#FFFFFF", true);
+            TextView number = text("ID " + row.id, 8, "#FFFFFF", true);
             number.setGravity(Gravity.CENTER);
             number.setBackground(roundStrokeColor(accent, accent, dp(999), 1));
-            box.addView(number, new LinearLayout.LayoutParams(dp(22), dp(22)));
+            box.addView(number, new LinearLayout.LayoutParams(dp(36), dp(22)));
 
             TextView label = text(name, 8, "#0B3A78", true);
             label.setGravity(Gravity.CENTER);
@@ -604,7 +613,7 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
             labelLp.topMargin = dp(3);
             box.addView(label, labelLp);
 
-            TextView count = text(drivers + " driver", 7, "#475569", false);
+            TextView count = text(drivers + " driver aktif", 8, "#475569", false);
             count.setGravity(Gravity.CENTER);
             box.addView(count);
 

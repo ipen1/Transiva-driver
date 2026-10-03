@@ -123,6 +123,7 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         earningText.setText(rupiah(state.todayEarning));
         if (growthScoreText != null) growthScoreText.setText("Driver Score " + state.driverScore + "/100 • " + state.driverScoreLabel);
         if (growthGoalText != null) growthGoalText.setText("Target hari ini " + rupiah(state.todayEarning) + " / " + rupiah(state.dailyGoal) + " • " + state.goalProgress + "%");
+        if (growthProgress != null) growthProgress.setProgress(Math.max(0, Math.min(100, state.goalProgress)));
         if (growthRateText != null) growthRateText.setText("Pendapatan/jam " + rupiah(state.earningPerHour));
         if (destinationModeText != null) {
             String dm = clean(state.destinationMode);
@@ -136,7 +137,7 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         queueText.setText(state.queueRank > 0
                 ? "Smart Queue: posisi " + state.queueRank + " dari " + Math.max(state.queueTotal, state.queueRank)
                 : "Smart Queue: belum aktif");
-        queueDetailText.setText(first(state.queueLabel, "Antrean dihitung otomatis dan adil."));
+        queueDetailText.setText("Antrean berdasarkan data server • bukan sekadar login customer");
         assistantTitleText.setText(first(state.assistantTitle, "Asisten Transiva"));
         assistantMessageText.setText(buildAssistantMessage(state));
         int localHotspotScore = effectiveHotspotScore(state);
