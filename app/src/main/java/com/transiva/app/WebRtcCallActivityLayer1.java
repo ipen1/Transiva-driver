@@ -120,7 +120,8 @@ abstract class WebRtcCallActivityLayer1 extends Activity {
             if (destroyed || ended || !accepted || callId.isEmpty()) return;
             status("Mencoba menyambungkan audio kembali...");
             resetRtcForRetry();
-            loadIceAndStartPeer();
+            startCallForeground();
+        loadIceAndStartPeer();
         }
     };
 
@@ -303,6 +304,7 @@ abstract class WebRtcCallActivityLayer1 extends Activity {
         if (closeNow) userRequestedClose = true;
         if (ended) return;
         ended = true;
+        stopService(new Intent(this, WebRtcCallForegroundService.class));
         stopRingtone();
         main.removeCallbacks(pollTask);
         main.removeCallbacks(rtcRetryTask);
@@ -469,11 +471,27 @@ abstract class WebRtcCallActivityLayer1 extends Activity {
 
     @Override
     @SuppressLint("MissingSuperCall")
+    private void startCallForeground() {
+        if (android.os.Build.VERSION.SDK_INT >= 23 &&
+                checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+                        != android.content.pm.PackageManager.PERMISSION_GRANTED) return;
+        try {
+            Intent intent = new Intent(this, WebRtcCallForegroundService.class);
+            intent.putExtra("peer", peerName);
+            if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(intent);
+            else startService(intent);
+        } catch (RuntimeException ignored) {
+            // No false success indication: platform restrictions may deny service start.
+        }
+    }
+
     public void onBackPressed() {
-        finishCall(
-                callId.isEmpty() ? "" : (incoming && !accepted ? "reject" : "end"),
-                true
-        );
+        // Back minimizes the call; only the explicit End button hangs up.
+        if (!ended && !callId.isEmpty()) {
+            moveTaskToBack(true);
+        } else {
+            finish();
+        }
     }
 
     @Override
