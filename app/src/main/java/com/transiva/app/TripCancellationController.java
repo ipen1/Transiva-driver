@@ -78,15 +78,15 @@ public final class TripCancellationController {
     }
 
     private void perform(String reason) {
-        final String gate = "cancel:" + host.tripOrderId();
+        final String gate = "cancel:" + host.tripInternalId();
         if (!DriverRequestGate.enter(gate)) return;
         host.tripSetLoading(true);
         if (cancelButton != null) cancelButton.setEnabled(false);
         DriverNetworkExecutor.execute(() -> {
             try {
                 JSONObject body = new JSONObject();
-                body.put("order_id", host.tripOrderId());
-                body.put("source", host.tripSource());
+                body.put("order_id", host.tripInternalId());
+                body.put("source", host.tripIsPickupOrder() ? "pickup_orders" : "orders");
                 body.put("current_status", host.tripStatus());
                 body.put("reason", reason);
                 DriverApiClient.Result result = new DriverApiClient(session).post("driver_cancel_order_native.php", body);
@@ -111,7 +111,10 @@ public final class TripCancellationController {
                     DriverRequestGate.leave(gate);
                     host.tripSetLoading(false);
                     if (cancelButton != null) cancelButton.setEnabled(true);
-                    host.tripInfo("Gagal Membatalkan", "Koneksi/server bermasalah. Order tidak diubah.");
+                    String detail = e instanceof DriverApiClient.ApiException
+                            ? ((DriverApiClient.ApiException) e).getMessage()
+                            : "Koneksi tidak dapat dipastikan. Periksa status order sebelum mencoba lagi.";
+                    host.tripInfo("Gagal Membatalkan", detail);
                 });
             }
         });
