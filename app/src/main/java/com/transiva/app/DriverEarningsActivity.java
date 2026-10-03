@@ -207,12 +207,7 @@ public class DriverEarningsActivity extends DriverEarningsActivityLayer1 {
                 )
         );
 
-        content.addView(
-                header(
-                        "Transaksi",
-                        "Saldo masuk, saldo keluar, dan fee aplikasi"
-                )
-        );
+        content.addView(text("Transaksi",22,"#0B3A78",true));
 
         LinearLayout wallet =
                 new LinearLayout(this);
@@ -222,10 +217,10 @@ public class DriverEarningsActivity extends DriverEarningsActivityLayer1 {
         );
 
         wallet.setPadding(
-                dp(18),
-                dp(17),
-                dp(18),
-                dp(17)
+                dp(14),
+                dp(12),
+                dp(14),
+                dp(12)
         );
 
         wallet.setBackground(
@@ -296,7 +291,7 @@ public class DriverEarningsActivity extends DriverEarningsActivityLayer1 {
                 deposit,
                 new LinearLayout.LayoutParams(
                         0,
-                        dp(46),
+                        dp(42),
                         1
                 )
         );
@@ -316,7 +311,7 @@ public class DriverEarningsActivity extends DriverEarningsActivityLayer1 {
         LinearLayout.LayoutParams withdrawLp =
                 new LinearLayout.LayoutParams(
                         0,
-                        dp(46),
+                        dp(42),
                         1
                 );
 
@@ -336,7 +331,7 @@ public class DriverEarningsActivity extends DriverEarningsActivityLayer1 {
         transfer.setOnClickListener(view -> startActivity(
                 new Intent(this, DriverTransferActivity.class)
         ));
-        LinearLayout.LayoutParams transferLp = new LinearLayout.LayoutParams(0, dp(46), 1);
+        LinearLayout.LayoutParams transferLp = new LinearLayout.LayoutParams(0, dp(42), 1);
         transferLp.setMargins(dp(8), 0, 0, 0);
         actions.addView(transfer, transferLp);
 
@@ -394,23 +389,9 @@ public class DriverEarningsActivity extends DriverEarningsActivityLayer1 {
                 statLp(true)
         );
 
-        LinearLayout.LayoutParams statsLp =
-                new LinearLayout.LayoutParams(
-                        -1,
-                        -2
-                );
-
-        statsLp.setMargins(
-                0,
-                0,
-                0,
-                dp(14)
-        );
-
-        content.addView(
-                stats,
-                statsLp
-        );
+        LinearLayout.LayoutParams statsLp=new LinearLayout.LayoutParams(-1,-2);
+        statsLp.topMargin=dp(12);
+        wallet.addView(stats,statsLp);
 
         LinearLayout history =
                 card();
@@ -424,14 +405,7 @@ public class DriverEarningsActivity extends DriverEarningsActivityLayer1 {
                 )
         );
 
-        history.addView(
-                text(
-                        "Lihat seluruh saldo masuk, saldo keluar, fee aplikasi, deposit, withdraw, dan transfer antar-driver.",
-                        11,
-                        "#718096",
-                        false
-                )
-        );
+        history.addView(text("Saldo masuk, keluar, fee, deposit dan transfer",11,"#718096",false));
 
         Button receipt =
                 outlineButton(
@@ -450,7 +424,7 @@ public class DriverEarningsActivity extends DriverEarningsActivityLayer1 {
         LinearLayout.LayoutParams receiptLp =
                 new LinearLayout.LayoutParams(
                         -1,
-                        dp(46)
+                        dp(42)
                 );
 
         receiptLp.setMargins(

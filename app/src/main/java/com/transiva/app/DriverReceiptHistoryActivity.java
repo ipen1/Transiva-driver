@@ -42,6 +42,12 @@ public class DriverReceiptHistoryActivity extends Activity {
     private SessionManager session;
     private String username = "";
     private JSONArray receipts = new JSONArray();
+    private String filter="Semua";
+    private int visibleCount=10;
+    private boolean loading=false;
+    private LinearLayout filters;
+    private TextView loadMore;
+    private ScrollView mainScroll;
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
@@ -63,12 +69,12 @@ public class DriverReceiptHistoryActivity extends Activity {
     private void buildUi() {
         FrameLayout page = new FrameLayout(this);
         page.setBackgroundColor(DriverThemeTokens.color(this, "#F3F8FF"));
-        ScrollView scroll = new ScrollView(this);
+        ScrollView scroll = new ScrollView(this); mainScroll=scroll;
         page.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(16), dp(22), dp(16), dp(30));
+        root.setPadding(dp(14), dp(12), dp(14), dp(22));
         scroll.addView(root, new ScrollView.LayoutParams(-1, -2));
 
         LinearLayout header = card();
@@ -85,18 +91,26 @@ public class DriverReceiptHistoryActivity extends Activity {
         htxt.setOrientation(LinearLayout.VERTICAL);
         header.addView(htxt, new LinearLayout.LayoutParams(0, -2, 1));
         htxt.addView(text("Driver", 13, "#64748B", true));
-        htxt.addView(text("Riwayat Transaksi", 23, "#0B3A78", true));
+        htxt.addView(text("Riwayat Transaksi", 18, "#0B3A78", true));
         Button refresh = outlineButton("Refresh");
         refresh.setOnClickListener(v -> loadReceipts());
-        header.addView(refresh, new LinearLayout.LayoutParams(dp(104), dp(46)));
+        header.addView(refresh, new LinearLayout.LayoutParams(dp(86), dp(42)));
         root.addView(header, new LinearLayout.LayoutParams(-1, -2));
 
+        filters=new LinearLayout(this);filters.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams fp=new LinearLayout.LayoutParams(-1,-2);fp.topMargin=dp(12);
+        root.addView(filters,fp);buildFilters();
         listBox = new LinearLayout(this);
         listBox.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.setMargins(0, dp(14), 0, 0);
         root.addView(listBox, lp);
 
+        loadMore=text("Muat 10 transaksi berikutnya ↓",13,"#0B7CFF",true);
+        loadMore.setGravity(Gravity.CENTER);loadMore.setPadding(dp(8),dp(12),dp(8),dp(12));
+        loadMore.setVisibility(View.GONE);
+        loadMore.setOnClickListener(v->{visibleCount+=10;renderCached();});
+        root.addView(loadMore);
         Button back = outlineButton("Kembali");
         back.setOnClickListener(v -> finish());
         LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-1, dp(52));
@@ -112,46 +126,73 @@ public class DriverReceiptHistoryActivity extends Activity {
         DriverAppSettings.apply(this);
     }
 
-    private void loadReceipts() {
-        if (username.length() == 0) {
-            showInfo("Data Driver", "Data driver tidak ditemukan. Silakan login ulang.");
-            renderEmpty("🧾", "Data driver tidak ditemukan", "Silakan kembali dan login ulang.");
+    private void buildFilters(){
+        filters.removeAllViews();
+        for(String f:new String[]{"Semua","Masuk","Keluar"}){
+            TextView t=text(f,12,f.equals(filter)?"#FFFFFF":"#0B3A78",true);
+            t.setGravity(Gravity.CENTER);t.setPadding(dp(10),dp(9),dp(10),dp(9));
+            t.setBackground(roundStroke(f.equals(filter)?"#0B7CFF":"#EAF4FF","#B9DBFF",dp(14),1));
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);
+            lp.rightMargin=dp(6);filters.addView(t,lp);
+            t.setOnClickListener(v->{filter=f;visibleCount=10;buildFilters();renderCached();});
+        }
+    }
+    private void loadReceipts(){
+        if(loading)return;
+        if(username.length()==0){
+            showInfo("Data Driver","Data driver tidak ditemukan. Silakan login ulang.");
+            if(receipts.length()==0)renderEmpty("🧾","Data driver tidak ditemukan","Silakan login ulang.");
             return;
         }
-        progressBar.setVisibility(View.VISIBLE);
-        listBox.removeAllViews();
-        listBox.addView(emptyBox("🧾", "Memuat riwayat transaksi...", ""));
-        DriverNetworkExecutor.execute(() -> {
-            String body = "";
-            try { body = get(API_URL + "?v=" + System.currentTimeMillis()); } catch (Exception ignored) {}
-            String finalBody = body;
-            mainHandler.post(() -> {
-                progressBar.setVisibility(View.GONE);
-                renderList(finalBody);
+        loading=true;
+        if(receipts.length()==0)progressBar.setVisibility(View.VISIBLE);
+        DriverNetworkExecutor.execute(()->{
+            String body="";
+            try{body=get(API_URL+"?v="+System.currentTimeMillis());}catch(Exception ignored){}
+            final String result=body;
+            mainHandler.post(()->{
+                loading=false;progressBar.setVisibility(View.GONE);
+                if(result.isEmpty()){
+                    if(receipts.length()==0)renderEmpty("⚠️","Gagal Memuat Riwayat","Periksa koneksi lalu coba lagi.");
+                    else android.widget.Toast.makeText(this,"Sinkronisasi gagal, data terakhir tetap ditampilkan",android.widget.Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                try{
+                    JSONObject res=new JSONObject(result);
+                    if(!res.optBoolean("success",false)){
+                        if(receipts.length()==0)renderEmpty("⚠️","Gagal Memuat Riwayat",res.optString("message","Coba lagi."));
+                        return;
+                    }
+                    JSONArray next=res.optJSONArray("receipts");if(next==null)next=new JSONArray();
+                    if(!next.toString().equals(receipts.toString())){
+                        receipts=next;renderCached();
+                    }else if(listBox.getChildCount()==0)renderCached();
+                }catch(Exception e){
+                    if(receipts.length()==0)renderEmpty("⚠️","Response tidak valid","Periksa koneksi server.");
+                }
             });
         });
     }
-
-    private void renderList(String body) {
-        listBox.removeAllViews();
-        try {
-            JSONObject res = new JSONObject(body);
-            if (!res.optBoolean("success", false)) {
-                renderEmpty("⚠️", "Gagal Memuat Riwayat", res.optString("message", "Periksa koneksi internet lalu coba lagi."));
-                return;
-            }
-            receipts = res.optJSONArray("receipts");
-            if (receipts == null || receipts.length() == 0) {
-                renderEmpty("🧾", "Belum ada nota", "Nota transaksi akan muncul setelah order selesai.");
-                return;
-            }
-            for (int i = 0; i < receipts.length(); i++) {
-                JSONObject item = receipts.optJSONObject(i);
-                if (item != null) listBox.addView(receiptCard(item));
-            }
-        } catch (Exception e) {
-            renderEmpty("⚠️", "Response tidak valid", "Server belum mengirim data nota yang benar.");
+    private boolean matchesFilter(JSONObject item){
+        if("Semua".equals(filter))return true;
+        boolean incoming;
+        if("wallet".equalsIgnoreCase(item.optString("entry_kind")))
+            incoming="in".equalsIgnoreCase(item.optString("direction"));
+        else incoming=true;
+        return "Masuk".equals(filter)==incoming;
+    }
+    private void renderCached(){
+        int scrollY=mainScroll.getScrollY();listBox.removeAllViews();
+        int shown=0,total=0;
+        for(int i=0;i<receipts.length();i++){
+            JSONObject item=receipts.optJSONObject(i);
+            if(item==null||!matchesFilter(item))continue;
+            total++;
+            if(shown<visibleCount){listBox.addView(receiptCard(item));shown++;}
         }
+        if(total==0)renderEmpty("🧾","Tidak ada transaksi","Belum ada transaksi untuk filter ini.");
+        loadMore.setVisibility(total>shown?View.VISIBLE:View.GONE);
+        mainScroll.post(()->mainScroll.scrollTo(0,scrollY));
     }
 
     private View receiptCard(JSONObject item) {
@@ -159,7 +200,7 @@ public class DriverReceiptHistoryActivity extends Activity {
         if (walletEntry) return walletCard(item);
 
         LinearLayout c = card();
-        c.setPadding(dp(16), dp(14), dp(16), dp(14));
+        c.setPadding(dp(12), dp(10), dp(12), dp(10));
         c.setOnClickListener(v -> openDetail(item));
 
         LinearLayout top = new LinearLayout(this);
@@ -204,7 +245,7 @@ public class DriverReceiptHistoryActivity extends Activity {
         double fee = item.optDouble("admin_fee", 0);
 
         LinearLayout c = card();
-        c.setPadding(dp(16), dp(14), dp(16), dp(14));
+        c.setPadding(dp(12), dp(10), dp(12), dp(10));
         c.setOnClickListener(v -> openDetail(item));
 
         LinearLayout top = new LinearLayout(this);
@@ -214,7 +255,9 @@ public class DriverReceiptHistoryActivity extends Activity {
         LinearLayout left = new LinearLayout(this);
         left.setOrientation(LinearLayout.VERTICAL);
         top.addView(left, new LinearLayout.LayoutParams(0, -2, 1));
-        left.addView(text(firstNonEmpty(item.optString("reference"), "TRANSFER"), 17, "#0B3A78", true));
+        String reference=firstNonEmpty(item.optString("reference"),"TRANSFER");
+        boolean appFee=reference.toUpperCase(Locale.US).startsWith("FEE-ORD");
+        left.addView(text(appFee?"Biaya layanan aplikasi":reference,15,"#0B3A78",true));
         TextView date = text("🕒 " + firstNonEmpty(item.optString("created_at"), "-"), 12, "#64748B", false);
         date.setPadding(0, dp(4), 0, 0);
         left.addView(date);
@@ -224,7 +267,8 @@ public class DriverReceiptHistoryActivity extends Activity {
         top.addView(price, new LinearLayout.LayoutParams(-2, -2));
 
         c.addView(transactionDivider());
-        c.addView(row(incoming ? "👤 Diterima dari" : "👤 Dikirim ke", counterpart, "#0B3A78", false));
+        if(!appFee)c.addView(row(incoming?"👤 Diterima dari":"👤 Dikirim ke",counterpart,"#0B3A78",false));
+        else c.addView(row("Referensi order",reference.replaceFirst("(?i)^FEE-",""),"#0B3A78",false));
         if (fee > 0) c.addView(row("⚙️ Biaya Admin", "- " + rupiah(fee), "#DC2626", false));
         c.addView(row("💳 Saldo Setelah", rupiah(item.optDouble("balance_after", 0)), "#0F172A", false));
 

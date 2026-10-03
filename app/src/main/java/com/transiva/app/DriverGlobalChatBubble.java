@@ -6,6 +6,7 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -28,29 +29,49 @@ public final class DriverGlobalChatBubble {
         View existing=root.findViewWithTag(TAG_KEY);
         if(existing instanceof TextView){ current=new WeakReference<>((TextView)existing); refreshCurrent(); return; }
 
-        TextView bubble=new TextView(activity);
-        bubble.setTag(TAG_KEY);
-        bubble.setText("›");
-        bubble.setTextSize(24);
-        bubble.setTypeface(Typeface.DEFAULT_BOLD);
-        bubble.setGravity(Gravity.CENTER);
-        bubble.setElevation(dp(activity,12));
-        bubble.setContentDescription("Buka chat global driver");
-        bubble.setOnClickListener(v -> {
-            Intent i=new Intent(activity,DriverGlobalChatActivity.class);
-            long mention=DriverGlobalChatStore.getLastMentionId(activity);
-            if(DriverGlobalChatStore.getUnreadMentions(activity)>0 && mention>0)i.putExtra("jump_message_id",mention);
-            i.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
-            activity.startActivity(i);
-            activity.overridePendingTransition(R.anim.global_chat_enter_from_left,R.anim.global_chat_hold);
+        // Invisible edge gesture: swipe left-to-right, without a floating button.
+        // Restrict the touch target to the first 22dp so normal page scrolling works.
+        TextView edge=new TextView(activity);
+        edge.setTag(TAG_KEY);
+        edge.setContentDescription("Geser dari tepi kiri ke kanan untuk membuka chat global");
+        edge.setBackgroundColor(Color.TRANSPARENT);
+        final float[] down={0f,0f};
+        edge.setOnTouchListener((v,event)->{
+            switch(event.getActionMasked()){
+                case MotionEvent.ACTION_DOWN:
+                    down[0]=event.getRawX();down[1]=event.getRawY();return true;
+                case MotionEvent.ACTION_UP:
+                    float dx=event.getRawX()-down[0];
+                    float dy=event.getRawY()-down[1];
+                    if(dx>dp(activity,75) && Math.abs(dy)<dp(activity,65)){
+                        openChat(activity);
+                    }
+                    return true;
+                case MotionEvent.ACTION_CANCEL:return true;
+                default:return true;
+            }
         });
-        FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(dp(activity,32),dp(activity,40),Gravity.END|Gravity.TOP);
-        lp.rightMargin=dp(activity,5);
-        lp.topMargin=dp(activity,68);
-        if(root instanceof FrameLayout) ((FrameLayout)root).addView(bubble,lp);
-        else root.addView(bubble,new ViewGroup.LayoutParams(dp(activity,28),dp(activity,58)));
-        current=new WeakReference<>(bubble);
+        if(root instanceof FrameLayout){
+            FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(dp(activity,22),-1,Gravity.START|Gravity.TOP);
+            lp.topMargin=dp(activity,90);lp.bottomMargin=dp(activity,85);
+            ((FrameLayout)root).addView(edge,lp);
+        }else{
+            // Most Android Activity decor roots are FrameLayout. Do not place
+            // a full-screen overlay in an unexpected layout.
+            return;
+        }
+        current=new WeakReference<>(edge);
         refreshCurrent();
+    }
+
+    private static void openChat(Activity activity){
+        Intent i=new Intent(activity,DriverGlobalChatActivity.class);
+        long mention=DriverGlobalChatStore.getLastMentionId(activity);
+        if(DriverGlobalChatStore.getUnreadMentions(activity)>0 && mention>0)
+            i.putExtra("jump_message_id",mention);
+        i.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+        activity.startActivity(i);
+        activity.overridePendingTransition(R.anim.global_chat_enter_from_left,R.anim.global_chat_hold);
     }
 
     public static void detach(Activity activity){
@@ -61,12 +82,11 @@ public final class DriverGlobalChatBubble {
     }
 
     public static void refreshCurrent(){
-        TextView b=current.get(); if(b==null)return;
-        int unread=DriverGlobalChatStore.getUnreadMentions(b.getContext());
-        b.setText("›"); b.setTextSize(22);
-        b.setTextColor(Color.WHITE);
-        b.setBackground(bg(unread>0?"#B3F59E0B":"#990B7CFF","#CCFFFFFF"));
-        b.setContentDescription(unread>0?"Chat global, ada "+unread+" mention baru":"Buka chat global driver");
+        TextView edge=current.get();if(edge==null)return;
+        int unread=DriverGlobalChatStore.getUnreadMentions(edge.getContext());
+        edge.setContentDescription(unread>0
+            ?"Geser dari tepi kiri ke kanan untuk chat global, "+unread+" mention baru"
+            :"Geser dari tepi kiri ke kanan untuk membuka chat global");
     }
 
     private static GradientDrawable bg(String fill,String stroke){ GradientDrawable g=new GradientDrawable(); g.setColor(Color.parseColor(fill)); g.setCornerRadius(22); g.setStroke(1,Color.parseColor(stroke)); return g; }
