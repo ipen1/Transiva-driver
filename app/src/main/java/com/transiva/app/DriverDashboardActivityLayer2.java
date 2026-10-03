@@ -202,9 +202,18 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         DriverBottomNavigation.refreshUnread(this, bottomNavigationView);
 
         // Adaptive mode: keep active trip and incoming offers above secondary widgets.
-        if (wallet != null) wallet.setVisibility(
-                (state.activeOrders != null && !state.activeOrders.isEmpty()) ||
-                (state.online && state.offers != null && !state.offers.isEmpty()) ? View.GONE : View.VISIBLE);
+        // Wallet is declared by the concrete dashboard, not this parent layer.
+        if (this instanceof DriverDashboardActivity) {
+            LinearLayout dashboardWallet = ((DriverDashboardActivity) this).wallet;
+            if (dashboardWallet != null) {
+                boolean priorityMode = (state.activeOrders != null && !state.activeOrders.isEmpty())
+                        || (state.online && state.offers != null && !state.offers.isEmpty());
+                int desiredVisibility = priorityMode ? View.GONE : View.VISIBLE;
+                if (dashboardWallet.getVisibility() != desiredVisibility) {
+                    dashboardWallet.setVisibility(desiredVisibility);
+                }
+            }
+        }
         activeBox.removeAllViews();
         if (state.activeOrders == null || state.activeOrders.isEmpty()) {
             session.remove("current_order_id");
