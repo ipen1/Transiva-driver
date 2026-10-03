@@ -387,9 +387,9 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
     }
 
     protected void buildWalletAndPerformance() {
-        LinearLayout wallet = new LinearLayout(this);
+        wallet = new LinearLayout(this);
         wallet.setOrientation(LinearLayout.VERTICAL);
-        wallet.setPadding(dp(16), dp(13), dp(16), dp(13));
+        wallet.setPadding(dp(14), dp(10), dp(14), dp(10));
         wallet.setBackground(gradient("#086BFF", "#2EA2FF", dp(22)));
 
         wallet.addView(text("Saldo Driver", 13, "#EAF4FF", true));
@@ -410,9 +410,9 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         tripText = text("0", 16, "#FFFFFF", true);
         tripsColumn.addView(tripText);
         metrics.addView(tripsColumn, new LinearLayout.LayoutParams(0, -2, 1));
-        add(wallet, metrics, 0, dp(11), 0, 0);
+        add(wallet, metrics, 0, dp(6), 0, 0);
         TextView walletHint = text("Ketuk untuk Top Up, Withdraw & Mutasi  ›", 11, "#EAF5FF", true);
-        add(wallet, walletHint, 0, dp(9), 0, 0);
+        add(wallet, walletHint, 0, dp(5), 0, 0);
 
         wallet.setOnClickListener(
                 view -> DriverPageTransition.open(
@@ -448,20 +448,28 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
     protected void buildDriverGrowth() {
         LinearLayout card = card();
         card.addView(text("🏆 Driver Growth  ›", 15, "#0B3A78", true));
+        growthDetails = new LinearLayout(this);
+        growthDetails.setOrientation(LinearLayout.VERTICAL);
+        growthDetails.setVisibility(View.GONE);
         growthScoreText = text("Driver Score 70/100 • Good", 15, "#0B7CFF", true);
         add(card, growthScoreText, 0, dp(6), 0, 0);
         growthGoalText = text("Target hari ini Rp 0 / Rp 200.000", 13, "#334155", true);
-        add(card, growthGoalText, 0, dp(7), 0, 0);
+        add(growthDetails, growthGoalText, 0, dp(7), 0, 0);
         growthRateText = text("Pendapatan/jam Rp 0", 12, "#64748B", false);
-        add(card, growthRateText, 0, dp(5), 0, 0);
+        add(growthDetails, growthRateText, 0, dp(5), 0, 0);
         destinationModeText = text("🏠 Mode tujuan: Nonaktif", 12, "#475569", true);
-        add(card, destinationModeText, 0, dp(8), 0, 0);
+        add(growthDetails, destinationModeText, 0, dp(8), 0, 0);
         growthProgress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         growthProgress.setMax(100);
         growthProgress.setProgress(0);
-        add(card, growthProgress, 0, dp(7), 0, 0);
-        add(card, text("Ketuk untuk atur target & Mode Pulang", 10, "#64748B", false), 0, dp(6), 0, 0);
-        card.setOnClickListener(v -> showGrowthSettings());
+        add(growthDetails, growthProgress, 0, dp(7), 0, 0);
+        add(growthDetails, text("Ketuk untuk atur target & Mode Pulang", 10, "#64748B", false), 0, dp(6), 0, 0);
+        card.addView(growthDetails);
+        card.setOnClickListener(v -> {
+            if (!growthExpanded) { growthExpanded = true; growthDetails.setVisibility(View.VISIBLE); }
+            else showGrowthSettings();
+        });
+        card.setOnLongClickListener(v -> { growthExpanded = false; growthDetails.setVisibility(View.GONE); return true; });
         add(homeSections, card, 0, dp(12), 0, 0);
     }
 
@@ -517,6 +525,12 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         });
     }
 
+    private LinearLayout smartDetails;
+    protected LinearLayout wallet;
+    private LinearLayout growthDetails;
+    private boolean smartExpanded;
+    private boolean growthExpanded;
+
     protected void buildSmartAssistant() {
         LinearLayout card = card();
         LinearLayout titleRow = new LinearLayout(this);
@@ -534,6 +548,9 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         clusterCurrentText = text("📍 Cluster: mendeteksi lokasi...", 12, "#0B3A78", true);
         add(card, clusterCurrentText, 0, dp(10), 0, 0);
 
+        smartDetails = new LinearLayout(this);
+        smartDetails.setOrientation(LinearLayout.VERTICAL);
+        smartDetails.setVisibility(View.GONE);
         android.widget.HorizontalScrollView clusterScroll = new android.widget.HorizontalScrollView(this);
         clusterScroll.setHorizontalScrollBarEnabled(false);
         clusterScroll.setFillViewport(true);
@@ -541,16 +558,16 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         clusterGrid.setOrientation(LinearLayout.HORIZONTAL);
         clusterGrid.setGravity(Gravity.CENTER_VERTICAL);
         clusterScroll.addView(clusterGrid, new android.widget.HorizontalScrollView.LayoutParams(-2, -2));
-        add(card, clusterScroll, 0, dp(8), 0, 0);
+        add(smartDetails, clusterScroll, 0, dp(8), 0, 0);
         renderClusterGrid(null);
 
         clusterListText = text("", 1, "#FFFFFF", false);
         clusterListText.setVisibility(View.GONE);
 
         assistantTitleText = text("Asisten Transiva", 14, "#0B3A78", true);
-        add(card, assistantTitleText, 0, dp(8), 0, 0);
+        add(smartDetails, assistantTitleText, 0, dp(8), 0, 0);
         assistantMessageText = text("Memuat rekomendasi…", 12, "#475569", false);
-        add(card, assistantMessageText, 0, dp(5), 0, 0);
+        add(smartDetails, assistantMessageText, 0, dp(5), 0, 0);
 
         LinearLayout queueBox = new LinearLayout(this);
         queueBox.setOrientation(LinearLayout.VERTICAL);
@@ -560,7 +577,11 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         queueDetailText = text("Antrean dihitung otomatis dan adil.", 11, "#64748B", false);
         queueBox.addView(queueText);
         queueBox.addView(queueDetailText);
-        add(card, queueBox, 0, dp(8), 0, 0);
+        add(smartDetails, queueBox, 0, dp(8), 0, 0);
+        card.addView(smartDetails);
+        titleRow.setOnClickListener(v -> { smartExpanded = !smartExpanded; smartDetails.setVisibility(smartExpanded ? View.VISIBLE : View.GONE); });
+        hotspotText.setOnClickListener(v -> titleRow.performClick());
+        clusterCurrentText.setOnClickListener(v -> titleRow.performClick());
         add(homeSections, card, 0, dp(12), 0, 0);
     }
 

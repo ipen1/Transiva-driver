@@ -201,6 +201,10 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         DriverMessageUnreadRepository.retainOnlyActiveOrders(this, activeMessageOrders);
         DriverBottomNavigation.refreshUnread(this, bottomNavigationView);
 
+        // Adaptive mode: keep active trip and incoming offers above secondary widgets.
+        if (wallet != null) wallet.setVisibility(
+                (state.activeOrders != null && !state.activeOrders.isEmpty()) ||
+                (state.online && state.offers != null && !state.offers.isEmpty()) ? View.GONE : View.VISIBLE);
         activeBox.removeAllViews();
         if (state.activeOrders == null || state.activeOrders.isEmpty()) {
             session.remove("current_order_id");
