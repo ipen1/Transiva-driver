@@ -98,6 +98,8 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected double prevDriverLat = 0, prevDriverLng = 0;
     protected boolean updatingStatus = false;
     protected boolean mapReady = false;
+    protected LinearLayout actionDock;
+    protected TextView dockHint;
     protected SessionManager session;
     protected DriverNetworkRepository api;
     protected final SmoothLocationEngine smoothLocation = new SmoothLocationEngine(2500L);

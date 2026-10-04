@@ -106,6 +106,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         c.addView(text("📝 Catatan Customer", 16, "#0B3A78", true));
         TextView n = text(note.isEmpty() ? "Tidak ada catatan customer." : note,
                 14, note.isEmpty() ? "#64748B" : "#111827", false);
+        n.setVisibility(View.GONE);c.setOnClickListener(v->n.setVisibility(n.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE));
         n.setPadding(0, dp(6),0,0);
         c.addView(n);
         add(c,0,0,0,dp(12));
@@ -117,19 +118,22 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
     protected void addActions(){
         LinearLayout c = card(); c.setPadding(dp(16), dp(16), dp(16), dp(16));
         c.addView(text("Perjalanan", 17, "#0F172A", true));
-        TextView guide = text("Geser ke kanan untuk mengubah status. Ini mencegah status berubah karena salah sentuh.", 12, "#64748B", false);
+        TextView guide = text("Chat, navigasi, dan pilihan perjalanan", 12, "#64748B", false);
         guide.setPadding(0, dp(4), 0, dp(4)); c.addView(guide);
 
-        arrivedPickupBtn = slideAction("📍 Geser • Tiba di Penjemputan", () -> updateStatus("arrived_pickup")); c.addView(arrivedPickupBtn, slideLp(8));
-        startDeliveryBtn = slideAction(orderKind.equals("pickup") ? "📦 Geser • Paket Diambil, Mulai Antar" : vehicleEmoji() + " Geser • Mulai Perjalanan", () -> updateStatus("on_delivery")); c.addView(startDeliveryBtn, slideLp(8));
+        arrivedPickupBtn = slideAction("📍 Geser • Tiba di Penjemputan", () -> updateStatus("arrived_pickup")); actionDock.addView(arrivedPickupBtn, slideLp(0));
+        startDeliveryBtn = slideAction(orderKind.equals("pickup") ? "📦 Geser • Paket Diambil, Mulai Antar" : vehicleEmoji() + " Geser • Mulai Perjalanan", () -> updateStatus("on_delivery")); actionDock.addView(startDeliveryBtn, slideLp(0));
         DriverEcosystemFeatures ecoNow=DriverEcosystemFeatures.from(order); JSONObject pendingStop=ecoNow.nextPendingWaypoint();
         if(isDeliveryPhase(status()) && pendingStop!=null){ int seq=pendingStop.optInt("sequence",1); SlideActionView stopBtn=slideAction("📍 Geser • Tiba di Stop "+seq, () -> markCurrentWaypointArrived(seq)); c.addView(stopBtn, slideLp(8)); }
-        arrivedDeliveryBtn = slideAction("🏁 Geser • Tiba di Pengantaran", () -> { if(extensionNeedsArrival()) destinationExtension.arrive(); else updateStatus("arrived_delivery"); }); c.addView(arrivedDeliveryBtn, slideLp(8));
-        finishBtn = slideAction("✅ Geser • Selesaikan Order", () -> { if (isPickupOrder()) showPickupOtpDialog(); else updateStatus("finished"); }); c.addView(finishBtn, slideLp(8));
-        updatePriceBtn = outline("💰 Update Total"); updatePriceBtn.setOnClickListener(v -> showUpdatePriceDialog()); c.addView(updatePriceBtn, btnLp(8));
-        if(isDeliveryPhase(status())){ Button extraFare=outline("🛣 Ajukan Ongkir Jarak Terlewat"); extraFare.setOnClickListener(v->requestExtraFareForMissedDistance()); c.addView(extraFare,btnLp(8)); }
+        arrivedDeliveryBtn = slideAction("🏁 Geser • Tiba di Pengantaran", () -> { if(extensionNeedsArrival()) destinationExtension.arrive(); else updateStatus("arrived_delivery"); }); actionDock.addView(arrivedDeliveryBtn, slideLp(0));
+        finishBtn = slideAction("✅ Geser • Selesaikan Order", () -> { if (isPickupOrder()) showPickupOtpDialog(); else updateStatus("finished"); }); actionDock.addView(finishBtn, slideLp(0));
+        dockHint=text("Geser untuk melanjutkan perjalanan",12,"#64748B",false);actionDock.addView(dockHint);
+        LinearLayout options=new LinearLayout(this);options.setOrientation(LinearLayout.VERTICAL);options.setVisibility(View.GONE);
+        Button more=outline("Opsi perjalanan  ▾");more.setOnClickListener(v->{boolean open=options.getVisibility()!=View.VISIBLE;options.setVisibility(open?View.VISIBLE:View.GONE);more.setText(open?"Opsi perjalanan  ▴":"Opsi perjalanan  ▾");});c.addView(more,btnLp(6));c.addView(options);
+        updatePriceBtn = outline("💰 Update Total"); updatePriceBtn.setOnClickListener(v -> showUpdatePriceDialog()); options.addView(updatePriceBtn, btnLp(6));
+        if(isDeliveryPhase(status())){ Button extraFare=outline("Ajukan ongkir tambahan"); extraFare.setOnClickListener(v->requestExtraFareForMissedDistance()); options.addView(extraFare,btnLp(6)); }
         if(canExtendDestination()){
-            Button addDestination=outline("＋ Tambah Tujuan / Pulang (PP)");
+            Button addDestination=outline("＋ Tujuan baru / Pulang (PP)");
             addDestination.setOnClickListener(v->destinationExtension.show());c.addView(addDestination,btnLp(8));
             JSONObject proposal=order.optJSONObject("destination_extension");
             if(proposal!=null && "pending".equals(proposal.optString("status"))){
@@ -139,7 +143,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         cancelOrderBtn = dangerOutlineButton("Batalkan Order");
         cancellationController = new TripCancellationController(this, order, session, cancelOrderBtn);
         cancelOrderBtn.setOnClickListener(v -> cancellationController.show());
-        c.addView(cancelOrderBtn, btnLp(8));
+        options.addView(cancelOrderBtn, btnLp(6));
 
         if (communicationController != null) communicationController.onStop();
         LinearLayout quick = new LinearLayout(this); quick.setOrientation(LinearLayout.HORIZONTAL);
@@ -347,6 +351,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
     protected void refreshButtons(){
         if(arrivedPickupBtn == null) return;
         String st = status();
+        if(dockHint!=null)dockHint.setText(extensionNeedsArrival()?"Menuju tujuan tambahan":"Geser untuk melanjutkan perjalanan");
 
         hideAction(arrivedPickupBtn);
         hideAction(startDeliveryBtn);
@@ -355,7 +360,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         hideAction(updatePriceBtn);
         hideAction(cancelOrderBtn);
         if (DriverOrderCancellationPolicy.canCancel(st)) showAction(cancelOrderBtn, true);
-        if(statusBadge != null) statusBadge.setText(statusLabel(st));
+        if(statusBadge != null) statusBadge.setText(extensionNeedsArrival()?"Tujuan tambahan":("arrived_delivery".equals(st)?"Tiba di tujuan":statusLabel(st)));
 
         if(st.equals("taken")){
             showAction(arrivedPickupBtn, false);
@@ -404,7 +409,10 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
             return;
         }
         if(st.equals("arrived_delivery")){
-            showAction(finishBtn, true);
+            boolean received=order.optInt("customer_received",0)==1;
+            boolean pending="pending".equals(order.optString("price_change_status"));
+            showAction(finishBtn,received && !pending);
+            if(dockHint!=null)dockHint.setText(pending?"Menunggu persetujuan biaya customer":received?"Customer telah mengonfirmasi. Geser untuk selesai.":"Menunggu konfirmasi customer");
             showAction(updatePriceBtn, true);
             distanceInfo.setText("🏁 Anda sudah tiba di lokasi pengantaran.");
             distanceHint.setText("Serahkan pesanan ke customer. Setelah diterima, geser Selesaikan Order.");

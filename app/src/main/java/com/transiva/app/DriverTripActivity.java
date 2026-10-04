@@ -113,7 +113,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             JSONObject q=new JSONObject().put("order_id",key);
             com.transiva.app.driver.data.DriverApiClient.Result rr=new com.transiva.app.driver.data.DriverApiClient(session).post("driver_trip_realtime.php",q);
             JSONObject fresh=rr.body.optJSONObject("order"); if(fresh==null)return;
-            String sig=fresh.optString("status")+"|"+fresh.optString("price")+"|"+String.valueOf(fresh.optJSONObject("ecosystem"))+"|"+String.valueOf(fresh.optJSONObject("extra_fare_request"))+"|"+fresh.optString("price_change_status")+"|"+fresh.optString("delivery_lat")+"|"+fresh.optString("delivery_lng")+"|"+String.valueOf(fresh.optJSONObject("destination_extension"));
+            String sig=fresh.optString("customer_received")+"|"+fresh.optString("status")+"|"+fresh.optString("price")+"|"+String.valueOf(fresh.optJSONObject("ecosystem"))+"|"+String.valueOf(fresh.optJSONObject("extra_fare_request"))+"|"+fresh.optString("price_change_status")+"|"+fresh.optString("delivery_lat")+"|"+fresh.optString("delivery_lng")+"|"+String.valueOf(fresh.optJSONObject("destination_extension"));
             if(sig.equals(realtimeSignature))return; realtimeSignature=sig;
             mainHandler.post(()->{ try{ order=fresh; saveActiveOrder(); renderOrder(); refreshButtons(); }catch(Exception ignored){} });
         }catch(Exception ignored){} });
@@ -186,35 +186,43 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     }
     protected void buildBase(){
         FrameLayout page = new FrameLayout(this); page.setBackgroundColor(DriverThemeTokens.color(this, "#F3F8FF"));
-        ScrollView scroll = new ScrollView(this); page.addView(scroll, new FrameLayout.LayoutParams(-1,-1));
-        root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(18), dp(22), dp(18), dp(26));
+        ScrollView scroll = new ScrollView(this); FrameLayout.LayoutParams scrollLp=new FrameLayout.LayoutParams(-1,-1);scrollLp.bottomMargin=dp(112);page.addView(scroll,scrollLp);
+        root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(14), dp(12), dp(14), dp(16));
         scroll.addView(root, new ScrollView.LayoutParams(-1,-2));
         progressBar = new ProgressBar(this); progressBar.setVisibility(View.GONE);
         FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(dp(48), dp(48)); pp.gravity = Gravity.CENTER; page.addView(progressBar, pp);
+        actionDock=new LinearLayout(this);actionDock.setOrientation(LinearLayout.VERTICAL);
+        actionDock.setPadding(dp(14),dp(8),dp(14),dp(10));actionDock.setBackgroundColor(DriverThemeTokens.surface(this));
+        FrameLayout.LayoutParams dockLp=new FrameLayout.LayoutParams(-1,-2);dockLp.gravity=Gravity.BOTTOM;page.addView(actionDock,dockLp);
         setContentView(page);
         DriverAppSettings.apply(this);
     }
     protected void renderEmpty(){
-        root.removeAllViews(); top("Driver Trip", "Status perjalanan order native");
+        root.removeAllViews(); top("Driver Trip", "");
         LinearLayout c = card(); c.setPadding(dp(18), dp(16), dp(18), dp(16));
         c.addView(text("Order tidak ditemukan.", 16, "#64748B", false));
         Button back = outline("Kembali ke Dashboard"); back.setOnClickListener(v -> finish()); c.addView(back, btnLp(14)); add(c,0,dp(8),0,0);
     }
     protected void renderOrder(){
-        root.removeAllViews(); top("Driver Trip", "Status perjalanan order native");
+        if(mapView!=null){try{mapView.onPause();mapView.onStop();mapView.onDestroy();}catch(Exception ignored){}}
+        mapView=null;googleMap=null;mapReady=false;pickupMarker=null;deliveryMarker=null;driverMarker=null;
+        pickupPolyline=null;deliveryPolyline=null;waypointMarkers.clear();overviewMapApplied=false;
+        root.removeAllViews(); top("Driver Trip", "");
         addHeaderCard();
-        // Aksi utama ditempatkan langsung setelah ringkasan agar selalu terlihat tanpa harus scroll ke bawah.
+        if(actionDock!=null)actionDock.removeAllViews();
+        addLocationCard("Titik jemput", pickupAddress(), true);
+        addLocationCard("Tujuan", deliveryAddress(), false);
+        if(!"arrived_delivery".equals(status()) || extensionNeedsArrival())addMapCard();
         addActions();
-        addLocationCard("📍 Lokasi Penjemputan", pickupAddress(), true);
-        addLocationCard("🏁 Lokasi Delivery", deliveryAddress(), false);
-        addMapCard(); addFoodOrNoteCard();
+        if("arrived_delivery".equals(status()) && !extensionNeedsArrival())addMapCard();
+        addFoodOrNoteCard();
     }
     protected void top(String title, String sub){
         LinearLayout row = new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(0,0,0,dp(14));
         TextView back = text("‹", 38, "#0B3A78", true); back.setGravity(Gravity.CENTER); back.setBackground(round("#FFFFFF", dp(22))); back.setOnClickListener(v -> finish());
-        row.addView(back, new LinearLayout.LayoutParams(dp(58), dp(58)));
+        row.addView(back, new LinearLayout.LayoutParams(dp(42), dp(42)));
         LinearLayout col = new LinearLayout(this); col.setOrientation(LinearLayout.VERTICAL); col.setPadding(dp(14),0,0,0);
-        col.addView(text(title, 27, "#0B3A78", true)); col.addView(text(sub, 14, "#64748B", false)); row.addView(col, new LinearLayout.LayoutParams(0,-2,1));
+        col.addView(text(title, 21, "#0B3A78", true)); if(!sub.isEmpty())col.addView(text(sub, 12, "#64748B", false)); row.addView(col, new LinearLayout.LayoutParams(0,-2,1));
         TextView online = text("• Online", 13, "#059669", true); online.setGravity(Gravity.CENTER); online.setPadding(dp(12), dp(8), dp(12), dp(8)); online.setBackground(round("#DCFCE7", dp(22))); row.addView(online);
         root.addView(row);
     }
@@ -222,10 +230,11 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         LinearLayout h = card(); h.setPadding(dp(16), dp(14), dp(16), dp(14));
         LinearLayout top = new LinearLayout(this); top.setGravity(Gravity.CENTER_VERTICAL); h.addView(top);
         LinearLayout left = new LinearLayout(this); left.setOrientation(LinearLayout.VERTICAL); top.addView(left, new LinearLayout.LayoutParams(0,-2,1));
-        left.addView(text(cleanServiceLabel() + " • " + vehicleLabel(), 14, "#64748B", true)); TextView id = text("#" + orderId(), 24, "#0B3A78", true); id.setMaxLines(2); left.addView(id);
+        left.addView(text(cleanServiceLabel() + " • " + vehicleLabel(), 14, "#64748B", true)); TextView id = text("#" + orderId(), 14, "#0B3A78", true); id.setSingleLine(true);id.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+        id.setOnClickListener(v->{android.content.ClipboardManager clipboard=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Order",orderId()));android.widget.Toast.makeText(this,"Nomor order disalin",android.widget.Toast.LENGTH_SHORT).show();}); left.addView(id);
         statusBadge = text(statusLabel(status()), 12, "#FFFFFF", true); statusBadge.setGravity(Gravity.CENTER); statusBadge.setPadding(dp(12), dp(7), dp(12), dp(7)); statusBadge.setBackground(gradient("#086BFF", "#2EA2FF", dp(18))); top.addView(statusBadge);
         LinearLayout stats = new LinearLayout(this); stats.setOrientation(LinearLayout.HORIZONTAL); stats.setGravity(Gravity.CENTER); LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1,-2); sp.setMargins(0, dp(14),0,0); h.addView(stats, sp);
-        mini(stats, "💰", "Total Bayar", rupiah(optDouble("price", "fare", "total"))); mini(stats, vehicleEmoji(), "Jarak", one(optDouble("distance_km")) + " KM"); mini(stats, "⏱️", "Estimasi", zero(optDouble("duration_minutes")) + " menit");
+        mini(stats, "", "Total Bayar", rupiah(optDouble("price", "fare", "total"))); mini(stats, "", "Jarak", one(optDouble("distance_km")) + " KM"); mini(stats, "", "Estimasi", zero(optDouble("duration_minutes")) + " menit");
         double orderVoucher = optDouble("voucher_discount"); if(orderVoucher > 0){ TextView subsidy=text("🏷 Customer memakai voucher " + rupiah(orderVoucher) + " • biaya ditanggung Transiva • pendapatan Anda tetap dihitung dari ongkir normal.",12,"#047857",true); subsidy.setPadding(dp(12),dp(10),dp(12),dp(10)); h.addView(subsidy); }
         distanceInfo = text("📡 Mengukur jarak driver...", 13, "#64748B", false); distanceInfo.setPadding(0, dp(10),0,0); h.addView(distanceInfo);
         distanceHint = text("", 13, "#059669", true); distanceHint.setPadding(dp(12), dp(9), dp(12), dp(9)); distanceHint.setBackground(stroke("#ECFDF5", "#86EFAC", dp(14), 1)); LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-1,-2); hp.setMargins(0, dp(8),0,0); h.addView(distanceHint, hp);
@@ -234,7 +243,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     }
     protected void mini(LinearLayout parent, String icon, String label, String value){
         LinearLayout box = new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setGravity(Gravity.CENTER); box.setPadding(dp(3),0,dp(3),0);
-        TextView i = text(icon, 20, "#0B3A78", false); i.setGravity(Gravity.CENTER); box.addView(i);
+        TextView i = text(icon, 20, "#0B3A78", false); i.setGravity(Gravity.CENTER); if(!icon.isEmpty())box.addView(i);
         TextView l = text(label, 11, "#64748B", false); l.setGravity(Gravity.CENTER); box.addView(l);
         TextView v = text(value, 13, "#111827", true); v.setGravity(Gravity.CENTER); box.addView(v);
         parent.addView(box, new LinearLayout.LayoutParams(0,-2,1));
@@ -242,21 +251,15 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     protected void addLocationCard(String title, String body, boolean pickup){
         // Satu baris tanpa tombol navigasi samping. Tombol navigasi utama tetap ada di kartu Aksi Perjalanan.
         LinearLayout c = card(); c.setPadding(dp(16), dp(14), dp(16), dp(14));
-        LinearLayout row = new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL); c.addView(row);
-        TextView label = text(title + ":", 15, "#0B3A78", true);
-        label.setSingleLine(true);
-        row.addView(label, new LinearLayout.LayoutParams(-2, -2));
-        TextView address = text(first(body, "-"), 15, "#111827", false);
-        address.setSingleLine(true);
-        address.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        address.setPadding(dp(6), 0, 0, 0);
-        row.addView(address, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView label=text(title,12,"#64748B",true);c.addView(label);
+        TextView address=text(first(body,"-"),14,"#111827",false);address.setMaxLines(2);address.setEllipsize(android.text.TextUtils.TruncateAt.END);c.addView(address);
+        c.setOnClickListener(v->info(title,first(body,"-")));
         add(c,0,0,0,dp(12));
     }
     protected void addMapCard(){
         LinearLayout c = card(); c.setPadding(dp(12), dp(12), dp(12), dp(12));
         c.addView(text("🗺️ Peta Perjalanan", 16, "#0B3A78", true));
-        c.addView(text("Google Maps SDK • posisi driver, pickup, delivery, dan jalur perjalanan.", 12, "#64748B", false));
+        
         mapView = new MapView(this);
         mapView.onCreate(null);
         try { MapsInitializer.initialize(getApplicationContext(), MapsInitializer.Renderer.LATEST, null); } catch (Throwable ignored) { TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
@@ -274,7 +277,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             if(pendingPickupRoutePoints.isEmpty()) requestStableRoute(true);
         });
         LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(-1, dp(250)); mp.setMargins(0,dp(8),0,0);
-        c.addView(mapView, mp); add(c,0,0,0,dp(12));
+        c.addView(mapView, mp);if(realtimeTripRunning){mapView.onStart();mapView.onResume();} add(c,0,0,0,dp(12));
     }
 
     protected void initNativeTripMarkers(){
