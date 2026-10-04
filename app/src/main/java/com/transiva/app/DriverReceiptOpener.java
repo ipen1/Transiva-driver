@@ -41,6 +41,7 @@ public class DriverReceiptOpener {
             putNumber(item, "sisa_saldo", receipt, "sisa_saldo");
             putNumber(item, "items_count", receipt, "items_count");
             putNumber(item, "is_food", receipt, "is_food");
+            item.put("waiting_fee",receipt.optLong("waiting_fee"));item.put("smart_waiting",receipt.optJSONObject("smart_waiting"));
             item.put("receipt_json", receipt.toString());
 
             Intent i = new Intent(activity, DriverReceiptDetailActivity.class);

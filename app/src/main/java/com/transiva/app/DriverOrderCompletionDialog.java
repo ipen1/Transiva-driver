@@ -105,6 +105,7 @@ public final class DriverOrderCompletionDialog {
             earningCard.addView(feeText);
         }
         card.addView(earningCard, lp(-1, -2, 0, 0, 0, 18));
+        SmartWaitingTextView waiting=new SmartWaitingTextView(activity);waiting.bind(receipt.optJSONObject("smart_waiting"));card.addView(waiting);
 
         View divider = new View(activity);
         divider.setBackgroundColor(line);

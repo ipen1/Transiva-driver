@@ -107,14 +107,27 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     @Override protected void onDestroy(){ if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView != null) mapView.onDestroy(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_DESTROY_FAILED",e); } super.onDestroy(); }
     @Override public void onLowMemory(){ super.onLowMemory(); try{ if(mapView!=null) mapView.onLowMemory(); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } }
 
+    private SmartWaitingTextView waitingView;
     private void refreshTripRealtime(){
         final String key=orderId();
+        if(isPickupOrder()){
+            DriverNetworkExecutor.execute(() -> {try{
+                JSONObject body=new JSONObject().put("order_id",key).put("source","pickup_orders");
+                com.transiva.app.driver.data.DriverApiClient.Result result=new com.transiva.app.driver.data.DriverApiClient(session).post("smart_waiting.php",body);
+                JSONObject state=result.body.optJSONObject("smart_waiting");
+                mainHandler.post(() -> {try{order.put("smart_waiting",state);}catch(Exception ignored){}if(waitingView!=null)waitingView.bind(state);});
+            }catch(Exception ignored){} });return;
+        }
         DriverNetworkExecutor.execute(()->{ try{
             JSONObject q=new JSONObject().put("order_id",key);
             com.transiva.app.driver.data.DriverApiClient.Result rr=new com.transiva.app.driver.data.DriverApiClient(session).post("driver_trip_realtime.php",q);
             JSONObject fresh=rr.body.optJSONObject("order"); if(fresh==null)return;
             JSONObject snapshot=fresh.optJSONObject("server_route");
             String sig=(snapshot==null?"":snapshot.optLong("version")+":"+snapshot.optString("route_hash"))+"|"+fresh.optString("customer_received")+"|"+fresh.optString("status")+"|"+fresh.optString("price")+"|"+String.valueOf(fresh.optJSONObject("ecosystem"))+"|"+String.valueOf(fresh.optJSONObject("extra_fare_request"))+"|"+fresh.optString("price_change_status")+"|"+fresh.optString("delivery_lat")+"|"+fresh.optString("delivery_lng")+"|"+String.valueOf(fresh.optJSONObject("destination_extension"));
+            JSONObject waiting=fresh.optJSONObject("smart_waiting");
+            JSONObject activeWaiting=waiting==null?null:waiting.optJSONObject("active");
+            sig+="|WAIT:"+(activeWaiting==null?0:activeWaiting.optLong("id"));
+            mainHandler.post(() -> { if(order!=null)try{order.put("smart_waiting",waiting);}catch(Exception ignored){} if(waitingView!=null)waitingView.bind(waiting); });
             if(sig.equals(realtimeSignature))return; realtimeSignature=sig;
             mainHandler.post(()->{ try{ order=fresh; saveActiveOrder(); renderOrder(); refreshButtons(); }catch(Exception ignored){} });
         }catch(Exception ignored){} });
@@ -210,6 +223,20 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         pickupPolyline=null;deliveryPolyline=null;waypointMarkers.clear();overviewMapApplied=false;
         root.removeAllViews(); top("Driver Trip", "");
         addHeaderCard();
+        waitingView=new SmartWaitingTextView(this);waitingView.bind(order.optJSONObject("smart_waiting"));root.addView(waitingView,new LinearLayout.LayoutParams(-1,-2));
+        JSONObject waitingState=order.optJSONObject("smart_waiting");JSONObject waitingActive=waitingState==null?null:waitingState.optJSONObject("active");
+        if(waitingActive!=null && waitingActive.optString("point_key").startsWith("stop:")){
+            final long sessionId=waitingActive.optLong("id");Button continueTrip=outline("Lanjut perjalanan • hentikan waktu tunggu");
+            continueTrip.setOnClickListener(v -> {
+                continueTrip.setEnabled(false);
+                DriverNetworkExecutor.execute(() -> { try {
+                    JSONObject body=new JSONObject().put("order_id",orderId()).put("source",isPickupOrder()?"pickup_orders":"orders").put("action","continue").put("session_id",sessionId);
+                    com.transiva.app.driver.data.DriverApiClient.Result response=new com.transiva.app.driver.data.DriverApiClient(session).post("smart_waiting.php",body);
+                    if(!response.body.optBoolean("success"))throw new Exception(response.body.optString("message"));
+                    mainHandler.post(() -> { try{order.put("smart_waiting",response.body.optJSONObject("smart_waiting"));}catch(Exception ignored){}renderOrder(); });
+                }catch(Exception error){mainHandler.post(() -> {continueTrip.setEnabled(true);info("Smart Waiting",first(error.getMessage(),"Belum dapat melanjutkan. Coba lagi."));});} });
+            });root.addView(continueTrip,btnLp(8));
+        }
         if(actionDock!=null)actionDock.removeAllViews();
         addLocationCard("Titik jemput", pickupAddress(), true);
         addLocationCard("Tujuan", deliveryAddress(), false);

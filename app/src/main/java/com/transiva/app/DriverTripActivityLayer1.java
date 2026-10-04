@@ -279,6 +279,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
             p.put("order_kind", orderKind);
             p.put("source", isPickupOrder() ? "pickup_orders" : "orders");
             p.put("status", next);
+            p.put("driver_lat",lastDriverLat);p.put("driver_lng",lastDriverLng);
             if(isPickupOrder() && (next.equals("finished") || next.equals("completed"))) p.put("otp", pendingFinishOtp);
             String endpoint = endpoint(next);
             JSONObject r = postJson(BASE_URL + endpoint, p);

@@ -121,7 +121,7 @@ public class DriverReceiptDetailActivity extends Activity {
         if (protectedGross <= 0) protectedGross = num("ongkir");
         double customerContribution = num("customer_contribution");
 
-        income.addView(row("🛵 Ongkir Normal" + modeLabel, rupiah(num("ongkir")), "#0F172A", false));
+        income.addView(row("🛵 Ongkir Normal" + modeLabel, rupiah(Math.max(0,num("ongkir")-receipt.optDouble("waiting_fee"))), "#0F172A", false));
         if (voucherDiscount > 0) {
             income.addView(row(isFood ? "👤 Total Dibayar Customer" : "👤 Dibayar Customer", rupiah(customerContribution), "#0F172A", false));
             income.addView(row("🏷️ Voucher Customer", "- " + rupiah(voucherDiscount), "#DC2626", false));
@@ -131,6 +131,7 @@ public class DriverReceiptDetailActivity extends Activity {
         income.addView(divider());
         income.addView(row(voucherDiscount > 0 ? "Pendapatan Driver Terlindungi" : "Total Pendapatan", rupiah(num("total_pendapatan")), "#16A34A", true));
         root.addView(income);
+        SmartWaitingTextView waiting=new SmartWaitingTextView(this);waiting.bind(receipt.optJSONObject("smart_waiting")!=null?receipt.optJSONObject("smart_waiting"):data.optJSONObject("smart_waiting"));root.addView(waiting);
 
         if (voucherDiscount > 0) {
             LinearLayout protectedBox = sectionCard();
