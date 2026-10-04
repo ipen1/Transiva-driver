@@ -9,14 +9,26 @@ errors=[]
 if not rich.exists(): errors.append('Rich manager missing')
 if 'if (TransivaRichNotificationManager.isRichType(type))' not in service or 'return;' not in service[service.find('if (TransivaRichNotificationManager.isRichType(type))'):][:300]: errors.append('Rich FCM path is not isolated')
 if 'assembleDebugAndroidTest' not in workflow: errors.append('Instrumentation compile missing')
-if 'connectedDebugAndroidTest' not in workflow: errors.append('Connected test missing')
 if 'Clean stale instrumentation harness' not in workflow: errors.append('Stale harness cleanup missing from CI')
 
-# Keep emulator execution shell-free and deterministic.
-# Multiline wrapper scripts can be executed by /usr/bin/sh and fail before Gradle starts.
+# Support direct Gradle and an explicitly invoked Bash diagnostic runner.
 emulator_block = workflow[workflow.find('name: Run connected instrumentation tests'):]
-if 'script: ./gradlew connectedDebugAndroidTest --stacktrace' not in emulator_block:
-    errors.append('Instrumentation runner must invoke Gradle directly')
+direct = 'script: ./gradlew connectedDebugAndroidTest --stacktrace' in emulator_block
+wrapped = 'script: bash tools/ci/run_android_runtime_tests.sh' in emulator_block
+if wrapped:
+    runner_path = root/'tools/ci/run_android_runtime_tests.sh'
+    if not runner_path.is_file():
+        errors.append('Diagnostic instrumentation runner missing')
+    else:
+        runner = runner_path.read_text()
+        for required in ('set -uo pipefail', './gradlew connectedDebugAndroidTest --stacktrace',
+                         'gradle_exit=${PIPESTATUS[0]}', 'exit "$gradle_exit"'):
+            if required not in runner:
+                errors.append('Diagnostic runner missing required behavior: '+required)
+        if not (root/'tools/ci/print_android_test_failures.py').is_file():
+            errors.append('Instrumentation failure reporter missing')
+if not direct and not wrapped:
+    errors.append('Connected test must invoke Gradle directly or the validated Bash diagnostic runner')
 if 'script: |' in emulator_block:
     errors.append('Instrumentation runner must not use multiline shell script')
 for api in ('26','29','31','34','35'):
