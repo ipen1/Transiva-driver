@@ -553,6 +553,16 @@ abstract class DriverTripActivityLayer1 extends Activity {
             renderEcosystemFeatures();
         });
     }
+    protected final TripDestinationExtensionController destinationExtension = new TripDestinationExtensionController(this);
+    protected boolean extensionNeedsArrival(){
+        JSONObject e=order==null?null:order.optJSONObject("destination_extension");
+        return e!=null && "approved".equals(e.optString("status")) && e.optInt("needs_arrival",0)==1;
+    }
+    protected boolean canExtendDestination(){
+        if(order==null||isPickupOrder()||!("on_delivery".equals(status())||"arrived_delivery".equals(status())))return false;
+        String t=order.optString("order_type", "").toLowerCase(java.util.Locale.US);
+        return java.util.Arrays.asList("transride","transbike","transcar","ride","bike","car").contains(t);
+    }
     protected void requestExtraFareForMissedDistance(){
         if(order==null||session==null){ info("Ongkir Tambahan","Order belum siap."); return; }
         if(!valid(lastDriverLat,lastDriverLng)){ info("Ongkir Tambahan","GPS driver belum akurat. Tunggu lokasi terbaca lalu coba lagi."); return; }

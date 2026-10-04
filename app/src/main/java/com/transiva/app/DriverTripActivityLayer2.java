@@ -124,10 +124,18 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         startDeliveryBtn = slideAction(orderKind.equals("pickup") ? "📦 Geser • Paket Diambil, Mulai Antar" : vehicleEmoji() + " Geser • Mulai Perjalanan", () -> updateStatus("on_delivery")); c.addView(startDeliveryBtn, slideLp(8));
         DriverEcosystemFeatures ecoNow=DriverEcosystemFeatures.from(order); JSONObject pendingStop=ecoNow.nextPendingWaypoint();
         if(isDeliveryPhase(status()) && pendingStop!=null){ int seq=pendingStop.optInt("sequence",1); SlideActionView stopBtn=slideAction("📍 Geser • Tiba di Stop "+seq, () -> markCurrentWaypointArrived(seq)); c.addView(stopBtn, slideLp(8)); }
-        arrivedDeliveryBtn = slideAction("🏁 Geser • Tiba di Pengantaran", () -> updateStatus("arrived_delivery")); c.addView(arrivedDeliveryBtn, slideLp(8));
+        arrivedDeliveryBtn = slideAction("🏁 Geser • Tiba di Pengantaran", () -> { if(extensionNeedsArrival()) destinationExtension.arrive(); else updateStatus("arrived_delivery"); }); c.addView(arrivedDeliveryBtn, slideLp(8));
         finishBtn = slideAction("✅ Geser • Selesaikan Order", () -> { if (isPickupOrder()) showPickupOtpDialog(); else updateStatus("finished"); }); c.addView(finishBtn, slideLp(8));
         updatePriceBtn = outline("💰 Update Total"); updatePriceBtn.setOnClickListener(v -> showUpdatePriceDialog()); c.addView(updatePriceBtn, btnLp(8));
         if(isDeliveryPhase(status())){ Button extraFare=outline("🛣 Ajukan Ongkir Jarak Terlewat"); extraFare.setOnClickListener(v->requestExtraFareForMissedDistance()); c.addView(extraFare,btnLp(8)); }
+        if(canExtendDestination()){
+            Button addDestination=outline("＋ Tambah Tujuan / Pulang (PP)");
+            addDestination.setOnClickListener(v->destinationExtension.show());c.addView(addDestination,btnLp(8));
+            JSONObject proposal=order.optJSONObject("destination_extension");
+            if(proposal!=null && "pending".equals(proposal.optString("status"))){
+                c.addView(text("Menunggu customer: "+proposal.optString("address")+" • tambahan "+rupiah(proposal.optDouble("extra_fare")),13,"#B45309",true));
+            }
+        }
         cancelOrderBtn = dangerOutlineButton("Batalkan Order");
         cancellationController = new TripCancellationController(this, order, session, cancelOrderBtn);
         cancelOrderBtn.setOnClickListener(v -> cancellationController.show());
@@ -278,7 +286,9 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
             tripStartLat=lastDriverLat;
             tripStartLng=lastDriverLng;
         }
-        final String currentStatus=status();
+        final boolean extensionRoute=extensionNeedsArrival();
+        final JSONArray stops=DriverEcosystemFeatures.from(order).waypoints;
+        final String currentStatus=status()+"|"+dLat+"|"+dLng+"|"+stops.toString();
         long now=System.currentTimeMillis();
         boolean statusChanged=!currentStatus.equals(lastOverviewRouteStatus);
         if(!force && overviewRoutesLoaded && !statusChanged && now-lastRouteRequestAt<45000L) return;
@@ -288,13 +298,26 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         DriverNetworkExecutor.execute(() -> {
             try{
                 StableRouteEngine.Result firstLeg=StableRouteEngine.fetch(startLat,startLng,pLat,pLng);
-                StableRouteEngine.Result secondLeg=StableRouteEngine.fetch(pLat,pLng,dLat,dLng);
+                double a=extensionRoute?lastDriverLat:pLat,b=extensionRoute?lastDriverLng:pLng;
+                JSONArray deliveryPoints=new JSONArray();double routeMeters=0,routeSeconds=0;
+                if(extensionRoute){
+                    for(int i=0;i<stops.length();i++){
+                        JSONObject stop=stops.optJSONObject(i);if(stop==null||"arrived".equals(stop.optString("status")))continue;
+                        double x=stop.optDouble("latitude"),y=stop.optDouble("longitude");if(!valid(x,y))continue;
+                        StableRouteEngine.Result leg=StableRouteEngine.fetch(a,b,x,y);
+                        for(int n=0;n<leg.latLngPoints.length();n++)deliveryPoints.put(leg.latLngPoints.opt(n));
+                        routeMeters+=leg.distanceMeters;routeSeconds+=leg.durationSeconds;a=x;b=y;
+                    }
+                }
+                StableRouteEngine.Result secondLeg=StableRouteEngine.fetch(a,b,dLat,dLng);
+                for(int n=0;n<secondLeg.latLngPoints.length();n++)deliveryPoints.put(secondLeg.latLngPoints.opt(n));
+                routeMeters+=secondLeg.distanceMeters;routeSeconds+=secondLeg.durationSeconds;
                 pendingPickupRoutePoints=firstLeg.pointsJson();
                 pendingPickupRouteKm=firstLeg.distanceMeters/1000d;
                 pendingPickupRouteSeconds=firstLeg.durationSeconds;
-                pendingDeliveryRoutePoints=secondLeg.pointsJson();
-                pendingDeliveryRouteKm=secondLeg.distanceMeters/1000d;
-                pendingDeliveryRouteSeconds=secondLeg.durationSeconds;
+                pendingDeliveryRoutePoints=deliveryPoints.toString();
+                pendingDeliveryRouteKm=routeMeters/1000d;
+                pendingDeliveryRouteSeconds=routeSeconds;
                 overviewRoutesLoaded=true;
                 lastOverviewRouteStatus=currentStatus;
                 mainHandler.post(this::applyPendingRoute);
@@ -373,6 +396,13 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
             }
             return;
         }
+        if(st.equals("arrived_delivery") && extensionNeedsArrival()){
+            float dd=distanceTo(coord("delivery_lat","destination_lat"),coord("delivery_lng","destination_lng"));
+            showAction(arrivedDeliveryBtn,dd>=0 && dd<=200);
+            distanceInfo.setText(dd>=0 ? "🏁 Jarak ke tujuan tambahan: "+meter(dd) : "Menunggu GPS tujuan tambahan");
+            distanceHint.setText("Perjalanan tambahan disetujui. Tiba di semua stop, lalu geser Tiba di Pengantaran dalam radius 200 m.");
+            return;
+        }
         if(st.equals("arrived_delivery")){
             showAction(finishBtn, true);
             showAction(updatePriceBtn, true);
@@ -403,6 +433,6 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
 
     protected void markCurrentWaypointArrived(int sequence){
         if(session==null||order==null)return; if(progressBar!=null)progressBar.setVisibility(View.VISIBLE);
-        DriverNetworkExecutor.execute(()->{try{JSONObject body=new JSONObject().put("action","arrive_waypoint").put("order_id",orderId()).put("sequence",sequence); new com.transiva.app.driver.data.DriverApiClient(session).post("ride_ecosystem_order.php",body); mainHandler.post(()->{loadEcosystemFeatures(); if(progressBar!=null)progressBar.setVisibility(View.GONE); renderOrder(); refreshButtons();});}catch(Exception e){mainHandler.post(()->{if(progressBar!=null)progressBar.setVisibility(View.GONE);tripInfo("Multi Destination",first(e.getMessage(),"Gagal menandai pemberhentian. Coba lagi."));});}});
+        DriverNetworkExecutor.execute(()->{try{JSONObject body=new JSONObject().put("action","arrive_waypoint").put("order_id",orderId()).put("sequence",sequence).put("driver_lat",lastDriverLat).put("driver_lng",lastDriverLng); new com.transiva.app.driver.data.DriverApiClient(session).post("ride_ecosystem_order.php",body); mainHandler.post(()->{loadEcosystemFeatures(); if(progressBar!=null)progressBar.setVisibility(View.GONE); renderOrder(); refreshButtons();});}catch(Exception e){mainHandler.post(()->{if(progressBar!=null)progressBar.setVisibility(View.GONE);tripInfo("Multi Destination",first(e.getMessage(),"Gagal menandai pemberhentian. Coba lagi."));});}});
     }
 }
