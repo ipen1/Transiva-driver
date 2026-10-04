@@ -5,7 +5,10 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
 
 import android.app.Instrumentation;
+import android.app.ActivityManager;
+import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
 import android.os.ParcelFileDescriptor;
 import android.os.SystemClock;
 import androidx.lifecycle.Lifecycle;
@@ -36,9 +39,29 @@ final class HostLifecycleTestActions {
             throw new AssertionError("Could not send the host task to background", error);
         }
         awaitState(scenario, Lifecycle.State.CREATED);
-        Intent foreground = new Intent(instrumentation.getTargetContext(), TestHarnessActivity.class)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
-        instrumentation.getTargetContext().startActivity(foreground);
+        if (Build.VERSION.SDK_INT < 31) {
+        ActivityManager manager = (ActivityManager) instrumentation.getTargetContext()
+                .getSystemService(Context.ACTIVITY_SERVICE);
+        if (manager == null) throw new AssertionError("ActivityManager is unavailable");
+        int hostTaskId = original.get().getTaskId();
+        boolean restored = false;
+        for (ActivityManager.AppTask task : manager.getAppTasks()) {
+            ActivityManager.RecentTaskInfo info = task.getTaskInfo();
+            if (info == null) continue;
+            int taskId = Build.VERSION.SDK_INT >= 29 ? info.taskId : info.id;
+            if (taskId == hostTaskId) {
+                // Restore the actual ActivityScenario task; do not resolve another task by Intent.
+                task.moveToFront();
+                restored = true;
+                break;
+            }
+        }
+        if (!restored) throw new AssertionError("Original host task not found: " + hostTaskId);
+        } else {
+            Intent foreground = new Intent(instrumentation.getTargetContext(), TestHarnessActivity.class)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+            instrumentation.getTargetContext().startActivity(foreground);
+        }
         awaitState(scenario, Lifecycle.State.RESUMED);
         scenario.onActivity(activity -> {
             assertSame("Foreground must restore the same host instance", original.get(), activity);
