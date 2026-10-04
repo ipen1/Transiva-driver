@@ -52,19 +52,13 @@ final class HostLifecycleTestActions {
             if (taskId == hostTaskId) {
                 // Restore the actual ActivityScenario task; do not resolve another task by Intent.
                 if (Build.VERSION.SDK_INT == 29) {
-                    // Android 10 checks background-start permission even for our own AppTask.
-                    // Adopt only this test permission and always release it after the move.
-                    instrumentation.getUiAutomation().adoptShellPermissionIdentity(
-                            "android.permission.START_ACTIVITIES_FROM_BACKGROUND");
-                    try {
-                        if (instrumentation.getTargetContext().checkSelfPermission(
-                                "android.permission.START_ACTIVITIES_FROM_BACKGROUND")
-                                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                            throw new AssertionError("API 29 test background-start permission unavailable");
-                        }
-                        task.moveToFront();
-                    } finally {
-                        instrumentation.getUiAutomation().dropShellPermissionIdentity();
+                    // Execute as the emulator shell, rather than as the background app UID.
+                    // Focus the original task without launching or recreating an Activity.
+                    String command = "am task focus " + hostTaskId;
+                    String result = runShell(instrumentation, command);
+                    android.util.Log.i("HostLifecycleTest", command + " -> " + result);
+                    if (!result.contains("Setting focus to task " + hostTaskId)) {
+                        throw new AssertionError("API 29 task-focus command failed: " + result);
                     }
                 } else {
                     task.moveToFront();
@@ -88,6 +82,24 @@ final class HostLifecycleTestActions {
         original.set(null);
     }
 
+    private static String runShell(Instrumentation instrumentation, String command) {
+        try {
+            ParcelFileDescriptor descriptor = instrumentation.getUiAutomation().executeShellCommand(command);
+            if (descriptor == null) throw new IOException("Shell returned no descriptor");
+            try (InputStream input = new ParcelFileDescriptor.AutoCloseInputStream(descriptor)) {
+                java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+                byte[] buffer = new byte[4096];
+                int length;
+                while ((length = input.read(buffer)) != -1) {
+                    if (output.size() < 262144) output.write(buffer, 0, Math.min(length, 262144 - output.size()));
+                }
+                return output.toString("UTF-8");
+            }
+        } catch (IOException error) {
+            throw new AssertionError("Lifecycle test shell command failed: " + command, error);
+        }
+    }
+
     private static void awaitState(ActivityScenario<TestHarnessActivity> scenario,
                                    Lifecycle.State expected) {
         long deadline = SystemClock.elapsedRealtime() + 20000L;
@@ -102,6 +114,21 @@ final class HostLifecycleTestActions {
             }
             SystemClock.sleep(50L);
         }
-        assertEquals("Host lifecycle transition timed out", expected, last);
+        String diagnosis = "";
+        if (Build.VERSION.SDK_INT == 29) {
+            Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
+            String activityDump = runShell(instrumentation, "dumpsys activity activities");
+            android.util.Log.e("HostLifecycleTest", "Transition " + last + " -> " + expected + " failed\n"
+                    + activityDump + "\n" + runShell(instrumentation, "dumpsys window windows"));
+            StringBuilder summary = new StringBuilder();
+            for (String line : activityDump.split("\n")) {
+                if (line.contains("mResumedActivity") || line.contains("mFocusedStack")
+                        || line.contains("mTopResumedActivity") || line.contains("Hist #")) {
+                    if (summary.length() < 3000) summary.append("\n").append(line.trim());
+                }
+            }
+            diagnosis = summary.toString();
+        }
+        assertEquals("Host lifecycle transition timed out" + diagnosis, expected, last);
     }
 }
