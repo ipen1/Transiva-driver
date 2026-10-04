@@ -3,7 +3,6 @@ package com.transiva.app;
 import static org.junit.Assert.*;
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
-import androidx.lifecycle.Lifecycle;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -15,7 +14,7 @@ public class WebRtcDeviceMatrixInstrumentedTest {
     }
     @Test public void background_to_foreground_preserves_host_lifecycle() {
         try(ActivityScenario<TestHarnessActivity> s=ActivityScenario.launch(TestHarnessActivity.class)){
-            s.moveToState(Lifecycle.State.CREATED); s.moveToState(Lifecycle.State.RESUMED);
+            HostLifecycleTestActions.backgroundAndReturn(s);
             s.onActivity(a -> assertFalse(a.isFinishing()));
         }
     }

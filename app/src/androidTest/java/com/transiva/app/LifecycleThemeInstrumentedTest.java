@@ -6,7 +6,6 @@ import android.content.Context;
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
-import androidx.lifecycle.Lifecycle;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -18,8 +17,7 @@ public class LifecycleThemeInstrumentedTest {
         try {
             DriverAppSettings.setDarkMode(app, false);
             try (ActivityScenario<TestHarnessActivity> s = ActivityScenario.launch(TestHarnessActivity.class)) {
-                s.moveToState(Lifecycle.State.CREATED);
-                s.moveToState(Lifecycle.State.RESUMED);
+                HostLifecycleTestActions.backgroundAndReturn(s);
                 s.recreate();
                 s.onActivity(a -> assertFalse(a.isFinishing()));
             }
