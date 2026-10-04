@@ -51,7 +51,24 @@ final class HostLifecycleTestActions {
             int taskId = Build.VERSION.SDK_INT >= 29 ? info.taskId : info.id;
             if (taskId == hostTaskId) {
                 // Restore the actual ActivityScenario task; do not resolve another task by Intent.
-                task.moveToFront();
+                if (Build.VERSION.SDK_INT == 29) {
+                    // Android 10 checks background-start permission even for our own AppTask.
+                    // Adopt only this test permission and always release it after the move.
+                    instrumentation.getUiAutomation().adoptShellPermissionIdentity(
+                            "android.permission.START_ACTIVITIES_FROM_BACKGROUND");
+                    try {
+                        if (instrumentation.getTargetContext().checkSelfPermission(
+                                "android.permission.START_ACTIVITIES_FROM_BACKGROUND")
+                                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                            throw new AssertionError("API 29 test background-start permission unavailable");
+                        }
+                        task.moveToFront();
+                    } finally {
+                        instrumentation.getUiAutomation().dropShellPermissionIdentity();
+                    }
+                } else {
+                    task.moveToFront();
+                }
                 restored = true;
                 break;
             }
