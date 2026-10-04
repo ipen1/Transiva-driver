@@ -18,6 +18,9 @@ import org.json.JSONObject;
 final class TripDestinationExtensionController {
     private final DriverTripActivityLayer1 host;
     private AlertDialog picker;
+    private TextView pickerStatus;
+    private EditText pickerAddress;
+    private boolean quotePending;
     private long generation,selectionVersion;
     private Runnable lookup=()->{};
     TripDestinationExtensionController(DriverTripActivityLayer1 host) { this.host = host; }
@@ -48,13 +51,13 @@ final class TripDestinationExtensionController {
         android.widget.FrameLayout.LayoutParams pinLp=new android.widget.FrameLayout.LayoutParams(host.dp(44),host.dp(44));pinLp.gravity=Gravity.CENTER;mapFrame.addView(pin,pinLp);
         body.addView(mapFrame,new LinearLayout.LayoutParams(-1,Math.min(host.dp(300),host.getResources().getDisplayMetrics().heightPixels/3)));
         Button home=new Button(host);home.setText("Kembali ke titik jemput (PP)");home.setTextColor(DriverThemeTokens.accent(host));body.addView(home);
-        TextView location=new TextView(host);location.setText("Menyiapkan peta…");location.setTextSize(12);location.setTextColor(DriverThemeTokens.textSecondary(host));body.addView(location);
-        EditText address=new EditText(host);address.setHint("Alamat otomatis • dapat diperbaiki");address.setTextColor(DriverThemeTokens.textPrimary(host));address.setHintTextColor(DriverThemeTokens.hint(host));address.setMaxLines(3);address.setTextSize(14);
+        TextView location=new TextView(host);pickerStatus=location;location.setText("Menyiapkan peta…");location.setTextSize(12);location.setTextColor(DriverThemeTokens.textSecondary(host));body.addView(location);
+        EditText address=new EditText(host);pickerAddress=address;address.setHint("Alamat otomatis • dapat diperbaiki");address.setTextColor(DriverThemeTokens.textPrimary(host));address.setHintTextColor(DriverThemeTokens.hint(host));address.setMaxLines(3);address.setTextSize(14);
         address.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(255)});body.addView(address);
         ScrollView scroll=new ScrollView(host);scroll.setFillViewport(true);scroll.addView(body);
         TextView title=new TextView(host);title.setText("Tujuan baru / Pulang (PP)");title.setTextSize(18);title.setTextColor(DriverThemeTokens.textPrimary(host));title.setPadding(host.dp(16),host.dp(16),host.dp(16),host.dp(8));title.setBackgroundColor(DriverThemeTokens.surface(host));
         picker=new AlertDialog.Builder(host).setCustomTitle(title).setView(scroll).setNegativeButton("Batal",null).setPositiveButton("Hitung ongkir",null).create();
-        picker.setOnDismissListener(v->{generation++;host.mainHandler.removeCallbacks(lookup);map.onPause();map.onStop();map.onDestroy();picker=null;});
+        picker.setOnDismissListener(v->{generation++;quotePending=false;host.setLoading(false);host.mainHandler.removeCallbacks(lookup);map.onPause();map.onStop();map.onDestroy();picker=null;});
         picker.setOnShowListener(v->{
             picker.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(DriverThemeTokens.accent(host));
             picker.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(DriverThemeTokens.accent(host));
@@ -62,18 +65,18 @@ final class TripDestinationExtensionController {
             picker.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(w->{
                 if(chosen[0]==null)return;
                 String label=address.getText().toString().trim();if(label.isEmpty()){address.setError("Alamat belum tersedia. Isi alamat atau tunggu pencarian.");return;}
-                LatLng target=chosen[0];close();quote(target,label);
+                if(quotePending)return;LatLng target=chosen[0];quote(target,label);
             });
         });
         address.addTextChangedListener(new android.text.TextWatcher(){
             public void beforeTextChanged(CharSequence s,int start,int count,int after){}
-            public void onTextChanged(CharSequence s,int start,int before,int count){if(picker!=null && picker.getButton(AlertDialog.BUTTON_POSITIVE)!=null)picker.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(chosen[0]!=null && s.toString().trim().length()>0);}
+            public void onTextChanged(CharSequence s,int start,int before,int count){if(picker!=null && picker.getButton(AlertDialog.BUTTON_POSITIVE)!=null)picker.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(!quotePending && chosen[0]!=null && s.toString().trim().length()>0);}
             public void afterTextChanged(android.text.Editable s){}
         });
         map.getMapAsync(g->{
             if(!alive()||picker==null||generation!=pickerVersion)return;
             g.getUiSettings().setMapToolbarEnabled(false);
-            g.setOnCameraMoveStartedListener(reason->{host.mainHandler.removeCallbacks(lookup);chosen[0]=null;address.setText("");location.setText("Geser peta untuk menentukan tujuan…");});
+            g.setOnCameraMoveStartedListener(reason->{selectionVersion++;host.mainHandler.removeCallbacks(lookup);chosen[0]=null;address.setText("");location.setText("Geser peta untuk menentukan tujuan…");});
             g.setOnCameraIdleListener(()->{
                 final LatLng point=g.getCameraPosition().target;chosen[0]=point;
                 if(preset[0]!=null && Math.abs(point.latitude-preset[0].latitude)<0.00001 && Math.abs(point.longitude-preset[0].longitude)<0.00001){preset[0]=null;address.setText(host.pickupAddress());location.setText("Pulang ke titik jemput awal");return;}
@@ -95,19 +98,30 @@ final class TripDestinationExtensionController {
         picker.show();if(picker.getWindow()!=null)picker.getWindow().setBackgroundDrawable(host.round("#FFFFFF",host.dp(18)));map.onStart();map.onResume();
     }
     private void quote(LatLng point,String label) {
-        host.setLoading(true);
+        final long dialogVersion=generation,pointVersion=selectionVersion;
+        quotePending=true;if(picker!=null)picker.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
+        if(pickerStatus!=null)pickerStatus.setText("Server menghitung seluruh rute dan ongkir…");host.setLoading(true);
         DriverNetworkExecutor.execute(() -> {
             try {
                 JSONObject q=new JSONObject().put("id",Integer.parseInt(host.internalId())).put("action","quote")
                     .put("latitude",point.latitude).put("longitude",point.longitude).put("address",label);
                 JSONObject r=new com.transiva.app.driver.data.DriverApiClient(host.session).post("driver_destination_extension.php",q).body;
                 host.mainHandler.post(() -> {
-                    if(!alive())return;host.setLoading(false);
+                    if(!alive()||generation!=dialogVersion)return;host.setLoading(false);quotePending=false;
+                    if(pointVersion!=selectionVersion||pickerAddress==null||!label.equals(pickerAddress.getText().toString().trim())){
+                        if(pickerStatus!=null)pickerStatus.setText("Pilihan berubah. Hitung ulang untuk titik terakhir.");if(picker!=null)picker.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);return;
+                    }
+                    close();
                     PremiumDialogs.builder(host).setTitle("Konfirmasi pengajuan tujuan")
-                        .setMessage("Tujuan baru: "+r.optString("address")+"\nJarak tambahan: "+host.one(r.optDouble("distance_km"))+" km\nOngkir tambahan: "+host.rupiah(r.optDouble("extra_fare"))+"\nTotal baru: "+host.rupiah(r.optDouble("total"))+"\n\nTujuan dan biaya berlaku setelah customer menyetujui. Tarif segmen tambahan mengikuti tarif reguler wilayah.")
+                        .setMessage("Tujuan baru: "+r.optString("address")+"\nJarak tambahan: "+host.one(r.optDouble("distance_km"))+" km\nOngkir tambahan: "+host.rupiah(r.optDouble("extra_fare"))+"\nSeluruh rute: "+host.one(r.optDouble("total_distance_km"))+" km\nTotal baru: "+host.rupiah(r.optDouble("total"))+"\n\nTujuan dan biaya berlaku setelah customer menyetujui. Tarif segmen tambahan mengikuti tarif reguler wilayah.")
                         .setNegativeButton("Batal",null).setPositiveButton("Kirim ke customer",(v,w)->send("request",r.optLong("request_id"))).show();
                 });
-            } catch(Exception e) { failed(e); }
+            } catch(Exception e) {
+                host.mainHandler.post(()->{if(!alive()||generation!=dialogVersion)return;host.setLoading(false);quotePending=false;
+                    if(pickerStatus!=null)pickerStatus.setText(host.first(e.getMessage(),"Layanan rute belum tersedia. Coba hitung lagi."));
+                    if(picker!=null)picker.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(pickerAddress!=null&&!pickerAddress.getText().toString().trim().isEmpty());
+                });
+            }
         });
     }
     void arrive() {

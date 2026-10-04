@@ -113,7 +113,8 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             JSONObject q=new JSONObject().put("order_id",key);
             com.transiva.app.driver.data.DriverApiClient.Result rr=new com.transiva.app.driver.data.DriverApiClient(session).post("driver_trip_realtime.php",q);
             JSONObject fresh=rr.body.optJSONObject("order"); if(fresh==null)return;
-            String sig=fresh.optString("customer_received")+"|"+fresh.optString("status")+"|"+fresh.optString("price")+"|"+String.valueOf(fresh.optJSONObject("ecosystem"))+"|"+String.valueOf(fresh.optJSONObject("extra_fare_request"))+"|"+fresh.optString("price_change_status")+"|"+fresh.optString("delivery_lat")+"|"+fresh.optString("delivery_lng")+"|"+String.valueOf(fresh.optJSONObject("destination_extension"));
+            JSONObject snapshot=fresh.optJSONObject("server_route");
+            String sig=(snapshot==null?"":snapshot.optLong("version")+":"+snapshot.optString("route_hash"))+"|"+fresh.optString("customer_received")+"|"+fresh.optString("status")+"|"+fresh.optString("price")+"|"+String.valueOf(fresh.optJSONObject("ecosystem"))+"|"+String.valueOf(fresh.optJSONObject("extra_fare_request"))+"|"+fresh.optString("price_change_status")+"|"+fresh.optString("delivery_lat")+"|"+fresh.optString("delivery_lng")+"|"+String.valueOf(fresh.optJSONObject("destination_extension"));
             if(sig.equals(realtimeSignature))return; realtimeSignature=sig;
             mainHandler.post(()->{ try{ order=fresh; saveActiveOrder(); renderOrder(); refreshButtons(); }catch(Exception ignored){} });
         }catch(Exception ignored){} });

@@ -16,9 +16,9 @@ import java.util.Locale;
  * This avoids WebView CORS/fetch failures and keeps the last good route on screen.
  */
 public final class StableRouteEngine {
-    private static final String OSRM = "https://router.project-osrm.org/route/v1/driving/";
+    
     private static final int CONNECT_TIMEOUT_MS = 3000;
-    private static final int READ_TIMEOUT_MS = 5000;
+    private static final int READ_TIMEOUT_MS = 18000;
     private static final long CACHE_TTL_MS = 180000L;
     private static volatile Result cacheResult;
     private static volatile double cacheFromLat, cacheFromLng, cacheToLat, cacheToLng;
@@ -70,9 +70,8 @@ public final class StableRouteEngine {
         for (int attempt = 0; attempt < 2; attempt++) {
             HttpURLConnection connection = null;
             try {
-                String endpoint = OSRM
-                        + String.format(Locale.US, "%.7f,%.7f;%.7f,%.7f", fromLng, fromLat, toLng, toLat)
-                        + "?overview=full&geometries=geojson&steps=true&alternatives=false";
+                String endpoint=DriverApiConfig.endpoint("customer_route_proxy.php")
+                        +String.format(Locale.US,"?from_lat=%.7f&from_lng=%.7f&to_lat=%.7f&to_lng=%.7f",fromLat,fromLng,toLat,toLng);
                 connection = com.transiva.app.driver.data.DriverConnectionRepository.open(endpoint);
                 connection.setRequestMethod("GET");
                 connection.setConnectTimeout(CONNECT_TIMEOUT_MS);

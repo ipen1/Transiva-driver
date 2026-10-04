@@ -281,7 +281,18 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         return BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE);
     }
 
+    protected boolean applyAgreedServerRoute(){
+        JSONObject snapshot=order==null?null:order.optJSONObject("server_route");
+        JSONObject payload=snapshot==null?null:snapshot.optJSONObject("route");JSONArray routes=payload==null?null:payload.optJSONArray("routes");
+        JSONObject route=routes==null?null:routes.optJSONObject(0);JSONObject geometry=route==null?null:route.optJSONObject("geometry");JSONArray coords=geometry==null?null:geometry.optJSONArray("coordinates");
+        if(googleMap==null||coords==null||coords.length()<2)return false;
+        java.util.ArrayList<LatLng> points=new java.util.ArrayList<>();for(int i=0;i<coords.length();i++){JSONArray xy=coords.optJSONArray(i);if(xy!=null&&xy.length()>1)points.add(new LatLng(xy.optDouble(1),xy.optDouble(0)));}
+        if(points.size()<2)return false;
+        if(deliveryPolyline!=null)deliveryPolyline.remove();deliveryPolyline=googleMap.addPolyline(new PolylineOptions().addAll(points).width(dp(5)).color(DriverThemeTokens.color(this,"#16A34A")));
+        return true;
+    }
     protected void requestStableRoute(boolean force){
+        if("delivery".equals(routeTargetMode()) && applyAgreedServerRoute())return;
         if(googleMap == null || !valid(lastDriverLat,lastDriverLng)) return;
         final double pLat=coord("pickup_lat","user_lat"), pLng=coord("pickup_lng","user_lng");
         final double dLat=coord("delivery_lat","destination_lat"), dLng=coord("delivery_lng","destination_lng");
@@ -334,6 +345,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
     }
 
     protected void applyPendingRoute(){
+        if("delivery".equals(routeTargetMode()) && applyAgreedServerRoute())return;
         if(googleMap==null || !mapReady) return;
         java.util.List<LatLng> p=parseRoutePoints(pendingPickupRoutePoints);
         java.util.List<LatLng> d=parseRoutePoints(pendingDeliveryRoutePoints);
