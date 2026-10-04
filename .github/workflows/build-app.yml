@@ -202,7 +202,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: ./gradlew connectedDebugAndroidTest --stacktrace --info --console=plain
+          script: bash tools/ci/run_android_runtime_tests.sh
       - name: Print instrumentation failure details
         if: failure()
         shell: bash
@@ -212,12 +212,13 @@ jobs:
           echo "=== Instrumentation reports ==="
           find app/build/reports/androidTests/connected -type f 2>/dev/null | head -40 || true
 
-      - name: Upload instrumentation reports on failure
-        if: failure()
+      - name: Upload instrumentation reports and emulator logs
+        if: always()
         uses: actions/upload-artifact@v6
         with:
           name: instrumentation-api-${{ matrix.api-level }}
           path: |
+            artifacts/android-runtime/**
             app/build/reports/androidTests/connected/**
             app/build/outputs/androidTest-results/connected/**
           if-no-files-found: warn
