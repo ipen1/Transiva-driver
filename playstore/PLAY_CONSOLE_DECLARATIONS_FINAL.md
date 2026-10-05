@@ -26,14 +26,19 @@ Use the recording script in `BACKGROUND_LOCATION_VIDEO_SCRIPT.md`. Record the re
 ## 2) Foreground Service declaration
 
 ### Manifest scope for this release
-Only one active FGS type is declared: `location`.
+Two services declare three FGS types: `location` for driver tracking, and `microphone|camera` for customer-driver calls.
 
 Permissions:
 - `android.permission.FOREGROUND_SERVICE`
 - `android.permission.FOREGROUND_SERVICE_LOCATION`
+- `android.permission.FOREGROUND_SERVICE_MICROPHONE`
+- `android.permission.FOREGROUND_SERVICE_CAMERA`
+- `android.permission.RECORD_AUDIO`
+- `android.permission.CAMERA`
 
 Service:
 - `.LocationService` with `android:foregroundServiceType="location"`
+- `.WebRtcCallForegroundService` with `android:foregroundServiceType="microphone|camera"`
 
 Legacy disabled services no longer declare a `dataSync` FGS type, and the release manifest no longer requests `FOREGROUND_SERVICE_DATA_SYNC`.
 
@@ -49,6 +54,11 @@ If the service is delayed or interrupted, the driver's position can become stale
 ### FGS video
 The same real-device video can demonstrate: driver turns ONLINE → disclosure/permission → persistent location foreground notification → app is sent to background → ONLINE operation remains active. If Play Console requests a separate URL, upload the same recording or a trimmed FGS-specific version.
 
+### Customer-driver voice/video calls
+The call foreground service owns an explicitly started or accepted WebRTC session. Microphone is used for call audio; camera is used for video calls after permission and acceptance. Home/Back navigation preserves the call. Video may continue in PiP; when the video screen is hidden without PiP, camera capture pauses. The ongoing call notification offers Return and End actions. Interrupting this service disconnects the active conversation. Voice-only calls start the service with the microphone runtime type; video calls also use the camera runtime type.
+
+For review, demonstrate an actual customer-driver voice call and video call, Home/Back navigation, PiP where supported, and ending from the app/notification. Declare the microphone/camera use cases truthfully according to the fields shown in Play Console.
+
 ## 3) Full-Screen Intent declaration
 
 The release binary requests `USE_FULL_SCREEN_INTENT` only for genuine incoming WebRTC calls between a customer and driver.
@@ -57,7 +67,7 @@ The release binary requests `USE_FULL_SCREEN_INTENT` only for genuine incoming W
 Transiva Driver **has an incoming VoIP calling feature**, but its overall main purpose is driver transport/delivery operations. Do not describe Transiva as a general phone/dialer app. If Play Console asks whether full-screen calling is the app's core/main purpose, answer accurately based on the UI wording presented. The app is already designed to work when automatic full-screen access is not granted.
 
 ### Paste-ready usage description
-Transiva Driver uses full-screen intent only for an incoming customer-to-driver WebRTC voice call that requires immediate driver attention. The notification uses the call category and provides Accept/Reject actions. On Android versions that require special access, the app checks whether full-screen intent is allowed. If access is unavailable, it gracefully falls back to a high-importance incoming-call notification with ringtone/vibration and Accept/Reject actions. Full-screen intent is not used for orders, chat, promotions, wallet events, or other notifications.
+Transiva Driver uses full-screen intent only for an incoming customer-to-driver WebRTC voice or video call that requires immediate driver attention. The notification uses the call category and provides Accept/Reject actions. On Android versions that require special access, the app checks whether full-screen intent is allowed. If access is unavailable, it gracefully falls back to a high-importance incoming-call notification with ringtone/vibration and Accept/Reject actions. Full-screen intent is not used for orders, chat, promotions, wallet events, or other notifications.
 
 ### Reviewer test
 1. Sign into the supplied driver review account.
@@ -87,7 +97,7 @@ Use `APP_ACCESS_REVIEWER.md`. Create a dedicated, persistent review account. Do 
 Before production submission:
 - Run `python3 tools/playstore_release_gate.py`.
 - Run `./gradlew testDebugUnitTest lintRelease bundleRelease`.
-- Verify the merged release manifest has only `foregroundServiceType="location"`.
+- Verify the merged release manifest declares one location service and one call service with `foregroundServiceType="microphone|camera"`, with the corresponding permissions.
 - Verify the public privacy-policy URL loads without authentication.
 - Upload real-device background-location/FGS demonstration video.
 - Complete Background Location, FGS, Full-Screen Intent, Data Safety, and App Access forms with the text above.
