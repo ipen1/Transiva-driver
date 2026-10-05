@@ -192,6 +192,7 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
         }
 
         root.addView(header);
+        root.addView(new ActiveCallBanner(this),new LinearLayout.LayoutParams(-1,-2));
 
         messagesScroll = new ScrollView(this);
         messagesScroll.setFillViewport(true);
