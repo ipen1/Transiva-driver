@@ -31,25 +31,50 @@ for p in REQUIRED:
     if p not in text: errors += fail(f'required driver location permission missing: {p}')
 if 'android.permission.FOREGROUND_SERVICE_DATA_SYNC' in text:
     errors += fail('unused FOREGROUND_SERVICE_DATA_SYNC remains; Play release should declare only active location FGS')
-# Validate each foreground-service declaration independently. Voice calls legitimately
-# require a microphone FGS in addition to the existing driver location FGS.
+# Validate service types as token sets: Video Call uses microphone + camera.
+# Keep the location service and reject unexpected/duplicate FGS declarations.
 import xml.etree.ElementTree as ET
 android_ns = '{http://schemas.android.com/apk/res/android}'
-try:
-    root = ET.fromstring(text)
-    services = root.findall('./application/service')
-    fgs = [(s.get(android_ns + 'name', ''), s.get(android_ns + 'foregroundServiceType', ''))
-           for s in services if s.get(android_ns + 'foregroundServiceType')]
-    # Existing location service name may differ; require one location service and
-    # exactly one named microphone service, with no unexpected FGS types.
-    location = [(name, kind) for name, kind in fgs if kind == 'location']
-    microphone = [(name, kind) for name, kind in fgs if kind == 'microphone']
-    if len(location) != 1 or microphone != [('.WebRtcCallForegroundService', 'microphone')] or len(fgs) != 2:
-        errors += fail('release manifest must declare exactly one location FGS and WebRtcCallForegroundService as microphone FGS')
-    if 'android.permission.FOREGROUND_SERVICE_MICROPHONE' not in text or 'android.permission.RECORD_AUDIO' not in text:
-        errors += fail('voice call foreground service requires microphone permissions')
-except ET.ParseError as exc:
-    errors += fail(f'invalid AndroidManifest.xml: {exc}')
+
+def validate_foreground_services(manifest_text, label):
+    issues = 0
+    try:
+        root = ET.fromstring(manifest_text)
+    except ET.ParseError as exc:
+        return fail(f'{label}: invalid AndroidManifest.xml: {exc}')
+    permissions = {p.get(android_ns + 'name', '') for p in root.findall('uses-permission')}
+    fgs = []
+    for service in root.findall('./application/service'):
+        kind = service.get(android_ns + 'foregroundServiceType', '')
+        if not kind:
+            continue
+        tokens = [part.strip() for part in kind.split('|')]
+        if any(not token for token in tokens) or len(tokens) != len(set(tokens)):
+            issues += fail(f'{label}: malformed or duplicate foreground service type: {kind}')
+        fgs.append((service.get(android_ns + 'name', ''), set(tokens), service))
+    location = [entry for entry in fgs if entry[1] == {'location'}]
+    calls = [entry for entry in fgs if entry[0] in {
+        '.WebRtcCallForegroundService', 'com.transiva.app.WebRtcCallForegroundService'
+    }]
+    if len(location) != 1 or len(calls) != 1 or len(fgs) != 2 or calls[0][1] != {'microphone', 'camera'}:
+        issues += fail(f'{label}: expected one location FGS and WebRtcCallForegroundService with microphone|camera only')
+    if len(calls) == 1:
+        service = calls[0][2]
+        if service.get(android_ns + 'exported') != 'false' or service.get(android_ns + 'stopWithTask') != 'false':
+            issues += fail(f'{label}: call service must be private and survive task dismissal')
+    for permission in [
+        'android.permission.FOREGROUND_SERVICE',
+        'android.permission.FOREGROUND_SERVICE_LOCATION',
+        'android.permission.FOREGROUND_SERVICE_MICROPHONE',
+        'android.permission.RECORD_AUDIO',
+        'android.permission.FOREGROUND_SERVICE_CAMERA',
+        'android.permission.CAMERA',
+    ]:
+        if permission not in permissions:
+            issues += fail(f'{label}: required foreground-call/location permission missing: {permission}')
+    return issues
+
+errors += validate_foreground_services(text, 'source manifest')
 
 def java_family(stem):
     base=ROOT/'app/src/main/java/com/transiva/app'
@@ -95,6 +120,7 @@ merged = list(ROOT.glob('app/build/intermediates/**/merged_manifests/**/AndroidM
 for m in merged:
     mt = read(m)
     if 'release' in str(m).lower():
+        errors += validate_foreground_services(mt, f'merged manifest {m.relative_to(ROOT)}')
         for p in FORBIDDEN:
             if p in mt: errors += fail(f'forbidden permission merged back into release manifest: {p}')
 
