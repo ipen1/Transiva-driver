@@ -78,7 +78,12 @@ abstract class WebRtcCallActivityLayer1 extends Activity {
     protected String orderSource = "orders";
     protected String callId = "";
     protected String peerName = "";
+    protected boolean callPermissionsGranted(){return checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED&&(!videoCall||checkSelfPermission(Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED);}
+    protected void requestCallPermissions(){requestPermissions(videoCall?new String[]{Manifest.permission.RECORD_AUDIO,Manifest.permission.CAMERA}:new String[]{Manifest.permission.RECORD_AUDIO},REQ_MIC);}
     protected boolean incoming;
+    protected boolean videoCall;
+    protected boolean callUiVisible;
+    protected TransivaVideoCallMedia videoMedia;
     protected boolean accepted;
     protected boolean autoAccept;
     protected boolean ended;
@@ -118,7 +123,7 @@ abstract class WebRtcCallActivityLayer1 extends Activity {
     protected final Runnable rtcRetryTask = new Runnable() {
         @Override public void run() {
             if (destroyed || ended || !accepted || callId.isEmpty()) return;
-            status("Mencoba menyambungkan audio kembali...");
+            status(videoCall?"Menyambungkan video kembali...":"Mencoba menyambungkan audio kembali...");
             resetRtcForRetry();
             startCallForeground();
         loadIceAndStartPeer();
@@ -178,9 +183,10 @@ abstract class WebRtcCallActivityLayer1 extends Activity {
         @Override public void onIceCandidatesRemoved(IceCandidate[] candidates) {}
         @Override public void onAddStream(MediaStream stream) {}
         @Override public void onRemoveStream(MediaStream stream) {}
+        @Override public void onTrack(org.webrtc.RtpTransceiver transceiver){final org.webrtc.MediaStreamTrack media=transceiver.getReceiver().track();if(videoMedia!=null)runOnUiThread(()->{if(!destroyed&&!ended&&videoMedia!=null)videoMedia.remote(media);});}
         @Override public void onDataChannel(DataChannel dataChannel) {}
         @Override public void onRenegotiationNeeded() { debug("RTC renegotiation needed"); }
-        @Override public void onAddTrack(RtpReceiver receiver, MediaStream[] mediaStreams) { debug("AUDIO remote track added"); }
+        @Override public void onAddTrack(RtpReceiver receiver, MediaStream[] mediaStreams) { final org.webrtc.MediaStreamTrack media=receiver.track();if(videoMedia!=null)runOnUiThread(()->{if(!destroyed&&!ended&&videoMedia!=null)videoMedia.remote(media);}); }
     }
 
     protected static class SimpleSdpObserver implements SdpObserver {
@@ -336,6 +342,7 @@ abstract class WebRtcCallActivityLayer1 extends Activity {
     protected void releaseRtc() {
         try { if (peerConnection != null) { peerConnection.close(); peerConnection.dispose(); } } catch (Throwable ignored) {}
         peerConnection = null;
+        if(videoMedia!=null)videoMedia.releaseMedia();
         try { if (localAudioTrack != null) localAudioTrack.dispose(); } catch (Throwable ignored) {}
         try { if (audioSource != null) audioSource.dispose(); } catch (Throwable ignored) {}
         try { if (factory != null) factory.dispose(); } catch (Throwable ignored) {}
@@ -477,6 +484,7 @@ abstract class WebRtcCallActivityLayer1 extends Activity {
         try {
             Intent intent = new Intent(this, WebRtcCallForegroundService.class);
             intent.putExtra("peer", peerName);
+            intent.putExtra("call_type",videoCall?"video":"audio");
             if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(intent);
             else startService(intent);
         } catch (RuntimeException ignored) {
@@ -499,18 +507,21 @@ abstract class WebRtcCallActivityLayer1 extends Activity {
         outState.putString(STATE_ORDER_ID, orderId);
         outState.putString(STATE_SOURCE, orderSource);
         outState.putString(STATE_PEER, peerName);
+        outState.putBoolean("wr_video",videoCall);
         outState.putBoolean(STATE_INCOMING, incoming);
         outState.putBoolean(STATE_ACCEPTED, accepted);
         super.onSaveInstanceState(outState);
     }
 
-    @Override protected void onPause() { super.onPause(); debug("LIFECYCLE onPause finishing=" + isFinishing()); }
+    @Override protected void onResume(){super.onResume();callUiVisible=true;if(videoMedia!=null)videoMedia.visible(true);}
+    @Override protected void onPause() { super.onPause();callUiVisible=false;if(videoMedia!=null)videoMedia.visible(false); debug("LIFECYCLE onPause finishing=" + isFinishing()); }
     @Override protected void onStop() { super.onStop(); debug("LIFECYCLE onStop finishing=" + isFinishing()); }
 
     @Override
     protected void onDestroy() {
         debug("LIFECYCLE onDestroy finishing=" + isFinishing() + " ended=" + ended + " userClose=" + userRequestedClose + " connected=" + everConnected);
         destroyed = true;
+        if(videoMedia!=null){videoMedia.dispose();videoMedia=null;}
         unregisterCallStateReceiver();
         main.removeCallbacks(pollTask);
         main.removeCallbacks(rtcRetryTask);

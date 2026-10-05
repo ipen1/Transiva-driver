@@ -72,6 +72,7 @@ public class WebRtcCallActivity extends WebRtcCallActivityLayer1 {
                     savedInstanceState.getString(STATE_PEER, ""),
                     role.equals("driver") ? "Customer" : "Driver"
             );
+            videoCall=savedInstanceState.getBoolean("wr_video",false);
             incoming = savedInstanceState.getBoolean(STATE_INCOMING, false);
             accepted = savedInstanceState.getBoolean(STATE_ACCEPTED, false);
         } else {
@@ -117,7 +118,7 @@ public class WebRtcCallActivity extends WebRtcCallActivityLayer1 {
                 main.post(pollTask);
                 ensureMicrophoneThenResume();
             } else {
-                status("Panggilan masuk");
+                status(videoCall?"Video Call masuk":"Panggilan suara masuk");
                 main.post(pollTask);
                 if (autoAccept) {
                     main.post(this::acceptIncoming);
@@ -142,6 +143,7 @@ public class WebRtcCallActivity extends WebRtcCallActivityLayer1 {
         orderId = clean(i.getStringExtra("order_id"));
         orderSource = first(i.getStringExtra("source"), i.getStringExtra("order_source"), "orders");
         peerName = first(i.getStringExtra("peer_name"), i.getStringExtra("caller_name"), role.equals("driver") ? "Customer" : "Driver");
+        videoCall="video".equals(i.getStringExtra("call_type"));
         incoming = i.getBooleanExtra("incoming", false);
         autoAccept = i.getBooleanExtra("auto_accept", false);
     }
@@ -183,7 +185,7 @@ public class WebRtcCallActivity extends WebRtcCallActivityLayer1 {
 
         if (titleView != null && !peerName.isEmpty()) titleView.setText(peerName);
         if (incoming && !accepted && !ended) {
-            status("Panggilan masuk");
+            status(videoCall?"Video Call masuk":"Panggilan suara masuk");
             startRingtone();
             main.removeCallbacks(pollTask);
             main.post(pollTask);
@@ -194,13 +196,13 @@ public class WebRtcCallActivity extends WebRtcCallActivityLayer1 {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.setPadding(dp(28), dp(52), dp(28), dp(28));
+        root.setPadding(dp(16), dp(videoCall?14:36), dp(16), dp(14));
         root.setBackgroundColor(Color.parseColor("#07131F"));
 
         TextView badge = text("T", 36, Color.WHITE, true);
         badge.setGravity(Gravity.CENTER);
         badge.setBackground(circle("#0B7CFF"));
-        root.addView(badge, new LinearLayout.LayoutParams(dp(92), dp(92)));
+        if(!videoCall)root.addView(badge, new LinearLayout.LayoutParams(dp(92), dp(92)));
 
         titleView = text(peerName, 24, Color.WHITE, true);
         titleView.setGravity(Gravity.CENTER);
@@ -224,7 +226,7 @@ public class WebRtcCallActivity extends WebRtcCallActivityLayer1 {
         root.addView(timerView, timerLp);
 
         View spacer = new View(this);
-        root.addView(spacer, new LinearLayout.LayoutParams(1, 0, 1f));
+        if(videoCall){ensureRtcFactoryInitialized();videoMedia=new TransivaVideoCallMedia(this,root);videoMedia.visible(callUiVisible);videoMedia.addControls(root);}else root.addView(spacer, new LinearLayout.LayoutParams(1, 0, 1f));
 
         LinearLayout controls = new LinearLayout(this);
         controls.setOrientation(LinearLayout.HORIZONTAL);
@@ -257,9 +259,8 @@ public class WebRtcCallActivity extends WebRtcCallActivityLayer1 {
 
     protected void ensureMicrophoneThenResume() {
         if (Build.VERSION.SDK_INT >= 23
-                && checkSelfPermission(Manifest.permission.RECORD_AUDIO)
-                != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_MIC);
+                && !callPermissionsGranted()) {
+            requestCallPermissions();
             return;
         }
 
@@ -268,8 +269,8 @@ public class WebRtcCallActivity extends WebRtcCallActivityLayer1 {
     }
 
     protected void ensureMicrophoneThenStart() {
-        if (Build.VERSION.SDK_INT >= 23 && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_MIC);
+        if (Build.VERSION.SDK_INT >= 23 && !callPermissionsGranted()) {
+            requestCallPermissions();
             return;
         }
         if (incoming && accepted) loadIceAndStartPeer();
@@ -280,7 +281,8 @@ public class WebRtcCallActivity extends WebRtcCallActivityLayer1 {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQ_MIC) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            if (callPermissionsGranted()) {
+                if(incoming&&!accepted){acceptIncoming();return;}
                 if (incoming && accepted) {
                     loadIceAndStartPeer();
                 } else if (!incoming) {
@@ -288,7 +290,7 @@ public class WebRtcCallActivity extends WebRtcCallActivityLayer1 {
                     else loadIceAndStartPeer();
                 }
             } else {
-                toast("Izin mikrofon diperlukan untuk panggilan online.");
+                toast(videoCall?"Izin mikrofon dan kamera diperlukan untuk Video Call.":"Izin mikrofon diperlukan untuk panggilan online.");
                 finishCall(callId.isEmpty() ? "" : (incoming ? "reject" : "end"), true);
             }
         }
@@ -302,6 +304,7 @@ public class WebRtcCallActivity extends WebRtcCallActivityLayer1 {
                 JSONObject p = basePayload("start");
                 p.put("order_id", orderId);
                 p.put("source", orderSource);
+                p.put("call_type",videoCall?"video":"audio");
                 JSONObject r = WebRtcSignalApi.post(session, p);
                 callId = r.optString("call_id", "");
                 debug("SIGNAL start OK call_id=" + callId);
@@ -321,13 +324,14 @@ public class WebRtcCallActivity extends WebRtcCallActivityLayer1 {
     protected void acceptIncoming() {
         debug("UI acceptIncoming() call=" + callId);
         if (accepted || callId.isEmpty()) return;
+        if(!callPermissionsGranted()){requestCallPermissions();return;}
         accepted = true;
         stopRingtone();
         try { configureAudioRoute(); }
         catch (Throwable t) { TransivaDiagnostics.error(this, "call", "AUDIO_ROUTE_ACCEPT_FAILED", t); }
         acceptButton.setVisibility(View.GONE);
         endButton.setText("Akhiri");
-        status("Menghubungkan audio...");
+        status(videoCall?"Menghubungkan video...":"Menghubungkan audio...");
         safeIo(() -> {
             try {
                 WebRtcSignalApi.post(session, basePayload("accept"));
@@ -387,7 +391,9 @@ public class WebRtcCallActivity extends WebRtcCallActivityLayer1 {
                     .setUseHardwareAcousticEchoCanceler(false)
                     .setUseHardwareNoiseSuppressor(false)
                     .createAudioDeviceModule();
-            factory = PeerConnectionFactory.builder().setAudioDeviceModule(audioDeviceModule).createPeerConnectionFactory();
+            PeerConnectionFactory.Builder factoryBuilder=PeerConnectionFactory.builder().setAudioDeviceModule(audioDeviceModule);
+            if(videoMedia!=null)factoryBuilder=videoMedia.codecs(factoryBuilder);
+            factory = factoryBuilder.createPeerConnectionFactory();
             debug("RTC factory created");
             audioSource = factory.createAudioSource(new MediaConstraints());
             localAudioTrack = factory.createAudioTrack("TRANSIVA_AUDIO", audioSource);
@@ -400,6 +406,7 @@ public class WebRtcCallActivity extends WebRtcCallActivityLayer1 {
             debug("RTC peerConnection=" + (peerConnection != null));
             if (peerConnection == null) throw new IllegalStateException("PeerConnection gagal dibuat");
             peerConnection.addTrack(localAudioTrack, Collections.singletonList("transiva_audio"));
+            if(videoMedia!=null)videoMedia.start(factory,peerConnection);
             debug("AUDIO addTrack OK");
             configureAudioRoute();
             if (!incoming) createOffer();
@@ -412,7 +419,7 @@ public class WebRtcCallActivity extends WebRtcCallActivityLayer1 {
         offerCreated = true;
         MediaConstraints c = new MediaConstraints();
         c.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"));
-        c.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveVideo", "false"));
+        c.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveVideo", videoCall?"true":"false"));
         peerConnection.createOffer(new SimpleSdpObserver() {
             @Override public void onCreateSuccess(SessionDescription sdp) {
                 debug("SDP offer created bytes=" + (sdp == null || sdp.description == null ? 0 : sdp.description.length()));
@@ -478,6 +485,9 @@ public class WebRtcCallActivity extends WebRtcCallActivityLayer1 {
                 lastCandidateId = r.optInt("candidate_last", lastCandidateId);
                 String serverPeer = r.optString("peer_name", "");
                 runOnUiThread(() -> {
+                    if(destroyed||ended)return;
+                    boolean serverVideo="video".equals(r.optString("call_type","audio"));
+                    if(serverVideo!=videoCall&&!peerStarted){if(videoMedia!=null){videoMedia.dispose();videoMedia=null;}videoCall=serverVideo;setContentView(buildUi());}
                     if (candidates != null && candidates.length() > 0) debug("ICE remote candidates batch=" + candidates.length() + " last=" + lastCandidateId);
                     if (!serverPeer.isEmpty()) { peerName = serverPeer; titleView.setText(peerName); }
                     handleStatus(st);

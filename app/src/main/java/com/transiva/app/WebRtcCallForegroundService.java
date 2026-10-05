@@ -19,7 +19,7 @@ public final class WebRtcCallForegroundService extends Service {
         super.onCreate();
         if (Build.VERSION.SDK_INT >= 26) {
             NotificationChannel c = new NotificationChannel(CHANNEL, "Panggilan Transiva", NotificationManager.IMPORTANCE_LOW);
-            c.setDescription("Panggilan suara sedang berlangsung");
+            c.setDescription("Panggilan sedang berlangsung");
             getSystemService(NotificationManager.class).createNotificationChannel(c);
         }
     }
@@ -29,9 +29,10 @@ public final class WebRtcCallForegroundService extends Service {
         int immutable = Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0;
         PendingIntent pending = PendingIntent.getActivity(this, 7821, open, PendingIntent.FLAG_UPDATE_CURRENT | immutable);
         String peer = intent == null ? "" : intent.getStringExtra("peer");
+        boolean video=intent!=null&&"video".equals(intent.getStringExtra("call_type"));
         Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, CHANNEL) : new Notification.Builder(this);
         Notification notification = b.setSmallIcon(getApplicationInfo().icon)
-            .setContentTitle("Panggilan Transiva berlangsung")
+            .setContentTitle(video?"Video Call Transiva berlangsung":"Panggilan Transiva berlangsung")
             .setContentText(peer == null || peer.isEmpty() ? "Ketuk untuk kembali ke panggilan" : "Dengan " + peer)
             .setContentIntent(pending).setOngoing(true).setCategory(Notification.CATEGORY_CALL).build();
         if (Build.VERSION.SDK_INT >= 29) startForeground(ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
