@@ -13,6 +13,8 @@ import android.util.Rational;
 import android.view.*;
 import android.widget.*;
 import androidx.core.content.ContextCompat;
+import androidx.annotation.ChecksSdkIntAtLeast;
+import androidx.annotation.RequiresApi;
 import org.webrtc.*;
 
 /** A replaceable view of the service session. Back never owns or tears down media. */
@@ -76,12 +78,15 @@ public class TransivaCallUiActivity extends Activity {
     private String duration(long base){long seconds=Math.max(0,(SystemClock.elapsedRealtime()-base)/1000);return String.format(java.util.Locale.US,"%02d:%02d",seconds/60,seconds%60);}
     private void releaseRenderers(){if(attached!=null)attached.detach(local,remote);attached=null;if(local!=null){local.release();local=null;}if(remote!=null){remote.release();remote=null;}rendererReady=false;}
     private void hangup(){stopRing();WebRtcSessionEngine e=WebRtcCallForegroundService.current();if(e!=null&&e.active()){e.end(true,"Panggilan berakhir");}else if(serviceRequested){startService(new Intent(this,WebRtcCallForegroundService.class).setAction(WebRtcCallForegroundService.END));finish();}else{final String id=getIntent().getStringExtra("call_id");final SessionManager session=new SessionManager(getApplicationContext());final String role=getPackageName().endsWith(".driver")?"driver":"customer";if(id!=null&&!id.isEmpty())new Thread(()->{try{WebRtcSignalApi.post(session,new org.json.JSONObject().put("action","reject").put("role",role).put("call_id",id));}catch(Exception ignored){}},"TransivaCallReject").start();finish();}}
+    @ChecksSdkIntAtLeast(api = 26)
     private boolean pipAvailable(){return Build.VERSION.SDK_INT>=26&&getPackageManager().hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE);}
+    @RequiresApi(26)
     private PictureInPictureParams pipParams(){PictureInPictureParams.Builder b=new PictureInPictureParams.Builder().setAspectRatio(new Rational(3,4));if(stage!=null){Rect r=new Rect();if(stage.getGlobalVisibleRect(r))b.setSourceRectHint(r);}if(Build.VERSION.SDK_INT>=31)b.setAutoEnterEnabled(video&&startedSession&&WebRtcCallForegroundService.current()!=null&&WebRtcCallForegroundService.current().active());return b.build();}
-    private void updatePip(){if(video&&pipAvailable())try{setPictureInPictureParams(pipParams());}catch(RuntimeException ignored){}}
-    private boolean enterPip(){if(!video||!startedSession||!pipAvailable())return false;try{pipEntering=true;boolean success=enterPictureInPictureMode(pipParams());if(!success)pipEntering=false;return success;}catch(RuntimeException e){pipEntering=false;return false;}}
+    private void updatePip(){if(Build.VERSION.SDK_INT>=26&&video&&pipAvailable())try{setPictureInPictureParams(pipParams());}catch(RuntimeException ignored){}}
+    private boolean enterPip(){if(Build.VERSION.SDK_INT<26||!video||!startedSession||!pipAvailable())return false;try{pipEntering=true;boolean success=enterPictureInPictureMode(pipParams());if(!success)pipEntering=false;return success;}catch(RuntimeException e){pipEntering=false;return false;}}
     @Override public void onBackPressed(){if(video&&startedSession){backToChat=true;if(enterPip())return;backToChat=false;Toast.makeText(this,"PiP tidak tersedia; suara tetap berjalan",Toast.LENGTH_SHORT).show();}openChat();finish();}
     @Override protected void onUserLeaveHint(){super.onUserLeaveHint();if(video&&startedSession&&Build.VERSION.SDK_INT<31)enterPip();}
+    @RequiresApi(26)
     @Override public void onPictureInPictureModeChanged(boolean pip,Configuration config){super.onPictureInPictureModeChanged(pip,config);pipEntering=false;header.setVisibility(pip?View.GONE:View.VISIBLE);controls.setVisibility(pip?View.GONE:View.VISIBLE);actions.setVisibility(pip?View.GONE:View.VISIBLE);applyPadding();if(local!=null)local.setVisibility(!pip&&WebRtcCallForegroundService.current()!=null&&WebRtcCallForegroundService.current().cameraEnabled?View.VISIBLE:View.INVISIBLE);WebRtcSessionEngine e=WebRtcCallForegroundService.current();if(e!=null)e.setVisible(pip||resumed);if(pip&&backToChat){backToChat=false;openChat();}}
     private void applyPadding(){boolean pip=Build.VERSION.SDK_INT>=26&&isInPictureInPictureMode();root.setPadding(pip?0:dp(12)+insetLeft,pip?0:dp(12)+insetTop,pip?0:dp(12)+insetRight,pip?0:dp(12)+insetBottom);}
     private void openChat(){WebRtcSessionEngine e=WebRtcCallForegroundService.current();String order=e!=null?e.orderId:getIntent().getStringExtra("order_id");if(order==null||order.isEmpty())return;Intent i=new Intent();i.setClassName(this,getPackageName().endsWith(".driver")?"com.transiva.app.DriverChatRoomActivity":"com.transiva.app.CustomerChatRoomActivity");i.putExtra("order_id",order).putExtra("order_source",e!=null?e.source:getIntent().getStringExtra("source")).putExtra("source",e!=null?e.source:getIntent().getStringExtra("source")).putExtra("participant_name",e!=null?e.peer:getIntent().getStringExtra("peer_name"));i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP);startActivity(i);}
