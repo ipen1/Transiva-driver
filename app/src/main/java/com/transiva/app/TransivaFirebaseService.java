@@ -125,7 +125,7 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
             // All state/signaling events are consumed here so they cannot launch
             // WebRtcCallActivity again through a PendingIntent/full-screen intent.
             if ("call_accepted".equals(event) || "accepted".equals(event)) {
-                IncomingCallAlertManager.stop(callId);
+                IncomingCallAlertManager.resolve(callId);
                 sendCallState(callId, "accepted");
                 cancelCallNotification(callId);
                 return;
@@ -141,7 +141,7 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
                 if (event.contains("reject")) status = "rejected";
                 else if (event.contains("miss")) status = "missed";
                 else status = "ended";
-                IncomingCallAlertManager.stop(callId);
+                IncomingCallAlertManager.resolve(callId);
                 sendCallState(callId, status);
                 cancelCallNotification(callId);
                 return;
@@ -304,6 +304,10 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
             String url,
             Map<String, String> data
     ) {
+        if ("webrtc_call".equals(type) && data != null
+                && "incoming_call".equalsIgnoreCase(first(data.get("event"), ""))
+                && !IncomingCallAlertManager.claimNotification(first(data.get("call_id"), ""))) return;
+
         TransivaNotificationStore.add(
                 this,
                 type,
@@ -405,7 +409,8 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
                     .setOngoing(true)
                     .setAutoCancel(false)
                     .setOnlyAlertOnce(true)
-                    .setTimeoutAfter(50_000L);
+                    .setTimeoutAfter(50_000L)
+                    .setSilent(true);
 
             // Accept is a user-initiated Activity launch and auto-answers once the call UI opens.
             Intent acceptIntent = buildOpenIntent(type, orderId, roomId, url, data);

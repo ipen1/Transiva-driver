@@ -19,7 +19,7 @@ public class IncomingCallActionReceiver extends BroadcastReceiver {
         final int notificationId = intent.getIntExtra("notification_id",
                 Math.abs(("webrtc_call|" + callId).hashCode()));
 
-        IncomingCallAlertManager.stop(callId);
+        IncomingCallAlertManager.resolve(callId);
         try {
             NotificationManager nm = (NotificationManager) app.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm != null) nm.cancel(notificationId);
