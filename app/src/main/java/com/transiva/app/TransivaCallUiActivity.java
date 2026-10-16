@@ -37,7 +37,7 @@ public class TransivaCallUiActivity extends Activity {
         render();
     }};
     private final Runnable refresh=new Runnable(){public void run(){render();if(!isFinishing())main.postDelayed(this,1000);}};
-    @Override protected void onCreate(Bundle saved){super.onCreate(saved);getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);incoming=getIntent().getBooleanExtra("incoming",false);video="video".equals(getIntent().getStringExtra("call_type"));
+    @Override protected void onCreate(Bundle saved){super.onCreate(saved);ensureOperationId(getIntent(),saved);getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);incoming=getIntent().getBooleanExtra("incoming",false);video="video".equals(getIntent().getStringExtra("call_type"));
         WebRtcSessionEngine e=WebRtcCallForegroundService.current();if(e!=null&&e.active()){video=e.video;incoming=e.incoming;startedSession=true;}
         build();IntentFilter f=new IntentFilter(WebRtcSessionEngine.CHANGED);f.addAction(ACTION_CALL_STATE);ContextCompat.registerReceiver(this,receiver,f,ContextCompat.RECEIVER_NOT_EXPORTED);registered=true;
         cancelIncomingNotification();
@@ -45,7 +45,18 @@ public class TransivaCallUiActivity extends Activity {
         if(Build.VERSION.SDK_INT>=33){backCallback=()->onBackPressed();getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,backCallback);}
         main.post(refresh);
     }
-    @Override protected void onNewIntent(Intent i){super.onNewIntent(i);if(WebRtcCallForegroundService.current()!=null){render();return;}setIntent(i);incoming=i.getBooleanExtra("incoming",false);video="video".equals(i.getStringExtra("call_type"));serviceRequested=false;startedSession=false;releaseRenderers();build();cancelIncomingNotification();if(incoming){startRing();if(i.getBooleanExtra("auto_accept",false))requestStart();}else requestStart();}
+    @Override protected void onNewIntent(Intent i){super.onNewIntent(i);ensureOperationId(i,null);if(WebRtcCallForegroundService.current()!=null){render();return;}setIntent(i);incoming=i.getBooleanExtra("incoming",false);video="video".equals(i.getStringExtra("call_type"));serviceRequested=false;startedSession=false;releaseRenderers();build();cancelIncomingNotification();if(incoming){startRing();if(i.getBooleanExtra("auto_accept",false))requestStart();}else requestStart();}
+    private static void ensureOperationId(Intent intent,Bundle saved){
+        if(intent.getBooleanExtra("incoming",false))return;
+        String id=intent.getStringExtra("operation_id");
+        if(id==null||id.isEmpty())id=saved==null?null:saved.getString("call_operation_id");
+        if(id==null||id.isEmpty())id=java.util.UUID.randomUUID().toString();
+        intent.putExtra("operation_id",id);
+    }
+    @Override protected void onSaveInstanceState(Bundle out){
+        out.putString("call_operation_id",getIntent().getStringExtra("operation_id"));
+        super.onSaveInstanceState(out);
+    }
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
     private TextView label(String text,int size){TextView t=new TextView(this);t.setText(text);t.setTextSize(size);t.setTextColor(Color.WHITE);t.setGravity(Gravity.CENTER);return t;}
     private Button button(String text){Button b=new Button(this);b.setText(text);b.setTextSize(12);b.setAllCaps(false);return b;}
@@ -93,7 +104,16 @@ public class TransivaCallUiActivity extends Activity {
     @Override protected void onPause(){super.onPause();resumed=false;/* Camera remains active during PiP transition; onStop decides visibility. */}
     @Override protected void onStop(){super.onStop();WebRtcSessionEngine e=WebRtcCallForegroundService.current();if(e!=null)e.setVisible(Build.VERSION.SDK_INT>=26&&isInPictureInPictureMode());}
     @Override protected void onDestroy(){if(!incoming||startedSession||serviceRequested)stopRing();main.removeCallbacksAndMessages(null);releaseRenderers();if(registered)unregisterReceiver(receiver);if(Build.VERSION.SDK_INT>=33&&backCallback!=null)getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(backCallback);super.onDestroy();/* Never end or release the service session here. */}
-    private void startRing(){if(incoming)IncomingCallAlertManager.start(this,getIntent().getStringExtra("call_id"));}
+    private void startRing(){if(incoming){
+        IncomingCallAlertManager.start(this,getIntent().getStringExtra("call_id"));
+        final String ringingId=getIntent().getStringExtra("call_id");
+        main.postDelayed(()->{
+            if(!isFinishing()&&!serviceRequested&&!startedSession
+                    &&ringingId!=null&&ringingId.equals(getIntent().getStringExtra("call_id"))){
+                IncomingCallAlertManager.resolve(ringingId);finish();
+            }
+        },Math.max(1,Math.min(45,getIntent().getIntExtra("remaining_seconds",45)))*1000L);
+    }}
     private void stopRing(){if(incoming){String id=getIntent().getStringExtra("call_id");if(id!=null&&!id.trim().isEmpty())IncomingCallAlertManager.stop(id);}}
     private void resolveRing(){if(incoming)IncomingCallAlertManager.resolve(getIntent().getStringExtra("call_id"));}
     private void cancelIncomingNotification(){cancelIncomingNotification(false);}

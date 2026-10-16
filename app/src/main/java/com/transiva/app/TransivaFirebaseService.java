@@ -50,6 +50,7 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
 
         saveTokenLocal(cleanToken);
         sendTokenToServer(cleanToken);
+        CallReliabilityRuntime.requestTokenSync();
     }
 
     @Override
