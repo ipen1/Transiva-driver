@@ -398,6 +398,7 @@ public class LoginActivity extends LoginActivityLayer2 {
             );
 
             JSONObject payload = new JSONObject();
+            payload.put("fcm_registration_protocol",2);
             payload.put("username", username);
             payload.put("password", password);
             payload.put(
@@ -423,7 +424,7 @@ public class LoginActivity extends LoginActivityLayer2 {
                  * FCM token hanya untuk notifikasi.
                  * Jangan kirim sebagai field token autentikasi.
                  */
-                payload.put("fcm_token", cachedFcmToken);
+                payload.put("fcm_registration_protocol", 2);
             }
 
             try (BufferedWriter writer =

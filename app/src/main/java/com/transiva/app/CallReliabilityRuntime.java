@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
@@ -13,7 +12,6 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import com.google.firebase.messaging.FirebaseMessaging;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
@@ -22,7 +20,6 @@ import java.io.OutputStream;
 import java.lang.ref.WeakReference;
 import java.net.HttpURLConnection;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -35,10 +32,9 @@ public final class CallReliabilityRuntime implements Application.ActivityLifecyc
     private final ExecutorService io = Executors.newFixedThreadPool(2);
     private WeakReference<Activity> resumed = new WeakReference<>(null);
     private String owner = "";
-    private boolean polling, syncing;
-    private long nextSync, nextPoll;
-    private int syncFailures, pollFailures;
-    private static final long SYNC_INTERVAL = 6L * 60L * 60L * 1000L;
+    private boolean polling;
+    private long nextPoll;
+    private int pollFailures;
     private final Runnable tick = new Runnable() {
         @Override public void run() {
             main.removeCallbacks(this);
@@ -48,18 +44,14 @@ public final class CallReliabilityRuntime implements Application.ActivityLifecyc
             String token = session.getToken();
             if (!session.isLoggedIn() || token == null || token.trim().isEmpty()
                     || !role.equalsIgnoreCase(session.getRole())) {
-                owner = ""; nextSync = 0; nextPoll = 0;
+                owner = ""; nextPoll = 0;
                 main.postDelayed(this, 4000); return;
             }
             if (!token.equals(owner)) {
-                owner = token; syncFailures = 0; pollFailures = 0; nextPoll = 0;
-                SharedPreferences p = prefs();
-                long age = System.currentTimeMillis() - p.getLong("ack_at", 0);
-                nextSync = digest(token).equals(p.getString("ack_owner", "")) && age >= 0 && age < SYNC_INTERVAL
-                        ? SystemClock.elapsedRealtime() + SYNC_INTERVAL - age : 0;
+                owner = token; pollFailures = 0; nextPoll = 0;
             }
             long now = SystemClock.elapsedRealtime();
-            if (!syncing && now >= nextSync) syncToken(token);
+            FcmTokenCoordinator.syncIfNeeded(app);
             if (!polling && now >= nextPoll) checkIncoming(token);
             main.postDelayed(this, 4000);
         }
@@ -68,6 +60,7 @@ public final class CallReliabilityRuntime implements Application.ActivityLifecyc
     private CallReliabilityRuntime(Application application) {
         app = application.getApplicationContext();
         role = app.getPackageName().endsWith(".driver") ? "driver" : "customer";
+        FcmTokenCoordinator.install(application);
         application.registerActivityLifecycleCallbacks(this);
         try {
             ConnectivityManager cm = (ConnectivityManager) app.getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -76,7 +69,7 @@ public final class CallReliabilityRuntime implements Application.ActivityLifecyc
                     new ConnectivityManager.NetworkCallback() {
                         @Override public void onAvailable(Network network) {
                             main.post(() -> {
-                                nextSync = 0; nextPoll = 0; pollFailures = 0;
+                                FcmTokenCoordinator.forceSync(app); nextPoll = 0; pollFailures = 0;
                                 // Resume only when an Activity is active.
                                 main.removeCallbacks(tick); main.post(tick);
                             });
@@ -89,60 +82,11 @@ public final class CallReliabilityRuntime implements Application.ActivityLifecyc
     }
     /** Also used by customer onNewToken/login; retries continue while foreground. */
     public static void requestTokenSync() {
-        CallReliabilityRuntime r = instance;
-        if (r != null) r.main.post(() -> {
-            r.nextSync = 0;
-            SessionManager session = new SessionManager(r.app);
-            String token = session.getToken();
-            if (!r.syncing && session.isLoggedIn() && token != null && !token.isEmpty()
-                    && r.role.equalsIgnoreCase(session.getRole())) r.syncToken(token);
-            r.main.removeCallbacks(r.tick); r.main.post(r.tick);
-        });
-    }
-    private SharedPreferences prefs() {
-        return app.getSharedPreferences("transiva_call_reliability", Context.MODE_PRIVATE);
+        CallReliabilityRuntime r=instance;if(r!=null)FcmTokenCoordinator.forceSync(r.app);
     }
     private boolean current(String token) {
         SessionManager s = new SessionManager(app);
         return s.isLoggedIn() && token.equals(s.getToken()) && role.equalsIgnoreCase(s.getRole());
-    }
-    private void syncToken(String token) {
-        syncing = true;
-        // Avoid bursts if several Activities resume or networks appear together.
-        nextSync = SystemClock.elapsedRealtime() + 5000;
-        try {
-            FirebaseMessaging.getInstance().getToken()
-                    .addOnSuccessListener(fcm -> {
-                        if (!current(token) || fcm == null || fcm.trim().length() < 20) {
-                            finishSync(token, false); return;
-                        }
-                        io.execute(() -> {
-                            boolean ok = false;
-                            try {
-                                if (current(token)) {
-                                    JSONObject p = new JSONObject().put("fcm_token", fcm.trim())
-                                            .put("app_scope", role).put("platform", "android_native");
-                                    ok = request(token, "save_fcm_token.php", p).optBoolean("success", false);
-                                }
-                            } catch (Exception ignored) { }
-                            final boolean success = ok;
-                            main.post(() -> finishSync(token, success));
-                        });
-                    }).addOnFailureListener(error -> finishSync(token, false));
-        } catch (RuntimeException error) { finishSync(token, false); }
-    }
-    private void finishSync(String token, boolean success) {
-        syncing = false;
-        if (!current(token)) return;
-        if (success) {
-            syncFailures = 0;
-            nextSync = SystemClock.elapsedRealtime() + SYNC_INTERVAL;
-            prefs().edit().putString("ack_owner", digest(token))
-                    .putLong("ack_at", System.currentTimeMillis()).apply();
-        } else {
-            syncFailures = Math.min(syncFailures + 1, 5);
-            nextSync = SystemClock.elapsedRealtime() + Math.min(60000L, 5000L << (syncFailures - 1));
-        }
     }
     private void checkIncoming(String token) {
         polling = true;
@@ -222,13 +166,6 @@ public final class CallReliabilityRuntime implements Application.ActivityLifecyc
                 return json;
             }
         } finally { c.disconnect(); }
-    }
-    private static String digest(String token) {
-        try {
-            byte[] bytes = MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8));
-            StringBuilder b = new StringBuilder(); for (byte value : bytes) b.append(String.format(java.util.Locale.US, "%02x", value & 255));
-            return b.toString();
-        } catch (Exception e) { throw new IllegalStateException(e); }
     }
     @Override public void onActivityResumed(Activity a) {
         resumed = new WeakReference<>(a); main.removeCallbacks(tick); main.post(tick);
