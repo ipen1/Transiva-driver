@@ -76,6 +76,7 @@ jobs:
       - name: Verify Play Store source policy gate
         run: |
           chmod +x tools/playstore_release_gate.py
+          python3 tools/playstore_release_gate_test.py
           python3 tools/playstore_release_gate.py
 
       - name: Verify Stability 4.0 architecture gate
