@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import sys, zipfile, glob
+import sys, zipfile, re
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 FORBIDDEN = [
@@ -22,19 +23,68 @@ def fail(msg):
 def read(p):
     return p.read_text(encoding='utf-8', errors='replace')
 
-errors = 0
-manifest = ROOT / 'app/src/main/AndroidManifest.xml'
-text = read(manifest)
-for p in FORBIDDEN:
-    if p in text: errors += fail(f'forbidden permission remains in source manifest: {p}')
-for p in REQUIRED:
-    if p not in text: errors += fail(f'required driver location permission missing: {p}')
-if 'android.permission.FOREGROUND_SERVICE_DATA_SYNC' in text:
-    errors += fail('unused FOREGROUND_SERVICE_DATA_SYNC remains; Play release should declare only active location FGS')
-# Validate service types as token sets: Video Call uses microphone + camera.
-# Keep the location service and reject unexpected/duplicate FGS declarations.
-import xml.etree.ElementTree as ET
+# Source contract for the shared background incoming-call implementation. Scan
+# production call sites too, so an unrelated notification cannot acquire FSI.
 android_ns = '{http://schemas.android.com/apk/res/android}'
+
+def compact_java(source):
+    # Preserve quoted text; comments must never satisfy a safety requirement.
+    token = r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|//[^\n]*|/\*.*?\*/'
+    source = re.sub(token, lambda m: '' if m.group().startswith(('//', '/*')) else m.group(), source, flags=re.S)
+    return re.sub(r'\s+', '', source)
+
+def validate_call_sources(firebase, notifier, ringing, production):
+    issues = 0
+    firebase, notifier, ringing, production = map(compact_java, (firebase, notifier, ringing, production))
+    def need(source, token, label):
+        nonlocal issues
+        if token not in source:
+            issues += fail(label)
+    if production.count('.setFullScreenIntent(') != 1 or notifier.count('.setFullScreenIntent(') != 1:
+        issues += fail('expected exactly one FSI call site, owned by IncomingCallNotifier')
+    for token in ['booleanfullscreen=Build.VERSION.SDK_INT<34;', 'if(Build.VERSION.SDK_INT>=34)try{',
+                  'fullscreen=n.canUseFullScreenIntent();', 'catch(RuntimeExceptiondenied){fullscreen=false;}',
+                  'if(fullscreen)b.setFullScreenIntent(view,true);']:
+        need(notifier, token, 'incoming-call FSI must fail closed behind Android 14 special access')
+    need(firebase, 'if("webrtc_call".equals(type)&&"incoming_call".equalsIgnoreCase(first(data.get("event"),""))){IncomingCallNotifier.receive(this,data);return;}',
+         'FCM must delegate only genuine incoming WebRTC calls to IncomingCallNotifier')
+    for token, label in [
+        ('PendingIntentview=PendingIntent.getActivity(c,number,callIntent(c,source),flags);', 'call-specific full-screen/content PendingIntent missing'),
+        ('newIntent(c,WebRtcCallActivity.class)', 'explicit call Activity target missing'),
+        ('PendingIntent.FLAG_IMMUTABLE', 'immutable call PendingIntents missing'),
+        ('putExtra("auto_accept",true)', 'incoming-call accept action missing'),
+        ('IncomingCallActionReceiver.ACTION_REJECT', 'incoming-call reject action missing'),
+        ('PendingIntentdecline=PendingIntent.getBroadcast(c,number+2,reject,flags);', 'explicit reject broadcast missing'),
+        ('NotificationCompat.CallStyle.forIncomingCall(newPerson.Builder().setName(name).setImportant(true).build(),decline,accept)', 'platform incoming CallStyle/actions missing'),
+        ('newIntent(c,IncomingCallRingingService.class).putExtras(open)', 'incoming notification must hand off to the ringing service'),
+        ('ContextCompat.startForegroundService(c,ring)', 'incoming ringing foreground-service admission missing'),
+        ('!post(c,open,false)', 'visible notification before service admission missing'),
+        ('!post(c,open,!IncomingCallAlertManager.isRinging(call))', 'audible fallback after service admission failure missing'),
+        ('PushExpiryPolicy.remainingMillis(data,System.currentTimeMillis(),true)', 'incoming push expiry validation missing'),
+        ('if(!validOwner(c,open))return;', 'incoming session ownership validation missing'),
+        ('Math.min(45000L,i.getLongExtra(DEADLINE,0)-SystemClock.elapsedRealtime())', 'incoming ring duration must remain bounded by its original deadline'),
+        ('setTimeoutAfter(Math.max(1,remaining(source)))', 'incoming notification expiry missing'),
+        ('Manifest.permission.POST_NOTIFICATIONS', 'notification runtime permission check missing'),
+        ('NotificationManager.IMPORTANCE_NONE', 'blocked notification channel check missing'),
+    ]:
+        need(notifier, token, label)
+    for token, label in [
+        ('ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE', 'incoming ringing must use shortService, not media FGS'),
+        ('IncomingCallAlertManager.start(this,call,remaining)', 'immediate bounded ringtone/vibration missing'),
+        ('IncomingCallNotifier.remaining(intent)<=0', 'ringing service must reject expired calls'),
+        ('!IncomingCallNotifier.validOwner(this,intent)', 'ringing service must reject a stale session'),
+        ('main.postDelayed(this::expire,remaining)', 'ringing service deadline cleanup missing'),
+        ('returnSTART_NOT_STICKY;', 'ringing service must not restart expired calls'),
+        ('onTimeout(intstartId){expire();}', 'Android 14 short-service timeout cleanup missing'),
+        ('onTimeout(intstartId,intfgsType){expire();}', 'Android 15 short-service timeout cleanup missing'),
+        ('stopForeground(true)', 'ringing foreground notification cleanup missing'),
+        ('IncomingCallAlertManager.stop(call)', 'ringtone cleanup missing'),
+    ]:
+        need(ringing, token, label)
+    for token in ['FOREGROUND_SERVICE_TYPE_MICROPHONE', 'FOREGROUND_SERVICE_TYPE_CAMERA', 'getUserMedia(', 'Camera.open(']:
+        if token in ringing:
+            issues += fail('incoming ringing service must not acquire camera/microphone before acceptance')
+    return issues
 
 def validate_foreground_services(manifest_text, label):
     issues = 0
@@ -52,16 +102,22 @@ def validate_foreground_services(manifest_text, label):
         if any(not token for token in tokens) or len(tokens) != len(set(tokens)):
             issues += fail(f'{label}: malformed or duplicate foreground service type: {kind}')
         fgs.append((service.get(android_ns + 'name', ''), set(tokens), service))
-    location = [entry for entry in fgs if entry[1] == {'location'}]
-    calls = [entry for entry in fgs if entry[0] in {
-        '.WebRtcCallForegroundService', 'com.transiva.app.WebRtcCallForegroundService'
-    }]
-    if len(location) != 1 or len(calls) != 1 or len(fgs) != 2 or calls[0][1] != {'microphone', 'camera'}:
-        issues += fail(f'{label}: expected one location FGS and WebRtcCallForegroundService with microphone|camera only')
-    if len(calls) == 1:
-        service = calls[0][2]
-        if service.get(android_ns + 'exported') != 'false' or service.get(android_ns + 'stopWithTask') != 'false':
-            issues += fail(f'{label}: call service must be private and survive task dismissal')
+    expected = {
+        'com.transiva.app.LocationService': {'location'},
+        'com.transiva.app.WebRtcCallForegroundService': {'microphone', 'camera'},
+        'com.transiva.app.IncomingCallRingingService': {'shortService'},
+    }
+    def qualified(name):
+        return 'com.transiva.app' + name if name.startswith('.') else name
+    actual = [(qualified(name), kinds, service) for name, kinds, service in fgs]
+    if len(actual) != len(expected) or {name for name, _, _ in actual} != set(expected):
+        issues += fail(f'{label}: expected exactly the location, active-call and incoming-ringing FGS owners')
+    for name, kinds, service in actual:
+        if name not in expected or kinds != expected[name]:
+            issues += fail(f'{label}: unexpected foreground service/type: {name}: {sorted(kinds)}')
+        if name in {'com.transiva.app.WebRtcCallForegroundService', 'com.transiva.app.IncomingCallRingingService'}:
+            if service.get(android_ns + 'exported') != 'false' or service.get(android_ns + 'stopWithTask') != 'false':
+                issues += fail(f'{label}: {name} must be private and survive task dismissal')
     for permission in [
         'android.permission.FOREGROUND_SERVICE',
         'android.permission.FOREGROUND_SERVICE_LOCATION',
@@ -74,74 +130,83 @@ def validate_foreground_services(manifest_text, label):
             issues += fail(f'{label}: required foreground-call/location permission missing: {permission}')
     return issues
 
-errors += validate_foreground_services(text, 'source manifest')
 
-def java_family(stem):
-    base=ROOT/'app/src/main/java/com/transiva/app'
-    return '\n'.join(read(p) for p in sorted(base.glob(stem+'*.java')))
+def main():
+    errors = 0
+    manifest = ROOT / 'app/src/main/AndroidManifest.xml'
+    text = read(manifest)
+    for p in FORBIDDEN:
+        if p in text: errors += fail(f'forbidden permission remains in source manifest: {p}')
+    for p in REQUIRED:
+        if p not in text: errors += fail(f'required driver location permission missing: {p}')
+    if 'android.permission.FOREGROUND_SERVICE_DATA_SYNC' in text:
+        errors += fail('unused FOREGROUND_SERVICE_DATA_SYNC remains; Play release must use only the declared location, active-call and incoming-ringing owners')
+    errors += validate_foreground_services(text, 'source manifest')
 
-dashboard = java_family('DriverDashboardActivity')
-for phrase in ['data lokasi presisi', 'latar belakang', 'aplikasi ditutup atau tidak sedang digunakan', 'tidak digunakan untuk iklan']:
-    if phrase not in dashboard:
-        errors += fail(f'background-location prominent disclosure missing required concept: {phrase}')
-for rel in ['playstore/PLAY_CONSOLE_DECLARATIONS_FINAL.md','playstore/BACKGROUND_LOCATION_VIDEO_SCRIPT.md','playstore/DATA_SAFETY_FORM.md','playstore/APP_ACCESS_REVIEWER.md','playstore/privacy.html']:
-    if not (ROOT/rel).exists(): errors += fail(f'missing Play submission artifact: {rel}')
+    def java_family(stem):
+        base=ROOT/'app/src/main/java/com/transiva/app'
+        return '\n'.join(read(p) for p in sorted(base.glob(stem+'*.java')))
 
-firebase = java_family('TransivaFirebaseService')
-# Full-screen intent is allowed only for the genuine WebRTC incoming-call path.
-if 'android.permission.USE_FULL_SCREEN_INTENT' not in text:
-    errors += fail('incoming-call permission USE_FULL_SCREEN_INTENT missing')
-if firebase.count('setFullScreenIntent(') != 1:
-    errors += fail('expected exactly one call-scoped setFullScreenIntent() usage')
-if 'incomingCallNotification' not in firebase or 'canUseFullScreenCallIntent()' not in firebase:
-    errors += fail('full-screen intent is not guarded by incoming-call + Android 14 special-access checks')
-if '"incoming_call".equalsIgnoreCase' not in firebase:
-    errors += fail('incoming-call event guard missing')
-if 'transiva_call_channel_v6' not in firebase: errors += fail('call channel was not migrated to managed-ringing v6')
-if 'IncomingCallAlertManager.start(this, callNotificationId)' not in firebase: errors += fail('incoming call does not start immediate ringtone/vibration manager')
-if 'IncomingCallActionReceiver.ACTION_REJECT' not in firebase: errors += fail('incoming call notification reject action missing')
-if 'NotificationCompat.CallStyle.forIncomingCall' not in firebase: errors += fail('incoming call does not use platform CallStyle')
-if 'fullScreenPendingIntent' not in firebase: errors += fail('dedicated full-screen PendingIntent missing')
-if 'acceptIntent.putExtra("auto_accept", true)' not in firebase: errors += fail('incoming call notification accept action missing')
-if 'ACTION_OPEN_DOCUMENT' not in java_family('DriverChatRoomActivity'): errors += fail('DriverChatRoomActivity family is not using the system document picker')
-rel='app/src/main/java/com/transiva/app/DriverTopUpActivity.java'
-if 'ACTION_OPEN_DOCUMENT' not in read(ROOT / rel): errors += fail(f'{rel} is not using the system document picker')
+    dashboard = java_family('DriverDashboardActivity')
+    for phrase in ['data lokasi presisi', 'latar belakang', 'aplikasi ditutup atau tidak sedang digunakan', 'tidak digunakan untuk iklan']:
+        if phrase not in dashboard:
+            errors += fail(f'background-location prominent disclosure missing required concept: {phrase}')
+    for rel in ['playstore/PLAY_CONSOLE_DECLARATIONS_FINAL.md','playstore/BACKGROUND_LOCATION_VIDEO_SCRIPT.md','playstore/DATA_SAFETY_FORM.md','playstore/APP_ACCESS_REVIEWER.md','playstore/privacy.html']:
+        if not (ROOT/rel).exists(): errors += fail(f'missing Play submission artifact: {rel}')
 
-for rel in ['gradlew','gradlew.bat','gradle/wrapper/gradle-wrapper.jar','gradle/wrapper/gradle-wrapper.properties']:
-    if not (ROOT/rel).exists(): errors += fail(f'missing Gradle wrapper component: {rel}')
-props = read(ROOT/'gradle/wrapper/gradle-wrapper.properties')
-if 'distributionSha256Sum=' not in props: errors += fail('Gradle distribution checksum pin missing')
+    firebase = java_family('TransivaFirebaseService')
+    if 'android.permission.USE_FULL_SCREEN_INTENT' not in text:
+        errors += fail('incoming-call permission USE_FULL_SCREEN_INTENT missing')
+    base = ROOT / 'app/src/main/java/com/transiva/app'
+    notifier = read(base / 'IncomingCallNotifier.java') if (base / 'IncomingCallNotifier.java').exists() else ''
+    ringing = read(base / 'IncomingCallRingingService.java') if (base / 'IncomingCallRingingService.java').exists() else ''
+    production = '\n'.join(read(p) for p in sorted((ROOT / 'app/src/main/java').rglob('*.java')))
+    errors += validate_call_sources(firebase, notifier, ringing, production)
+    if 'ACTION_OPEN_DOCUMENT' not in java_family('DriverChatRoomActivity'): errors += fail('DriverChatRoomActivity family is not using the system document picker')
+    rel='app/src/main/java/com/transiva/app/DriverTopUpActivity.java'
+    if 'ACTION_OPEN_DOCUMENT' not in read(ROOT / rel): errors += fail(f'{rel} is not using the system document picker')
 
-tests = list((ROOT/'app/src/test/java').rglob('*Test.java')) if (ROOT/'app/src/test/java').exists() else []
-if len(tests) < 3: errors += fail('expected at least 3 unit-test classes')
+    for rel in ['gradlew','gradlew.bat','gradle/wrapper/gradle-wrapper.jar','gradle/wrapper/gradle-wrapper.properties']:
+        if not (ROOT/rel).exists(): errors += fail(f'missing Gradle wrapper component: {rel}')
+    props = read(ROOT/'gradle/wrapper/gradle-wrapper.properties')
+    if 'distributionSha256Sum=' not in props: errors += fail('Gradle distribution checksum pin missing')
 
-# If a release build has already been produced, validate the built merged manifest too.
-merged = list(ROOT.glob('app/build/intermediates/**/merged_manifests/**/AndroidManifest.xml'))
-for m in merged:
-    mt = read(m)
-    if 'release' in str(m).lower():
-        errors += validate_foreground_services(mt, f'merged manifest {m.relative_to(ROOT)}')
-        for p in FORBIDDEN:
-            if p in mt: errors += fail(f'forbidden permission merged back into release manifest: {p}')
+    tests = list((ROOT/'app/src/test/java').rglob('*Test.java')) if (ROOT/'app/src/test/java').exists() else []
+    if len(tests) < 3: errors += fail('expected at least 3 unit-test classes')
 
-# If AAB exists, verify it is structurally readable and contains the expected bundle entries.
-aabs = list(ROOT.glob('app/build/outputs/bundle/release/*.aab'))
-for aab in aabs:
-    try:
-        with zipfile.ZipFile(aab) as z:
-            bad = z.testzip()
-            if bad: errors += fail(f'AAB zip corruption at {bad}')
-            names=set(z.namelist())
-            for required in ['BundleConfig.pb','base/manifest/AndroidManifest.xml']:
-                if required not in names: errors += fail(f'AAB missing {required}')
-            if not any(n.startswith('base/dex/classes') and n.endswith('.dex') for n in names):
-                errors += fail('AAB contains no base dex classes')
-    except Exception as e:
-        errors += fail(f'cannot validate AAB {aab}: {e}')
+    # If a release build has already been produced, validate the built merged manifest too.
+    merged = list(ROOT.glob('app/build/intermediates/**/merged_manifests/**/AndroidManifest.xml'))
+    for m in merged:
+        mt = read(m)
+        if 'release' in str(m).lower():
+            errors += validate_foreground_services(mt, f'merged manifest {m.relative_to(ROOT)}')
+            for p in FORBIDDEN:
+                if p in mt: errors += fail(f'forbidden permission merged back into release manifest: {p}')
 
-if errors:
-    print(f'PLAYSTORE RELEASE GATE: FAIL ({errors} issue(s))')
-    sys.exit(1)
-print('PLAYSTORE RELEASE GATE: PASS')
-print(f'Unit-test classes detected: {len(tests)}')
-print(f'Release AABs validated: {len(aabs)} (0 means run bundleRelease first)')
+    # If AAB exists, verify it is structurally readable and contains the expected bundle entries.
+    aabs = list(ROOT.glob('app/build/outputs/bundle/release/*.aab'))
+    for aab in aabs:
+        try:
+            with zipfile.ZipFile(aab) as z:
+                bad = z.testzip()
+                if bad: errors += fail(f'AAB zip corruption at {bad}')
+                names=set(z.namelist())
+                for required in ['BundleConfig.pb','base/manifest/AndroidManifest.xml']:
+                    if required not in names: errors += fail(f'AAB missing {required}')
+                if not any(n.startswith('base/dex/classes') and n.endswith('.dex') for n in names):
+                    errors += fail('AAB contains no base dex classes')
+        except Exception as e:
+            errors += fail(f'cannot validate AAB {aab}: {e}')
+
+    if errors:
+        print(f'PLAYSTORE RELEASE GATE: FAIL ({errors} issue(s))')
+        return 1
+    print('PLAYSTORE RELEASE GATE: PASS')
+    print(f'Unit-test classes detected: {len(tests)}')
+    print(f'Release AABs validated: {len(aabs)} (0 means run bundleRelease first)')
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
