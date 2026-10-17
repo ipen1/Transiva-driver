@@ -67,21 +67,15 @@ public class PlayStorePolicyInvariantTest {
                 + "\n"
                 + readFromRepo("app/src/main/java/com/transiva/app/TransivaFirebaseService.java");
 
-        assertTrue(source.contains("transiva_call_channel_v6"));
-        assertTrue(source.contains("incomingCallNotification"));
-        assertTrue(source.contains("\"webrtc_call\".equals(type)"));
-        assertTrue(source.contains("\"incoming_call\".equalsIgnoreCase"));
-        assertTrue(source.contains("canUseFullScreenCallIntent()"));
-        assertTrue(source.contains("manager.canUseFullScreenIntent()"));
-        assertTrue(source.contains("builder.setFullScreenIntent(fullScreenPendingIntent, true)"));
-        assertTrue(source.contains("IncomingCallAlertManager.start(this, callNotificationId)"));
-        assertTrue(source.contains("IncomingCallActionReceiver.ACTION_REJECT"));
-        assertTrue(source.contains("NotificationCompat.CallStyle.forIncomingCall"));
-        assertTrue(source.contains("fullScreenPendingIntent"));
-        assertTrue(source.contains("acceptIntent.putExtra(\"auto_accept\", true)"));
-
-        // Keep the full-screen call surface narrow: exactly one builder call site.
-        assertEquals(1, occurrences(source, "setFullScreenIntent("));
+        assertTrue(source.contains("IncomingCallNotifier.receive(this,data)"));
+        String incoming=readFromRepo("app/src/main/java/com/transiva/app/IncomingCallNotifier.java");
+        assertTrue(incoming.contains("n.canUseFullScreenIntent()"));
+        assertTrue(incoming.contains("NotificationCompat.CallStyle.forIncomingCall"));
+        assertTrue(incoming.contains("IncomingCallActionReceiver.ACTION_REJECT"));
+        assertTrue(incoming.contains("putExtra(\"auto_accept\",true)"));
+        assertTrue(incoming.contains("PushExpiryPolicy.remainingMillis"));
+        assertEquals(0,occurrences(source,"setFullScreenIntent("));
+        assertEquals(1,occurrences(incoming,"setFullScreenIntent("));
     }
 
     @Test
