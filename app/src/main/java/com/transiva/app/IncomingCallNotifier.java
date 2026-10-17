@@ -107,7 +107,12 @@ final class IncomingCallNotifier {
     static boolean post(Context c,Intent i,boolean sound){
         if(remaining(i)<=0||!validOwner(c,i)||IncomingCallAlertManager.isResolved(i.getStringExtra("call_id")))return false;
         try{channels(c);if(!allowed(c,sound?AUDIBLE:SILENT))return false;
+            // Keep this check at the notify call site so Lint can verify the permission.
+            if(Build.VERSION.SDK_INT>=33&&ContextCompat.checkSelfPermission(c,Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)return false;
             NotificationManagerCompat.from(c).notify(id(i.getStringExtra("call_id")),build(c,i,sound));return true;
+        }catch(SecurityException denied){
+            // Permission can be revoked after the check, before notify reaches the system.
+            android.util.Log.w("TransivaIncoming","Call notification permission denied",denied);return false;
         }catch(RuntimeException failure){android.util.Log.w("TransivaIncoming","Call notification failed",failure);return false;}
     }
     static void cancel(Context c,String id){try{NotificationManagerCompat.from(c).cancel(id(id));}catch(RuntimeException ignored){}}
