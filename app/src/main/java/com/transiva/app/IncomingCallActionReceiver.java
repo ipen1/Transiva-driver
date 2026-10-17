@@ -1,50 +1,22 @@
 package com.transiva.app;
-
 import android.app.NotificationManager;
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.Intent;
-
+import android.content.*;
 import org.json.JSONObject;
-
-/** Handles the Reject action without opening the UI. */
-public class IncomingCallActionReceiver extends BroadcastReceiver {
-    public static final String ACTION_REJECT = "com.transiva.app.action.REJECT_INCOMING_CALL";
-
-    @Override
-    public void onReceive(Context context, Intent intent) {
-        if (context == null || intent == null || !ACTION_REJECT.equals(intent.getAction())) return;
-        final Context app = context.getApplicationContext();
-        final String callId = clean(intent.getStringExtra("call_id"));
-        final int notificationId = intent.getIntExtra("notification_id",
-                Math.abs(("webrtc_call|" + callId).hashCode()));
-
-        IncomingCallAlertManager.resolve(callId);
-        try {
-            NotificationManager nm = (NotificationManager) app.getSystemService(Context.NOTIFICATION_SERVICE);
-            if (nm != null) nm.cancel(notificationId);
-        } catch (Throwable ignored) {}
-
-        final PendingResult pending = goAsync();
-        DriverNetworkExecutor.execute(() -> {
-            try {
-                if (!callId.isEmpty()) {
-                    SessionManager session = new SessionManager(app);
-                    JSONObject p = new JSONObject();
-                    p.put("action", "reject");
-                    p.put("role", "driver");
-                    p.put("call_id", callId);
-                    WebRtcSignalApi.post(session, p);
-                }
-            } catch (Throwable t) {
-                TransivaDiagnostics.error(app, "call", "NOTIFICATION_REJECT_FAILED", t);
-            } finally {
-                try { pending.finish(); } catch (Throwable ignored) {}
-            }
-        });
-    }
-
-    private static String clean(String value) {
-        return value == null ? "" : value.trim();
+import java.util.concurrent.*;
+/** Reject is local immediately, then sent with the identity captured at the tap. */
+public final class IncomingCallActionReceiver extends BroadcastReceiver {
+    public static final String ACTION_REJECT="com.transiva.app.action.REJECT_INCOMING_CALL";
+    private static final ExecutorService IO=Executors.newSingleThreadExecutor();
+    @Override public void onReceive(Context context,Intent intent){
+        if(intent==null||!ACTION_REJECT.equals(intent.getAction()))return;
+        Context app=context.getApplicationContext();String call=intent.getStringExtra("call_id");
+        if(call==null||call.isEmpty())return;
+        IncomingCallAlertManager.resolve(call);IncomingCallNotifier.cancel(app,call);
+        if(intent.hasExtra(IncomingCallNotifier.OWNER)&&!IncomingCallNotifier.validOwner(app,intent))return;
+        final SessionManager session=new SessionManager(app);final CallSignalSession owner=CallSignalSession.capture(app);
+        PendingResult pending=goAsync();
+        try{IO.execute(()->{try{
+            owner.check(app);WebRtcSignalApi.postCandidate(session,new JSONObject().put("action","reject").put("role","driver").put("call_id",call),owner);
+        }catch(Exception ignored){}finally{pending.finish();}});}catch(RejectedExecutionException ignored){pending.finish();}
     }
 }

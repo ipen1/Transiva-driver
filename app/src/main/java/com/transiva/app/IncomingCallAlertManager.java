@@ -46,16 +46,21 @@ public final class IncomingCallAlertManager {
             notifications.put(id, SystemClock.elapsedRealtime()); return true;
         }
     }
+    public static boolean isRinging(String id) { synchronized(LOCK){return clean(id).equals(activeCallId)&&ringtone!=null&&ringtone.isPlaying();} }
+    public static boolean isResolved(String id) { synchronized(LOCK){prune(resolved);return resolved.containsKey(clean(id));} }
+    public static void releaseNotification(String id) { synchronized(LOCK){notifications.remove(clean(id));} }
     public static void resolve(String callId) {
         synchronized (LOCK) {
             String id = clean(callId);
             if (id.isEmpty()) return;
             prune(resolved); resolved.put(id, SystemClock.elapsedRealtime());
             if (id.equals(activeCallId)) stopLocked();
+            IncomingCallRingingService.stopFor(id);
         }
     }
 
-    public static void start(Context context, String callId) {
+    public static void start(Context context, String callId) { start(context,callId,45000L); }
+    public static void start(Context context, String callId, long remaining) {
         if (context == null) return;
         final Context app = context.getApplicationContext();
         final String id = clean(callId);
@@ -73,7 +78,7 @@ public final class IncomingCallAlertManager {
                 android.app.NotificationManager nm = (android.app.NotificationManager) app.getSystemService(Context.NOTIFICATION_SERVICE);
                 if (nm != null) nm.cancel(Math.abs(("webrtc_call|" + id).hashCode()));
             }};
-            MAIN.postDelayed(expiry, 50_000L);
+            MAIN.postDelayed(expiry, Math.max(1,Math.min(45000L,remaining)));
             try {
                 Uri uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
                 ringtone = RingtoneManager.getRingtone(app, uri);
@@ -136,7 +141,8 @@ public final class IncomingCallAlertManager {
             if (vibrator != null) vibrator.cancel();
         } catch (Throwable ignored) {}
         vibrator = null;
-        activeCallId = "";
+        String stoppedId=activeCallId;activeCallId = "";
+        if(!stoppedId.isEmpty())IncomingCallRingingService.stopFor(stoppedId);
     }
 
     private static String clean(String value) {

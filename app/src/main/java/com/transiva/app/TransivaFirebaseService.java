@@ -67,6 +67,8 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
             return;
         }
 
+        if (PushExpiryPolicy.expiredOrder(data,System.currentTimeMillis())) return;
+
         if (data == null || data.isEmpty()) {
             String title =
                     remoteMessage.getNotification() != null
@@ -116,6 +118,10 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
                 TransivaDiagnostics.error(this,"fcm","MENTION_PUSH_PARSE_FAILED",t);
                 DriverGlobalChatStore.onMentionPush(this, 0L);
             }
+        }
+
+        if ("webrtc_call".equals(type) && "incoming_call".equalsIgnoreCase(first(data.get("event"),""))) {
+            IncomingCallNotifier.receive(this,data);return;
         }
 
         if ("webrtc_call".equals(type)) {
@@ -305,9 +311,10 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
             String url,
             Map<String, String> data
     ) {
-        if ("webrtc_call".equals(type) && data != null
-                && "incoming_call".equalsIgnoreCase(first(data.get("event"), ""))
-                && !IncomingCallAlertManager.claimNotification(first(data.get("call_id"), ""))) return;
+        if ("webrtc_call".equals(type)) {
+            if(data!=null&&"incoming_call".equalsIgnoreCase(first(data.get("event"),"")))IncomingCallNotifier.receive(this,data);
+            return;
+        }
 
         TransivaNotificationStore.add(
                 this,
@@ -391,82 +398,13 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
                                 NotificationCompat.VISIBILITY_PUBLIC
                         );
 
-        boolean incomingCallNotification = "webrtc_call".equals(type)
-                && data != null
-                && "incoming_call".equalsIgnoreCase(first(data.get("event"), ""));
+
 
         boolean merchantDriverChatNotification = isMerchantDriverChat(type, data);
 
-        if (incomingCallNotification) {
-            // Start the audible/vibration alert immediately from the incoming-call push.
-            // This keeps ringing even when Android denies full-screen special access.
-            IncomingCallAlertManager.start(this, callNotificationId);
 
-            // Full-screen intent is reserved EXCLUSIVELY for a real incoming WebRTC call.
-            // Android 14+ treats it as special app access. If unavailable, we gracefully
-            // fall back to the same high-priority heads-up call notification.
-            builder.setCategory(NotificationCompat.CATEGORY_CALL)
-                    .setPriority(NotificationCompat.PRIORITY_MAX)
-                    .setOngoing(true)
-                    .setAutoCancel(false)
-                    .setOnlyAlertOnce(true)
-                    .setTimeoutAfter(50_000L)
-                    .setSilent(true);
-
-            // Accept is a user-initiated Activity launch and auto-answers once the call UI opens.
-            Intent acceptIntent = buildOpenIntent(type, orderId, roomId, url, data);
-            acceptIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                    | Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            acceptIntent.putExtra("auto_accept", true);
-            PendingIntent acceptPendingIntent = PendingIntent.getActivity(
-                    this, requestCode + 1, acceptIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-
-            Intent rejectIntent = new Intent(this, IncomingCallActionReceiver.class);
-            rejectIntent.setAction(IncomingCallActionReceiver.ACTION_REJECT);
-            rejectIntent.putExtra("call_id", callNotificationId);
-            rejectIntent.putExtra("notification_id", requestCode);
-            PendingIntent rejectPendingIntent = PendingIntent.getBroadcast(
-                    this, requestCode + 2, rejectIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-
-            // Prefer the platform call style, but never let an OEM-specific
-            // Notification/CallStyle implementation crash the FCM process. If the
-            // style cannot be constructed, explicit Answer/Reject actions provide a
-            // stable fallback while preserving CATEGORY_CALL behavior.
-            try {
-                Person caller = new Person.Builder()
-                        .setName(data != null ? first(data.get("caller_name"), "Customer") : "Customer")
-                        .setImportant(true)
-                        .build();
-                builder.setStyle(NotificationCompat.CallStyle.forIncomingCall(
-                                caller, rejectPendingIntent, acceptPendingIntent))
-                        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
-            } catch (Throwable callStyleError) {
-                TransivaDiagnostics.error(this, "call", "CALL_STYLE_FAILED", callStyleError);
-                builder.addAction(android.R.drawable.ic_menu_close_clear_cancel,
-                                "Tolak", rejectPendingIntent)
-                        .addAction(android.R.drawable.sym_action_call,
-                                "Terima", acceptPendingIntent)
-                        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
-            }
-
-            if (canUseFullScreenCallIntent()) {
-                // Use a dedicated immutable Activity PendingIntent for the lock-screen
-                // full-screen surface. Android 13+ intentionally keeps this as an
-                // expanded heads-up notification while the device is actively in use.
-                Intent fullScreenIntent = buildOpenIntent(type, orderId, roomId, url, data);
-                fullScreenIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                        | Intent.FLAG_ACTIVITY_CLEAR_TOP
-                        | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                PendingIntent fullScreenPendingIntent = PendingIntent.getActivity(
-                        this, requestCode + 3, fullScreenIntent,
-                        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-                builder.setFullScreenIntent(fullScreenPendingIntent, true);
-            }
-        } else {
             if (newIncomingOrder) {
+                builder.setTimeoutAfter(Math.max(1,PushExpiryPolicy.remainingMillis(data,System.currentTimeMillis(),false)));
                 // Android 8+ mengambil suara dari NotificationChannel.
                 // Android 7 dan lebih lama mengambil suara langsung dari Builder.
                 if (Build.VERSION.SDK_INT < 26) {
@@ -489,12 +427,12 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
                 builder.setCategory(NotificationCompat.CATEGORY_MESSAGE)
                         .setPriority(NotificationCompat.PRIORITY_HIGH);
             }
-        }
+        
 
         // For operationally urgent pushes, briefly wake the display so the
         // heads-up notification can be noticed. Full-screen UI remains reserved
         // for genuine incoming calls, matching modern Android restrictions.
-        wakeScreenForPriority(type, incomingCallNotification);
+        wakeScreenForPriority(type, false);
 
         if (
                 Build.VERSION.SDK_INT >= 33
@@ -506,34 +444,19 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
             return;
         }
 
+        if(newIncomingOrder&&PushExpiryPolicy.remainingMillis(data,System.currentTimeMillis(),false)<=0)return;
         try {
-            NotificationManagerCompat
-                    .from(this)
-                    .notify(requestCode, builder.build());
-        } catch (Throwable notificationError) {
-            // A malformed/OEM-specific incoming-call notification must never crash
-            // FirebaseMessagingService and therefore the driver process. Record the
-            // failure and fall back to a minimal high-priority notification.
-            TransivaDiagnostics.error(this, "call", "INCOMING_NOTIFICATION_FAILED", notificationError);
-            if (incomingCallNotification) {
-                try {
-                    NotificationCompat.Builder fallback = new NotificationCompat.Builder(this, CH_CALL)
-                            .setSmallIcon(getSmallIcon())
-                            .setContentTitle(first(title, "Panggilan Transiva"))
-                            .setContentText(first(body, "Customer memanggil Anda"))
-                            .setCategory(NotificationCompat.CATEGORY_CALL)
-                            .setPriority(NotificationCompat.PRIORITY_MAX)
-                            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                            .setOngoing(true)
-                            .setAutoCancel(false)
-                            .setContentIntent(pendingIntent);
-                    NotificationManagerCompat.from(this).notify(requestCode, fallback.build());
-                } catch (Throwable fallbackError) {
-                    TransivaDiagnostics.error(this, "call", "INCOMING_NOTIFICATION_FALLBACK_FAILED", fallbackError);
-                    // Keep the process alive. IncomingCallAlertManager is already
-                    // ringing and the next call-state push can still be processed.
-                }
-            }
+            NotificationManagerCompat.from(this).notify(requestCode,builder.build());
+        } catch (RuntimeException notificationError) {
+            TransivaDiagnostics.error(this,"notification","NOTIFICATION_FAILED",notificationError);
+            try {
+                NotificationCompat.Builder fallback=new NotificationCompat.Builder(this,channelId)
+                    .setSmallIcon(getSmallIcon()).setContentTitle(first(title,"Transiva"))
+                    .setContentText(first(body,"Notifikasi baru")).setContentIntent(pendingIntent)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH).setAutoCancel(true);
+                if(newIncomingOrder)fallback.setTimeoutAfter(Math.max(1,PushExpiryPolicy.remainingMillis(data,System.currentTimeMillis(),false)));
+                NotificationManagerCompat.from(this).notify(requestCode,fallback.build());
+            }catch(RuntimeException failed){TransivaDiagnostics.error(this,"notification","NOTIFICATION_FALLBACK_FAILED",failed);}
         }
 
         // Do not start an Activity directly from background FCM. The notification

@@ -1,71 +1,33 @@
 package com.transiva.app;
-
 import org.json.JSONObject;
-
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
+import java.io.*;
 import java.net.HttpURLConnection;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
-
+/** Bounded signaling transport, pinned to the original call session. */
 public final class WebRtcSignalApi {
-    private static final int TIMEOUT_MS = 20000;
-    private static final String ENDPOINT = DriverApiConfig.endpoint("webrtc_call.php");
-
-    private WebRtcSignalApi() {}
-
-    public static JSONObject post(SessionManager session, JSONObject payload) throws Exception {
-        HttpURLConnection connection = null;
-        try {
-            connection = com.transiva.app.driver.data.DriverConnectionRepository.open(ENDPOINT);
-            connection.setRequestMethod("POST");
-            connection.setConnectTimeout(TIMEOUT_MS);
-            connection.setReadTimeout(TIMEOUT_MS);
-            connection.setUseCaches(false);
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-            if (session != null) {
-                String token = safe(session.getToken());
-                if (!token.isEmpty()) {
-                    connection.setRequestProperty("Authorization", "Bearer " + token);
-                }
-                connection.setRequestProperty(
-                        "X-Device-UUID",
-                        DeviceIdentityManager.getInstallationUuid(session.getContext())
-                );
-                connection.setRequestProperty("X-App-Scope", "driver");
+    private WebRtcSignalApi(){}
+    static final class ServerResponseException extends Exception {final int status;ServerResponseException(int status,String message){super(message);this.status=status;}}
+    public static JSONObject post(SessionManager session,JSONObject payload)throws Exception{return post(session,payload,CallSignalSession.capture(session.getContext()));}
+    static JSONObject post(SessionManager session,JSONObject payload,CallSignalSession owner)throws Exception{return request(session,payload,owner,20000);}
+    static JSONObject postCandidate(SessionManager session,JSONObject payload,CallSignalSession owner)throws Exception{return request(session,payload,owner,6000);}
+    private static JSONObject request(SessionManager session,JSONObject payload,CallSignalSession owner,int timeout)throws Exception{
+        android.content.Context c=session.getContext();owner.check(c);
+        HttpURLConnection connection=com.transiva.app.driver.data.DriverConnectionRepository.open(DriverApiConfig.endpoint("webrtc_call.php"));
+        try{
+            connection.setInstanceFollowRedirects(false);connection.setRequestMethod("POST");connection.setConnectTimeout(timeout);connection.setReadTimeout(timeout);connection.setUseCaches(false);connection.setDoOutput(true);
+            connection.setRequestProperty("Accept","application/json");connection.setRequestProperty("Content-Type","application/json; charset=UTF-8");owner.pin(c,connection);
+            byte[] bytes=payload.toString().getBytes(StandardCharsets.UTF_8);connection.setFixedLengthStreamingMode(bytes.length);
+            try(OutputStream out=connection.getOutputStream()){owner.check(c);out.write(bytes);}
+            int status=connection.getResponseCode();InputStream stream=status>=200&&status<300?connection.getInputStream():connection.getErrorStream();
+            if(stream==null)throw new IOException("Respons signaling kosong");
+            JSONObject json;
+            try(InputStream in=stream;ByteArrayOutputStream body=new ByteArrayOutputStream()){
+                byte[] buffer=new byte[4096];int n;while((n=in.read(buffer))!=-1){owner.check(c);if(body.size()+n>524288)throw new IOException("Respons signaling terlalu besar");body.write(buffer,0,n);}
+                json=new JSONObject(new String(body.toByteArray(),StandardCharsets.UTF_8));
             }
-            try (OutputStream out = connection.getOutputStream()) {
-                out.write(payload.toString().getBytes(StandardCharsets.UTF_8));
-                out.flush();
-            }
-            int status = connection.getResponseCode();
-            InputStream stream = status >= 200 && status < 400
-                    ? connection.getInputStream() : connection.getErrorStream();
-            if (stream == null) throw new IllegalStateException("Respons signaling kosong");
-            StringBuilder raw = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) raw.append(line);
-            }
-            String body = raw.toString().trim();
-            int a = body.indexOf('{');
-            int b = body.lastIndexOf('}');
-            if (a >= 0 && b > a) body = body.substring(a, b + 1);
-            JSONObject json = new JSONObject(body);
-            if (status < 200 || status >= 400 || !json.optBoolean("success", false)) {
-                throw new IllegalStateException(json.optString("message", "Signaling gagal (HTTP " + status + ")"));
-            }
+            owner.check(c);
+            if(status<200||status>=300||!json.optBoolean("success",false))throw new ServerResponseException(status,json.optString("message","Signaling gagal"));
             return json;
-        } finally {
-            if (connection != null) connection.disconnect();
-        }
-    }
-
-    private static String safe(String value) {
-        return value == null ? "" : value.trim();
+        }finally{connection.disconnect();}
     }
 }
