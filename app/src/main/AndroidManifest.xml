@@ -56,6 +56,7 @@
         <!-- Gunakan Maps SDK key yang sama dengan aplikasi customer yang sudah teruji.
              Jangan memakai google_api_key dari google-services.json: itu Firebase API key
              dan belum tentu diizinkan untuk Google Maps SDK for Android. -->
+        <activity android:name=".FcmRegistrationDiagnosticsActivity" android:exported="false" />
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="@string/google_maps_key" />
