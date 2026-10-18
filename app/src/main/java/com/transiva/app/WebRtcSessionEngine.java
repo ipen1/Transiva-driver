@@ -139,6 +139,7 @@ final class WebRtcSessionEngine {
         updateIdentity(r);
         String state=r.optString("status");
         if(Arrays.asList("ended","rejected","missed","cancelled").contains(state)){end(false,state.equals("rejected")?"Panggilan ditolak":"Panggilan berakhir");return;}
+        status=CallRingingState.status(incoming,accepted,connectedAt,state,r.optBoolean("receiver_ringing",false),peer,status);
         if("accepted".equals(state)){accepted=true;if(pc==null&&iceServers==null)loadIce();}
         if(pc!=null){
             String sdp=r.optString(incoming?"offer_sdp":"answer_sdp");

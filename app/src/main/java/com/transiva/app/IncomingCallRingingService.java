@@ -4,7 +4,7 @@ import android.content.*;
 import android.content.pm.ServiceInfo;
 import android.os.*;
 /** At most 45 seconds of incoming-call alerting. Does not open camera/microphone or start media. */
-public final class IncomingCallRingingService extends Service {
+public final class IncomingCallRingingService extends android.app.Service {
     private static volatile IncomingCallRingingService instance;
     private final Handler main=new Handler(Looper.getMainLooper());
     private final java.util.concurrent.ExecutorService io=java.util.concurrent.Executors.newSingleThreadExecutor();
@@ -50,7 +50,7 @@ public final class IncomingCallRingingService extends Service {
         final CallSignalSession owner=CallSignalSession.capture(this);
         try{io.execute(()->{
             String state="";
-            try{owner.check(this);state=WebRtcSignalApi.postCandidate(session,new org.json.JSONObject().put("action","heartbeat").put("role",getPackageName().endsWith(".driver")?"driver":"customer").put("call_id",id),owner).optString("status");}catch(WebRtcSignalApi.ServerResponseException rejected){if(rejected.status==401||rejected.status==403||rejected.status==404||rejected.status==409)state="ended";}catch(Exception ignored){}
+            try{owner.check(this);state=WebRtcSignalApi.postCandidate(session,new org.json.JSONObject().put("action","heartbeat").put("role",getPackageName().endsWith(".driver")?"driver":"customer").put("call_id",id).put("audible_ringing",CallRingingState.audible(this,id)),owner).optString("status");}catch(WebRtcSignalApi.ServerResponseException rejected){if(rejected.status==401||rejected.status==403||rejected.status==404||rejected.status==409)state="ended";}catch(Exception ignored){}
             final String status=state;
             main.post(()->{if(destroyed||finishing||generation!=checkGeneration)return;checking=false;if(!id.equals(call)){main.post(this::checkCall);return;}
                 if("accepted".equals(status)||"ended".equals(status)||"missed".equals(status)||"rejected".equals(status)){
