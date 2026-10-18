@@ -7,7 +7,6 @@ import static org.junit.Assert.assertSame;
 import android.app.Instrumentation;
 import android.app.ActivityManager;
 import android.content.Context;
-import android.content.Intent;
 import android.os.Build;
 import android.os.ParcelFileDescriptor;
 import android.os.SystemClock;
@@ -26,6 +25,7 @@ final class HostLifecycleTestActions {
         Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
         AtomicReference<TestHarnessActivity> original = new AtomicReference<>();
         scenario.onActivity(original::set);
+        final int hostTaskId = original.get().getTaskId();
         assertEquals(Lifecycle.State.RESUMED, scenario.getState());
         try {
             ParcelFileDescriptor descriptor = instrumentation.getUiAutomation()
@@ -39,11 +39,9 @@ final class HostLifecycleTestActions {
             throw new AssertionError("Could not send the host task to background", error);
         }
         awaitState(scenario, Lifecycle.State.CREATED);
-        if (Build.VERSION.SDK_INT < 31) {
         ActivityManager manager = (ActivityManager) instrumentation.getTargetContext()
                 .getSystemService(Context.ACTIVITY_SERVICE);
         if (manager == null) throw new AssertionError("ActivityManager is unavailable");
-        int hostTaskId = original.get().getTaskId();
         boolean restored = false;
         for (ActivityManager.AppTask task : manager.getAppTasks()) {
             ActivityManager.RecentTaskInfo info = task.getTaskInfo();
@@ -51,14 +49,14 @@ final class HostLifecycleTestActions {
             int taskId = Build.VERSION.SDK_INT >= 29 ? info.taskId : info.id;
             if (taskId == hostTaskId) {
                 // Restore the actual ActivityScenario task; do not resolve another task by Intent.
-                if (Build.VERSION.SDK_INT == 29) {
+                if (Build.VERSION.SDK_INT >= 29) {
                     // Execute as the emulator shell, rather than as the background app UID.
                     // Focus the original task without launching or recreating an Activity.
                     String command = "am task focus " + hostTaskId;
                     String result = runShell(instrumentation, command);
                     android.util.Log.i("HostLifecycleTest", command + " -> " + result);
                     if (!result.contains("Setting focus to task " + hostTaskId)) {
-                        throw new AssertionError("API 29 task-focus command failed: " + result);
+                        throw new AssertionError("Task-focus command failed on API " + Build.VERSION.SDK_INT + ": " + result);
                     }
                 } else {
                     task.moveToFront();
@@ -68,14 +66,10 @@ final class HostLifecycleTestActions {
             }
         }
         if (!restored) throw new AssertionError("Original host task not found: " + hostTaskId);
-        } else {
-            Intent foreground = new Intent(instrumentation.getTargetContext(), TestHarnessActivity.class)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
-            instrumentation.getTargetContext().startActivity(foreground);
-        }
         awaitState(scenario, Lifecycle.State.RESUMED);
         scenario.onActivity(activity -> {
             assertSame("Foreground must restore the same host instance", original.get(), activity);
+            assertEquals("Foreground must restore the original host task", hostTaskId, activity.getTaskId());
             assertFalse(activity.isFinishing());
             assertFalse(activity.isDestroyed());
         });
@@ -115,7 +109,7 @@ final class HostLifecycleTestActions {
             SystemClock.sleep(50L);
         }
         String diagnosis = "";
-        if (Build.VERSION.SDK_INT == 29) {
+        if (Build.VERSION.SDK_INT >= 29) {
             Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
             String activityDump = runShell(instrumentation, "dumpsys activity activities");
             android.util.Log.e("HostLifecycleTest", "Transition " + last + " -> " + expected + " failed\n"
