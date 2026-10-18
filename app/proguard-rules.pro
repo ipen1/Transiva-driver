@@ -15,3 +15,5 @@
 
 # WorkManager creates this worker reflectively after process restart.
 -keep class com.transiva.app.FcmRegistrationWorker { public <init>(android.content.Context, androidx.work.WorkerParameters); }
+
+-keep class com.transiva.app.CallDeliveryReceiptWorker { public <init>(android.content.Context, androidx.work.WorkerParameters); }
