@@ -30,12 +30,15 @@ public final class IncomingCallRingingService extends Service {
             Notification n=IncomingCallNotifier.build(this,intent,false);
             if(Build.VERSION.SDK_INT>=34)startForeground(IncomingCallNotifier.id(call),n,ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE);
             else startForeground(IncomingCallNotifier.id(call),n);
+            CallDeliveryTrace.record(this,intent,"SERVICE_STARTED","");
             long remaining=IncomingCallNotifier.remaining(intent);
             IncomingCallAlertManager.start(this,call,remaining);
+            CallDeliveryTrace.ringing(this,intent);
             PowerManager pm=(PowerManager)getSystemService(POWER_SERVICE);
             if(pm!=null){wake=pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"Transiva:IncomingCall");wake.acquire(remaining+1000);}
             main.removeCallbacksAndMessages(null);main.postDelayed(this::expire,remaining);main.postDelayed(this::checkOwner,1000);main.post(this::checkCall);
         }catch(RuntimeException unavailable){
+            CallDeliveryTrace.record(this,intent,"SERVICE_DENIED","SERVICE_PROMOTION_FAILED");
             IncomingCallAlertManager.stop(call);IncomingCallNotifier.cancel(this,call);
             IncomingCallNotifier.post(this,intent,true);stopSelf();
         }
@@ -59,8 +62,8 @@ public final class IncomingCallRingingService extends Service {
         });}catch(java.util.concurrent.RejectedExecutionException ignored){checking=false;}
     }
     private void checkOwner(){if(incoming==null||!IncomingCallNotifier.validOwner(this,incoming)||IncomingCallAlertManager.isResolved(call)){finishAlert();return;}main.postDelayed(this::checkOwner,1000);}
-    private void expire(){IncomingCallAlertManager.resolve(call);finishAlert();}
-    private void finishAlert(){finishing=true;++checkGeneration;checking=false;main.removeCallbacksAndMessages(null);stopForeground(true);IncomingCallNotifier.cancel(this,call);stopSelf();}
+    private void expire(){CallDeliveryTrace.record(this,incoming,"CALL_EXPIRED","RING_TIMEOUT");IncomingCallAlertManager.resolve(call);finishAlert();}
+    private void finishAlert(){if(!finishing)CallDeliveryTrace.record(this,incoming,"ALERT_STOPPED","");finishing=true;++checkGeneration;checking=false;main.removeCallbacksAndMessages(null);stopForeground(true);IncomingCallNotifier.cancel(this,call);stopSelf();}
     // Short-service timeout callback signatures for Android 14 and Android 15+.
     @Override public void onTimeout(int startId){expire();}
     @Override public void onTimeout(int startId,int fgsType){expire();}

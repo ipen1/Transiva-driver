@@ -69,7 +69,7 @@ public final class CallReliabilityRuntime implements Application.ActivityLifecyc
                     new ConnectivityManager.NetworkCallback() {
                         @Override public void onAvailable(Network network) {
                             main.post(() -> {
-                                FcmTokenCoordinator.forceSync(app); nextPoll = 0; pollFailures = 0;
+                                FcmTokenCoordinator.onNetworkAvailable(app); nextPoll = 0; pollFailures = 0;
                                 // Resume only when an Activity is active.
                                 main.removeCallbacks(tick); main.post(tick);
                             });
@@ -136,6 +136,8 @@ public final class CallReliabilityRuntime implements Application.ActivityLifecyc
                         .putExtra("call_type", call.optString("call_type", "audio"))
                         .putExtra("caller_name", call.optString("caller_name", "Transiva"))
                         .putExtra("remaining_seconds", call.optInt("remaining_seconds", 45));
+                incoming.putExtra("push_outbox_id",call.optString("push_outbox_id","")).putExtra("push_event","incoming_call").putExtra("push_transport","foreground_poll");
+                CallDeliveryTrace.record(app,incoming,"POLL_DISCOVERED","FOREGROUND_RECOVERY");
                 a.startActivity(incoming);
             });
         });

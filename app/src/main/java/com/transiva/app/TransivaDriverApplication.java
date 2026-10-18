@@ -24,6 +24,7 @@ public class TransivaDriverApplication extends Application implements Applicatio
     public void onCreate() {
         super.onCreate();
         SecureTokenStore.migrateLegacy(this);
+        CallDeliveryTrace.resume(this);
         CallReliabilityRuntime.install(this);
         appContext = getApplicationContext();
         TransivaDriverCrashReporter.initialize(this);
@@ -39,6 +40,7 @@ public class TransivaDriverApplication extends Application implements Applicatio
 
     @Override
     public void onActivityResumed(Activity activity) {
+        FcmReadinessBanner.attach(activity);
         currentActivity = new WeakReference<>(activity);
         TransivaDriverCrashReporter.screen(activity.getClass().getSimpleName());
         if (!(activity instanceof SplashActivity)) {
@@ -88,12 +90,13 @@ public class TransivaDriverApplication extends Application implements Applicatio
     }
     public void onActivityStarted(Activity a) {}
     public void onActivityPaused(Activity a) {
+        FcmReadinessBanner.detach(a);
         Activity current = currentActivity.get();
         if (current == a) currentActivity = new WeakReference<>(null);
     }
     public void onActivityStopped(Activity a) {}
     public void onActivitySaveInstanceState(Activity a, Bundle b) {}
-    public void onActivityDestroyed(Activity a) {}
+    public void onActivityDestroyed(Activity a) {FcmReadinessBanner.detach(a);}
     @Override
     public void onTrimMemory(int level) {
         super.onTrimMemory(level);

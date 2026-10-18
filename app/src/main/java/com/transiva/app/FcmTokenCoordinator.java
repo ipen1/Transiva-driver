@@ -12,6 +12,10 @@ public final class FcmTokenCoordinator {
     static final Object LOCK=new Object();
     static final String WORK="transiva-fcm-registration-v3",PERIODIC="transiva-fcm-refresh-v3";
     private static boolean installed;
+    private static volatile String cachedVersion;
+    private static final java.util.concurrent.ScheduledExecutorService SCHEDULER=java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
+    private static java.util.concurrent.ScheduledFuture<?> networkTask;
+    private static long lastNetworkRun=-1;
     private FcmTokenCoordinator(){}
     static boolean disabled(){return false;}
     static SharedPreferences prefs(Context c){return c.getApplicationContext().getSharedPreferences("transiva_fcm_registration_v2",Context.MODE_PRIVATE);}
@@ -24,11 +28,12 @@ public final class FcmTokenCoordinator {
     static Owner owner(Context c){
         SessionManager s=new SessionManager(c);String token=s.getToken();
         if(!s.isLoggedIn()||token==null||token.isEmpty()||!role(c).equalsIgnoreCase(s.getRole()))return null;
-        String version;try{android.content.pm.PackageInfo p=c.getPackageManager().getPackageInfo(c.getPackageName(),0);version=p.versionCode+":"+p.versionName;}catch(Exception e){version="unknown";}
+        String version=cachedVersion;if(version==null){try{android.content.pm.PackageInfo p=c.getPackageManager().getPackageInfo(c.getPackageName(),0);version=p.versionCode+":"+p.versionName;}catch(Exception e){version="unknown";}cachedVersion=version;}
         return new Owner(token,DeviceIdentityManager.getInstallationUuid(c).trim().toLowerCase(Locale.US),version);
     }
     static boolean current(Context c,Owner o){Owner now=owner(c);return now!=null&&now.key().equals(o.key());}
-    public static synchronized void install(Context c){
+    public static void install(Context c){if(c!=null&&!disabled())SCHEDULER.execute(()->installNow(c.getApplicationContext()));}
+    private static synchronized void installNow(Context c){
         if(c==null||disabled()||installed)return;
         try{
             SharedPreferences state=prefs(c);
@@ -44,11 +49,25 @@ public final class FcmTokenCoordinator {
             installed=true;
         }catch(RuntimeException error){diagnostic(c,"SCHEDULER_UNAVAILABLE",0);}
     }
-    public static void syncIfNeeded(Context c){request(c,false);}
-    public static void forceSync(Context c){request(c,true);}
-    public static void onNewToken(Context c,String token){if(token!=null&&token.trim().length()>=20)request(c,true);}
+    public static void syncIfNeeded(Context c){schedule(c,false);}
+    public static void forceSync(Context c){schedule(c,true);}
+    public static void onNewToken(Context c,String token){if(token!=null&&token.trim().length()>=20)schedule(c,true);}
+    private static void schedule(Context c,boolean force){if(c!=null&&!disabled())SCHEDULER.execute(()->request(c.getApplicationContext(),force));}
+    public static synchronized void onNetworkAvailable(Context context){
+        if(context==null||disabled()||(networkTask!=null&&!networkTask.isDone()))return;
+        Context app=context.getApplicationContext();
+        networkTask=SCHEDULER.schedule(()->{
+            synchronized(FcmTokenCoordinator.class){
+                long now=android.os.SystemClock.elapsedRealtime();
+                if(!CallDeliveryPolicy.networkDue(now,lastNetworkRun))return;
+                lastNetworkRun=now;
+            }
+            // KEEP unfinished work: Android resumes network-constrained retries itself.
+            request(app,false);
+        },2,TimeUnit.SECONDS);
+    }
     private static void request(Context context,boolean force){
-        if(context==null||disabled())return;Context c=context.getApplicationContext();install(c);
+        if(context==null||disabled())return;Context c=context.getApplicationContext();installNow(c);
         Owner o=owner(c);if(o==null)return;
         synchronized(LOCK){
             SharedPreferences p=prefs(c);String observed=p.getString("observed_owner","");boolean changed=!o.key().equals(observed);

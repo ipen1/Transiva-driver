@@ -13,6 +13,7 @@ public final class IncomingCallActionReceiver extends BroadcastReceiver {
         if(call==null||call.isEmpty())return;
         IncomingCallAlertManager.resolve(call);IncomingCallNotifier.cancel(app,call);
         if(intent.hasExtra(IncomingCallNotifier.OWNER)&&!IncomingCallNotifier.validOwner(app,intent))return;
+        CallDeliveryTrace.record(app,intent,"REJECT_REQUESTED","NOTIFICATION_ACTION");
         final SessionManager session=new SessionManager(app);final CallSignalSession owner=CallSignalSession.capture(app);
         PendingResult pending=goAsync();
         try{IO.execute(()->{try{

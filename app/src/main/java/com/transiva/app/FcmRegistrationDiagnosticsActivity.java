@@ -24,18 +24,20 @@ public final class FcmRegistrationDiagnosticsActivity extends Activity {
         Button settings=new Button(this);settings.setText("Pengaturan notifikasi");settings.setOnClickListener(v->{
             Intent i=Build.VERSION.SDK_INT>=26?new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,getPackageName()):new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName()));startActivity(i);
         });box.addView(settings);
+        Button receipts=new Button(this);receipts.setText("Kirim ulang receipt tertunda");receipts.setOnClickListener(v->{CallDeliveryTrace.resume(this);Toast.makeText(this,"Receipt dijadwalkan saat internet tersedia",Toast.LENGTH_SHORT).show();});box.addView(receipts);
         Button copy=new Button(this);copy.setText("Salin laporan");copy.setOnClickListener(v->{android.content.ClipboardManager clipboard=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);if(clipboard!=null)clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Status notifikasi",status.getText()));Toast.makeText(this,"Laporan disalin",Toast.LENGTH_SHORT).show();});box.addView(copy);
-        TextView note=new TextView(this);note.setText("Konfirmasi registrasi menunjukkan server menyimpan token. Penerimaan panggilan tetap memerlukan izin notifikasi dan koneksi internet.");box.addView(note);
+        TextView note=new TextView(this);note.setText("Konfirmasi registrasi berarti token tersimpan. NOTIFICATION_POSTED berarti Android menerima permintaan notifikasi; RINGING_STARTED berarti API dering melaporkan playback. Receipt adalah laporan aplikasi, bukan bukti pengguna mendengar atau menjawab.");box.addView(note);
     }
     private String time(long t){return t<=0?"Belum ada":java.text.DateFormat.getDateTimeInstance().format(new java.util.Date(t));}
     private void render(){if(status==null)return;JSONObject j=FcmTokenCoordinator.diagnostics(this);
         boolean enabled=androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled();
         String channel="Belum dibuat";if(Build.VERSION.SDK_INT>=26){NotificationManager n=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);android.app.NotificationChannel ch=n==null?null:n.getNotificationChannel(IncomingCallNotifier.SILENT);if(ch!=null)channel=ch.getImportance()==NotificationManager.IMPORTANCE_NONE?"Diblokir":"Aktif";}
+        String fallback="Belum dibuat";if(Build.VERSION.SDK_INT>=26){NotificationManager n=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);android.app.NotificationChannel ch=n==null?null:n.getNotificationChannel(IncomingCallNotifier.AUDIBLE);if(ch!=null)fallback=ch.getImportance()==NotificationManager.IMPORTANCE_NONE?"Diblokir":"Aktif";}
         String error=j.optString("last_error");if(error.isEmpty())error="Tidak ada";
         status.setText("Aplikasi: "+j.optString("app")+"\nSesi siap: "+j.optBoolean("session_ready")+"\nBuild pengujian lokal: "+j.optBoolean("verification_build")
-            +"\nNotifikasi diizinkan: "+enabled+"\nKanal panggilan: "+channel+"\nRegistrasi tertunda: "+j.optBoolean("pending")
+            +"\nNotifikasi diizinkan: "+enabled+"\nKanal panggilan: "+channel+"\nKanal cadangan: "+fallback+"\nRegistrasi tertunda: "+j.optBoolean("pending")
             +"\nSesi ini terkonfirmasi: "+j.optBoolean("current_session_acknowledged")+"\nKonfirmasi terakhir: "+time(j.optLong("last_ack_at"))
-            +"\nPercobaan terakhir: "+time(j.optLong("last_attempt_at"))+"\nHTTP: "+j.optInt("last_http")+"\nKesalahan: "+error+"\nPush panggilan terakhir: "+j.optString("last_call_push")+" ("+time(j.optLong("last_call_push_at"))+")"+"\nFingerprint: "+j.optString("token_fingerprint")+"\n\n");
+            +"\nPercobaan terakhir: "+time(j.optLong("last_attempt_at"))+"\nHTTP: "+j.optInt("last_http")+"\nKesalahan: "+error+"\nPush panggilan terakhir: "+j.optString("last_call_push")+" ("+time(j.optLong("last_call_push_at"))+")"+"\nFingerprint: "+j.optString("token_fingerprint")+"\n\nTahapan panggilan terakhir:\n"+CallDeliveryTrace.report(this)+"\n\n");
     }
     @Override protected void onResume(){super.onResume();main.post(refresh);}
     @Override protected void onPause(){main.removeCallbacks(refresh);super.onPause();}

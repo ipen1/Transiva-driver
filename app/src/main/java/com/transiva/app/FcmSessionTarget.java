@@ -10,6 +10,7 @@ final class FcmSessionTarget {
         boolean ok=s.isLoggedIn()&&token!=null&&!token.isEmpty()&&FcmRegistrationPolicy.matchesTarget(
             value(data,"target_user_id"),value(data,"target_app_scope"),value(data,"target_session_hash"),user,s.getRole(),FcmTokenCoordinator.hash(token));
         FcmTokenCoordinator.prefs(c).edit().putString("last_call_push",ok?"RECEIVED":"OWNER_MISMATCH").putLong("last_call_push_at",System.currentTimeMillis()).apply();
+        if("incoming_call".equalsIgnoreCase(value(data,"event")))CallDeliveryTrace.record(c,data,ok?"TARGET_VALIDATED":"TARGET_REJECTED",ok?"":"OWNER_MISMATCH");
         if(!ok)android.util.Log.w("TransivaFcmRegistration","CALL_PUSH_OWNER_MISMATCH");
         return ok;
     }

@@ -14,6 +14,9 @@ public final class SecureTokenStore {
     private static final String[] NAMES={"token","access_token","auth_token","api_token","session_token"};
     private static final String[] JSON_KEYS={"raw_user","raw_session","user_json"};
     private static boolean cleaned;
+    private static String cached;
+    private static boolean cleanupScheduled;
+    private static final java.util.concurrent.ExecutorService CLEANUP=java.util.concurrent.Executors.newSingleThreadExecutor();
     private SecureTokenStore(){}
     public static synchronized boolean put(Context c,String token){
         if(c==null)return false;String value=token==null?"":token.trim();if(value.isEmpty()){clear(c);return true;}
@@ -21,11 +24,15 @@ public final class SecureTokenStore {
             Cipher x=Cipher.getInstance("AES/GCM/NoPadding");x.init(Cipher.ENCRYPT_MODE,key(true));
             String cipher=Base64.encodeToString(x.doFinal(value.getBytes(StandardCharsets.UTF_8)),Base64.NO_WRAP);
             boolean saved=c.getSharedPreferences(PREF,0).edit().putString(CIPHER,cipher).putString(IV,Base64.encodeToString(x.getIV(),Base64.NO_WRAP)).remove("token").commit();
-            if(saved){cleaned=cleanLegacy(c);}return saved;
+            if(saved){cached=value;cleaned=cleanLegacy(c);}return saved;
         }catch(Exception failure){android.util.Log.w("TransivaAuth","AUTH_ENCRYPT_FAILED");return false;}
     }
     public static synchronized String get(Context c){
         if(c==null)return "";
+        if(cached!=null&&!cached.isEmpty()){
+            if(!cleaned&&!cleanupScheduled){cleanupScheduled=true;Context app=c.getApplicationContext();CLEANUP.execute(()->{synchronized(SecureTokenStore.class){try{cleaned=cleanLegacy(app);}finally{cleanupScheduled=false;}}});}
+            return cached;
+        }
         SharedPreferences p=c.getSharedPreferences(PREF,0);String encrypted=p.getString(CIPHER,"");
         if(encrypted.isEmpty()){
             String packed=p.getString("token","");int colon=packed.indexOf(':');
@@ -38,7 +45,7 @@ public final class SecureTokenStore {
             try{
                 Cipher x=Cipher.getInstance("AES/GCM/NoPadding");x.init(Cipher.DECRYPT_MODE,key(false),new GCMParameterSpec(128,Base64.decode(p.getString(IV,""),Base64.NO_WRAP)));
                 String value=new String(x.doFinal(Base64.decode(encrypted,Base64.NO_WRAP)),StandardCharsets.UTF_8).trim();
-                if(!cleaned)cleaned=cleanLegacy(c);return value;
+                cached=value;if(!cleaned)cleaned=cleanLegacy(c);return value;
             }catch(Exception unavailable){android.util.Log.w("TransivaAuth","AUTH_DECRYPT_UNAVAILABLE");return "";}
         }
         // Upgrade existing installs. If encryption fails, remove plaintext and require a fresh login.
@@ -57,7 +64,7 @@ public final class SecureTokenStore {
     public static String read(Context c){return get(c);}
     public static void save(Context c,String token){put(c,token);}
     public static synchronized void clear(Context c){
-        if(c==null)return;cleaned=false;
+        if(c==null)return;cached=null;cleaned=false;
         c.getSharedPreferences(PREF,0).edit().clear().commit();cleanLegacy(c);
     }
     private static boolean cleanLegacy(Context c){

@@ -31,11 +31,14 @@ final class IncomingCallNotifier {
         if(!FcmSessionTarget.accept(c,data))return;
         String call=PushExpiryPolicy.value(data,"call_id");
         long remaining=PushExpiryPolicy.remainingMillis(data,System.currentTimeMillis(),true);
-        if(call.isEmpty()||remaining<=0)return;
+        if(call.isEmpty())return;
+        if(remaining<=0){CallDeliveryTrace.record(c,data,"CALL_EXPIRED","DEADLINE_PASSED");return;}
         SessionManager session=new SessionManager(c);
         if(!session.isLoggedIn()||session.getToken()==null||session.getToken().isEmpty())return;
         Intent open=new Intent(c,WebRtcCallActivity.class);
-        for(String key:new String[]{"call_id","order_id","source","call_type","caller_name","caller_photo"})open.putExtra(key,PushExpiryPolicy.value(data,key));
+        for(String key:new String[]{"call_id","order_id","source","call_type","caller_name","caller_photo","push_outbox_id","push_event","push_transport","target_session_hash","target_user_id","target_app_scope"})open.putExtra(key,PushExpiryPolicy.value(data,key));
+        if(PushExpiryPolicy.value(data,"push_transport").isEmpty())open.putExtra("push_transport","fcm");
+        if(PushExpiryPolicy.value(data,"push_event").isEmpty())open.putExtra("push_event","incoming_call");
         String photo=PushExpiryPolicy.value(data,"caller_photo");
         if(photo.isEmpty())photo=PushExpiryPolicy.value(data,"caller_photo_url");
         if(photo.isEmpty())photo=PushExpiryPolicy.value(data,"caller_avatar");
@@ -43,15 +46,21 @@ final class IncomingCallNotifier {
         if(PushExpiryPolicy.value(data,"source").isEmpty())open.putExtra("source","orders");
         open.putExtra("incoming",true).putExtra("remaining_seconds",(int)Math.max(1,(remaining+999)/1000));
         open.putExtra(DEADLINE,SystemClock.elapsedRealtime()+remaining).putExtra(OWNER,FcmTokenCoordinator.hash(session.getToken()));
-        if(!validOwner(c,open))return;
-        try{channels(c);if(!allowed(c,SILENT)||!IncomingCallAlertManager.claimNotification(call))return;}
-        catch(RuntimeException unavailable){android.util.Log.w("TransivaIncoming","Notifications unavailable",unavailable);return;}
+        if(!validOwner(c,open)){CallDeliveryTrace.record(c,open,"TARGET_REJECTED","SESSION_CHANGED");return;}
+        try{channels(c);
+            String blocked=CallDeliveryTrace.notificationBlockReason(c,SILENT);
+            if(!blocked.isEmpty()){CallDeliveryTrace.record(c,open,"NOTIFICATION_BLOCKED",blocked);return;}
+            if(!IncomingCallAlertManager.claimNotification(call)){CallDeliveryTrace.record(c,open,"DUPLICATE_IGNORED","");return;}
+        }
+        catch(RuntimeException unavailable){CallDeliveryTrace.record(c,open,"NOTIFICATION_FAILED","MANAGER_UNAVAILABLE");android.util.Log.w("TransivaIncoming","Notifications unavailable",unavailable);return;}
         // Keep a usable notification even if FGS admission is denied or delayed.
         if(!post(c,open,false)){IncomingCallAlertManager.releaseNotification(call);return;}
         try{
             Intent ring=new Intent(c,IncomingCallRingingService.class).putExtras(open);
+            CallDeliveryTrace.record(c,open,"SERVICE_REQUESTED","");
             ContextCompat.startForegroundService(c,ring);
         }catch(RuntimeException denied){
+            CallDeliveryTrace.record(c,open,"SERVICE_DENIED","FGS_START_REJECTED");
             cancel(c,call);if(!post(c,open,!IncomingCallAlertManager.isRinging(call)))IncomingCallAlertManager.releaseNotification(call);
             android.util.Log.w("TransivaIncoming","Ringing service unavailable; notification fallback",denied);
         }
@@ -74,6 +83,7 @@ final class IncomingCallNotifier {
         PendingIntent view=PendingIntent.getActivity(c,number,callIntent(c,source),flags);
         PendingIntent accept=PendingIntent.getActivity(c,number+1,callIntent(c,source).putExtra("auto_accept",true),flags);
         Intent reject=new Intent(c,IncomingCallActionReceiver.class).setAction(IncomingCallActionReceiver.ACTION_REJECT).putExtra("call_id",call).putExtra(OWNER,source.getStringExtra(OWNER)).putExtra("notification_id",number);
+        for(String key:new String[]{"push_outbox_id","push_event","push_transport","target_session_hash","target_user_id","target_app_scope"})if(source.hasExtra(key))reject.putExtra(key,source.getStringExtra(key));
         PendingIntent decline=PendingIntent.getBroadcast(c,number+2,reject,flags);
         String name=source.getStringExtra("caller_name");if(name==null||name.trim().isEmpty())name="Transiva";
         NotificationCompat.Builder b=base(c,source,sound,name,view);
@@ -107,14 +117,14 @@ final class IncomingCallNotifier {
     }
     static boolean post(Context c,Intent i,boolean sound){
         if(remaining(i)<=0||!validOwner(c,i)||IncomingCallAlertManager.isResolved(i.getStringExtra("call_id")))return false;
-        try{channels(c);if(!allowed(c,sound?AUDIBLE:SILENT))return false;
+        try{channels(c);if(!allowed(c,sound?AUDIBLE:SILENT)){CallDeliveryTrace.record(c,i,"NOTIFICATION_BLOCKED",CallDeliveryTrace.notificationBlockReason(c,sound?AUDIBLE:SILENT));return false;}
             // Keep this check at the notify call site so Lint can verify the permission.
             if(Build.VERSION.SDK_INT>=33&&ContextCompat.checkSelfPermission(c,Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)return false;
-            NotificationManagerCompat.from(c).notify(id(i.getStringExtra("call_id")),build(c,i,sound));return true;
+            NotificationManagerCompat.from(c).notify(id(i.getStringExtra("call_id")),build(c,i,sound));CallDeliveryTrace.record(c,i,"NOTIFICATION_POSTED",sound?"SYSTEM_SOUND_REQUESTED":"SERVICE_SOUND_OWNER");return true;
         }catch(SecurityException denied){
             // Permission can be revoked after the check, before notify reaches the system.
-            android.util.Log.w("TransivaIncoming","Call notification permission denied",denied);return false;
-        }catch(RuntimeException failure){android.util.Log.w("TransivaIncoming","Call notification failed",failure);return false;}
+            CallDeliveryTrace.record(c,i,"NOTIFICATION_FAILED","PERMISSION_CHANGED");android.util.Log.w("TransivaIncoming","Call notification permission denied",denied);return false;
+        }catch(RuntimeException failure){CallDeliveryTrace.record(c,i,"NOTIFICATION_FAILED","NOTIFY_EXCEPTION");android.util.Log.w("TransivaIncoming","Call notification failed",failure);return false;}
     }
     static void cancel(Context c,String id){try{NotificationManagerCompat.from(c).cancel(id(id));}catch(RuntimeException ignored){}}
     static void channels(Context c){
