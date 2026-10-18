@@ -12,3 +12,6 @@
 # JSON/domain objects are currently mapped manually; keep names conservative for optimized release.
 -keep class com.transiva.app.driver.domain.** { *; }
 -keep class com.transiva.app.driver.data.** { *; }
+
+# WorkManager creates this worker reflectively after process restart.
+-keep class com.transiva.app.FcmRegistrationWorker { public <init>(android.content.Context, androidx.work.WorkerParameters); }
