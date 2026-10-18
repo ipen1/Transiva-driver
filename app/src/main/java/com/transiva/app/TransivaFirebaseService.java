@@ -63,6 +63,8 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
         Map<String, String> data =
                 remoteMessage.getData();
 
+        if(!FcmSessionTarget.accept(this,data))return;
+
         if (DriverFcmDeduplicator.isDuplicate(this, remoteMessage.getMessageId(), data)) {
             return;
         }

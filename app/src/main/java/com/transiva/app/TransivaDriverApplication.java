@@ -23,6 +23,7 @@ public class TransivaDriverApplication extends Application implements Applicatio
     @Override
     public void onCreate() {
         super.onCreate();
+        SecureTokenStore.migrateLegacy(this);
         CallReliabilityRuntime.install(this);
         appContext = getApplicationContext();
         TransivaDriverCrashReporter.initialize(this);

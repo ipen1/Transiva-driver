@@ -28,6 +28,7 @@ final class IncomingCallNotifier {
         return true;
     }
     static void receive(Context c,Map<String,String> data){
+        if(!FcmSessionTarget.accept(c,data))return;
         String call=PushExpiryPolicy.value(data,"call_id");
         long remaining=PushExpiryPolicy.remainingMillis(data,System.currentTimeMillis(),true);
         if(call.isEmpty()||remaining<=0)return;

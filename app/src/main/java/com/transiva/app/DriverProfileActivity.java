@@ -397,6 +397,9 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
     protected View buildSecurityCard() {
         LinearLayout card = whiteCard();
         card.addView(sectionTitle("Keamanan", "Kelola sesi aplikasi driver"));
+        Button diagnostics = dangerButton("Diagnostik Notifikasi");
+        diagnostics.setOnClickListener(view -> startActivity(new android.content.Intent(this,FcmRegistrationDiagnosticsActivity.class)));
+        card.addView(diagnostics,new LinearLayout.LayoutParams(-1,dp(50)));
         Button logout = dangerButton("Keluar dari Akun");
         logout.setOnClickListener(view -> confirmLogout());
         card.addView(logout, new LinearLayout.LayoutParams(-1, dp(50)));

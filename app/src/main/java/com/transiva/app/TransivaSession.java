@@ -29,7 +29,7 @@ public final class TransivaSession {
         if (context == null || user == null) return;
         SharedPreferences.Editor e = prefs(context).edit();
         e.putBoolean(KEY_LOGGED_IN, true);
-        e.putString(KEY_USER_JSON, user.toString());
+        e.putString(KEY_USER_JSON, TokenJsonSanitizer.clean(user).toString());
         e.putInt(KEY_ID, user.optInt("id", 0));
         e.putString(KEY_USERNAME, user.optString("username", ""));
         e.putString(KEY_ROLE, user.optString("role", "customer"));
@@ -55,7 +55,9 @@ public final class TransivaSession {
     }
 
     public static String getUserJson(Context context) {
-        return context == null ? "{}" : prefs(context).getString(KEY_USER_JSON, "{}");
+        if(context==null)return "{}";
+        SecureTokenStore.migrateLegacy(context);
+        return TokenJsonSanitizer.cleanString(prefs(context).getString(KEY_USER_JSON,"{}"));
     }
 
     public static void logout(Context context, String reason) {
