@@ -110,7 +110,7 @@ class ReleaseGateTest(unittest.TestCase):
             (1, '!post(c,open,false)', 'false'),
             (1, '!post(c,open,!IncomingCallAlertManager.isRinging(call))', 'false'),
             (1, 'PushExpiryPolicy.remainingMillis(data,System.currentTimeMillis(),true)', '45000L'),
-            (1, 'if(!validOwner(c,open))return;', ''),
+            (1, 'if(!validOwner(c,open)){CallDeliveryTrace.record(c,open,"TARGET_REJECTED","SESSION_CHANGED");return;}', ''),
             (1, 'Math.min(45000L,i.getLongExtra(DEADLINE,0)-SystemClock.elapsedRealtime())', '45000L'),
             (1, '.setTimeoutAfter(Math.max(1,remaining(source)))', ''),
             (1, 'Manifest.permission.POST_NOTIFICATIONS', '"removed.permission"'),
@@ -132,6 +132,32 @@ class ReleaseGateTest(unittest.TestCase):
                 sources = list(self.sources)
                 sources[index] = sources[index].replace(old, new)
                 self.assertGreater(self.call_issues(sources), 0)
+
+    def test_owner_guard_requires_early_return(self):
+        traced = 'if(!validOwner(c,open)){CallDeliveryTrace.record(c,open,"TARGET_REJECTED","SESSION_CHANGED");return;}'
+        self.assertIn(traced, self.sources[1])
+        for replacement in [
+            traced.replace('return;', ''),
+            traced.replace('!validOwner(c,open)', 'validOwner(c,open)'),
+            traced.replace('!validOwner(c,open)', 'false'),
+            '/* ' + traced + ' */',
+        ]:
+            with self.subTest(replacement=replacement):
+                sources = list(self.sources)
+                sources[1] = sources[1].replace(traced, replacement)
+                self.assertGreater(self.call_issues(sources), 0)
+
+    def test_legacy_and_formatted_traced_owner_guard_pass(self):
+        traced = 'if(!validOwner(c,open)){CallDeliveryTrace.record(c,open,"TARGET_REJECTED","SESSION_CHANGED");return;}'
+        self.assertIn(traced, self.sources[1])
+        for replacement in [
+            'if(!validOwner(c,open))return;',
+            traced.replace('if(', 'if /* owner */ (').replace('return;', '\n return ;\n'),
+        ]:
+            with self.subTest(replacement=replacement):
+                sources = list(self.sources)
+                sources[1] = sources[1].replace(traced, replacement)
+                self.assertEqual(0, self.call_issues(sources))
 
     def test_comment_does_not_replace_real_guard(self):
         sources = list(self.sources)

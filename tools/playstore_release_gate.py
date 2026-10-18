@@ -61,13 +61,21 @@ def validate_call_sources(firebase, notifier, ringing, production):
         ('!post(c,open,false)', 'visible notification before service admission missing'),
         ('!post(c,open,!IncomingCallAlertManager.isRinging(call))', 'audible fallback after service admission failure missing'),
         ('PushExpiryPolicy.remainingMillis(data,System.currentTimeMillis(),true)', 'incoming push expiry validation missing'),
-        ('if(!validOwner(c,open))return;', 'incoming session ownership validation missing'),
         ('Math.min(45000L,i.getLongExtra(DEADLINE,0)-SystemClock.elapsedRealtime())', 'incoming ring duration must remain bounded by its original deadline'),
         ('setTimeoutAfter(Math.max(1,remaining(source)))', 'incoming notification expiry missing'),
         ('Manifest.permission.POST_NOTIFICATIONS', 'notification runtime permission check missing'),
         ('NotificationManager.IMPORTANCE_NONE', 'blocked notification channel check missing'),
     ]:
         need(notifier, token, label)
+    # Both forms terminate before notification/service admission. The traced form
+    # adds observability only; matching the predicate alone would accept an unsafe
+    # branch that logs rejection but continues to post a call notification.
+    owner_guards = (
+        'if(!validOwner(c,open))return;',
+        'if(!validOwner(c,open)){CallDeliveryTrace.record(c,open,"TARGET_REJECTED","SESSION_CHANGED");return;}',
+    )
+    if not any(guard in notifier for guard in owner_guards):
+        issues += fail('incoming session ownership validation missing or does not return')
     for token, label in [
         ('ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE', 'incoming ringing must use shortService, not media FGS'),
         ('IncomingCallAlertManager.start(this,call,remaining)', 'immediate bounded ringtone/vibration missing'),
