@@ -81,7 +81,7 @@ public class TransivaCallUiActivity extends Activity {
         brand=label("T R A N S I V A  /  "+(video?"VIDEO CALL":"VOICE CALL"),10);
         brand.setTextColor(0xff71d8c2);brand.setPadding(0,0,0,dp(10));header.addView(brand);
         name=label(CallPeerIdentity.first(getIntent().getStringExtra("peer_name"),getIntent().getStringExtra("caller_name"),"Transiva"),28);
-        name.setTypeface(Typeface.create("sans-serif-medium",0));name.setMaxLines(2);header.addView(name);
+        name.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));name.setMaxLines(2);header.addView(name);
         status=label(incoming?"Panggilan masuk":"Menyiapkan panggilan",13);status.setTextColor(CallVisuals.MUTED);
         status.setPadding(0,dp(4),0,dp(4));header.addView(status);root.addView(header);
         stage=new FrameLayout(this);stage.setClipChildren(true);stage.setClipToPadding(true);stage.setClipToOutline(true);stage.setBackground(CallVisuals.surface(0xff10263b,0xff091525,dp(28),0xff213b50));

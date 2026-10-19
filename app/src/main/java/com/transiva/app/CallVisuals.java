@@ -38,7 +38,7 @@ final class CallVisuals {
             c.drawCircle(x,y,r,paint);paint.setShader(null);
             int save=c.save();Path clip=new Path();clip.addCircle(x,y,Math.max(0,r-3),Path.Direction.CW);c.clipPath(clip);
             if(getDrawable()!=null)super.onDraw(c);else{
-                paint.setColor(Color.WHITE);paint.setTypeface(Typeface.create("sans-serif-medium",0));paint.setTextSize(r*.66f);paint.setTextAlign(Paint.Align.CENTER);
+                paint.setColor(Color.WHITE);paint.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));paint.setTextSize(r*.66f);paint.setTextAlign(Paint.Align.CENTER);
                 c.drawText(initials,x,y-(paint.ascent()+paint.descent())/2,paint);
             }c.restoreToCount(save);
             paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(2);paint.setColor(0x70b9e4ef);c.drawCircle(x,y,Math.max(0,r-1),paint);paint.setStyle(Paint.Style.FILL);
