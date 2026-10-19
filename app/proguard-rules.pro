@@ -24,3 +24,23 @@
 -keepclassmembers class * {
     @android.webkit.JavascriptInterface <methods>;
 }
+
+# WebRTC 144 JNI_OnLoad also looks up org/jni_zero/JniInit by its Java name.
+-keep class org.jni_zero.** { *; }
+-keepclasseswithmembers,includedescriptorclasses class * {
+    @org.jni_zero.CalledByNative <methods>;
+}
+-keepclasseswithmembers,includedescriptorclasses class * {
+    @org.jni_zero.CalledByNativeUnchecked <methods>;
+}
+-keepclasseswithmembers,includedescriptorclasses class * {
+    @org.jni_zero.AccessedByNative <fields>;
+}
+-keep class * implements org.webrtc.PeerConnection$Observer { *; }
+-keep class * implements org.webrtc.SdpObserver { *; }
+-keep class * implements org.webrtc.VideoSink { *; }
+-keep class com.transiva.app.WebRtcNativeRuntime { *; }
+-keep class com.transiva.app.WebRtcSessionEngine { *; }
+-keep class com.transiva.app.WebRtcSessionEngine$* { *; }
+# Legacy explicit class names are still used by other driver entry points.
+-keepnames class com.transiva.app.** extends android.app.Activity
