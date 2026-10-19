@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Resource names resolved with getIdentifier() must survive release resource shrinking. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_nav_*,@drawable/ic_service_*,@drawable/map_*,@drawable/splash_screen,@drawable/transiva_logo,@drawable/ic_notification_bell" />
