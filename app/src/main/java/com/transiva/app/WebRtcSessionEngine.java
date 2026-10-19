@@ -59,7 +59,7 @@ final class WebRtcSessionEngine {
         context=c.getApplicationContext();session=new SessionManager(context);callOwner=CallSignalSession.capture(context);stopped=stop;
         role=context.getPackageName().endsWith(".driver")?"driver":"customer";
         orderId=clean(i.getStringExtra("order_id"));source=first(i.getStringExtra("source"),"orders");peer=first(i.getStringExtra("peer_name"),i.getStringExtra("caller_name"),"Transiva");
-        peerPhoto=first(i.getStringExtra("peer_photo"),i.getStringExtra("caller_photo"));
+        peerPhoto=CallPeerIdentity.first(i.getStringExtra("peer_photo"),i.getStringExtra("caller_photo"));
         operationId=first(i.getStringExtra("operation_id"),java.util.UUID.randomUUID().toString());
         video="video".equals(i.getStringExtra("call_type"));incoming=i.getBooleanExtra("incoming",false);callId=clean(i.getStringExtra("call_id"));
     }
@@ -132,8 +132,8 @@ final class WebRtcSessionEngine {
                 ||transport==PeerConnection.PeerConnectionState.FAILED||transport==PeerConnection.PeerConnectionState.DISCONNECTED)beginRecovery();
     }
     private void updateIdentity(JSONObject r){
-        peer=first(r.optString("peer_name"),peer);
-        peerPhoto=first(r.optString("peer_photo"),r.optString("peer_photo_url"),peerPhoto);
+        peer=CallPeerIdentity.first(r.optString("peer_name"),peer);
+        peerPhoto=CallPeerIdentity.first(r.optString("peer_photo"),r.optString("peer_photo_url"),peerPhoto);
     }
     private void apply(JSONObject r){
         updateIdentity(r);
@@ -173,7 +173,7 @@ final class WebRtcSessionEngine {
     private String initializationStage="native";
     private void initialize(){try{
         initializationStage="native";
-        PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(context).createInitializationOptions());
+        WebRtcNativeRuntime.initialize(context);
         initializationStage="audio";
         audioDevice=JavaAudioDeviceModule.builder(context).setUseHardwareAcousticEchoCanceler(false).setUseHardwareNoiseSuppressor(false).createAudioDeviceModule();
         PeerConnectionFactory.Builder builder=PeerConnectionFactory.builder().setAudioDeviceModule(audioDevice);
