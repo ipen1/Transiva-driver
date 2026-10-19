@@ -73,9 +73,9 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         // Android automatically releases this flag when the Activity window is gone.
         getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         try{
-            getWindow().setStatusBarColor(DriverThemeTokens.background(this));
-            getWindow().setNavigationBarColor(DriverThemeTokens.background(this));
-            if(Build.VERSION.SDK_INT >= 23) getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+            DriverSystemBars.setStatusBarColor(this, DriverThemeTokens.background(this));
+            DriverSystemBars.setNavigationBarColor(this, DriverThemeTokens.background(this));
+            
         }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_WINDOW_SETUP_FAILED",e); }
         session = new SessionManager(this);
         api = new DriverNetworkRepository(session);

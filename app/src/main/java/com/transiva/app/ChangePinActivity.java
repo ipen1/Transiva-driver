@@ -49,8 +49,8 @@ public class ChangePinActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        getWindow().setStatusBarColor(DriverThemeTokens.color(this, "#0B7CFF"));
-        getWindow().setNavigationBarColor(DriverThemeTokens.color(this, "#081423"));
+        DriverSystemBars.setStatusBarColor(this, DriverThemeTokens.color(this, "#0B7CFF"));
+        DriverSystemBars.setNavigationBarColor(this, DriverThemeTokens.color(this, "#081423"));
 
         session = new SessionManager(this);
         if (!session.isLoggedIn() || safe(session.getToken()).isEmpty()) {

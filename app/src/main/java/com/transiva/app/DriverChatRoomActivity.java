@@ -59,8 +59,8 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        getWindow().setStatusBarColor(Color.parseColor("#0B7CFF"));
-        getWindow().setNavigationBarColor(Color.parseColor("#071426"));
+        DriverSystemBars.setStatusBarColor(this, Color.parseColor("#0B7CFF"));
+        DriverSystemBars.setNavigationBarColor(this, Color.parseColor("#071426"));
 
         session = new SessionManager(this);
         readIntent();

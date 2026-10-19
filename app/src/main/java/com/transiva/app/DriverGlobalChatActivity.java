@@ -42,7 +42,7 @@ public class DriverGlobalChatActivity extends Activity {
 
     @Override protected void onCreate(Bundle b){
         super.onCreate(b);
-        getWindow().setStatusBarColor(DriverThemeTokens.color(this, "#071426")); getWindow().setNavigationBarColor(DriverThemeTokens.color(this, "#071426"));
+        DriverSystemBars.setStatusBarColor(this, DriverThemeTokens.color(this, "#071426")); DriverSystemBars.setNavigationBarColor(this, DriverThemeTokens.color(this, "#071426"));
         myUsername=new SessionManager(this).getUsername(); jumpId=getIntent().getLongExtra("jump_message_id",0L);
         setContentView(build()); DriverGlobalChatBubble.detach(this); DriverAppSettings.apply(this); load(true); main.postDelayed(refresh,DriverPollingCoordinator.interval(this,12000L));
     }

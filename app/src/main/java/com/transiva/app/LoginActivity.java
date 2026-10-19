@@ -47,9 +47,9 @@ public class LoginActivity extends LoginActivityLayer2 {
         super.onCreate(savedInstanceState);
 
         try {
-            getWindow().setStatusBarColor(
+            DriverSystemBars.setStatusBarColor(this, 
                     Color.parseColor("#0A1A2E"));
-            getWindow().setNavigationBarColor(
+            DriverSystemBars.setNavigationBarColor(this, 
                     Color.parseColor("#0A1A2E"));
         } catch (Exception ignored) {}
 

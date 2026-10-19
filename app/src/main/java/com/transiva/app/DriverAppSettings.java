@@ -114,20 +114,11 @@ public final class DriverAppSettings {
             APPLIED_ACTIVITY_THEMES.put(activity, dark);
         }
 
-        activity.getWindow().setStatusBarColor(
+        DriverSystemBars.setStatusBarColor(activity, 
                 dark ? Color.rgb(5, 16, 29) : Color.parseColor("#0B7CFF")
         );
-        activity.getWindow().setNavigationBarColor(Color.rgb(5, 16, 29));
+        DriverSystemBars.setNavigationBarColor(activity, Color.rgb(5, 16, 29));
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            int flags = activity.getWindow().getDecorView().getSystemUiVisibility();
-            if (dark) {
-                flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-            } else {
-                flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-            }
-            activity.getWindow().getDecorView().setSystemUiVisibility(flags);
-        }
 
         View content = activity.findViewById(android.R.id.content);
         if (content == null) return;

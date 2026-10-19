@@ -29,11 +29,11 @@ public class DriverEarningsActivity extends DriverEarningsActivityLayer1 {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        getWindow().setStatusBarColor(
+        DriverSystemBars.setStatusBarColor(this, 
                 Color.parseColor("#0B7CFF")
         );
 
-        getWindow().setNavigationBarColor(
+        DriverSystemBars.setNavigationBarColor(this, 
                 Color.parseColor("#071426")
         );
 

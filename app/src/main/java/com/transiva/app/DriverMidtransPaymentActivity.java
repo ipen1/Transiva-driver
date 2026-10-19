@@ -26,7 +26,7 @@ public class DriverMidtransPaymentActivity extends Activity {
         super.onCreate(b);
         String url=getIntent().getStringExtra("payment_url");
         if(url==null||!(url.startsWith("https://app.sandbox.midtrans.com/")||url.startsWith("https://app.midtrans.com/"))){ setResult(RESULT_CANCELED); finish(); return; }
-        try{getWindow().setStatusBarColor(Color.parseColor("#0B3A78"));getWindow().setNavigationBarColor(Color.WHITE);}catch(Exception ignored){}
+        try{DriverSystemBars.setStatusBarColor(this, Color.parseColor("#0B3A78"));DriverSystemBars.setNavigationBarColor(this, Color.WHITE);}catch(Exception ignored){}
 
         LinearLayout page=new LinearLayout(this); page.setOrientation(LinearLayout.VERTICAL); page.setBackgroundColor(Color.WHITE);
         LinearLayout bar=new LinearLayout(this); bar.setGravity(Gravity.CENTER_VERTICAL); bar.setPadding(dp(12),dp(8),dp(12),dp(8)); bar.setBackgroundColor(Color.parseColor("#0B3A78"));

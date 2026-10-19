@@ -28,7 +28,7 @@ public class TransivaCallUiActivity extends Activity {
     private Button accept,end,mute,speaker,camera,swap;
     private WebRtcSessionEngine attached;
     private boolean serviceRequested,startedSession,incoming,video,registered,rendererReady,resumed,backToChat,pipEntering;
-    private int insetLeft,insetTop,insetRight,insetBottom;
+    private boolean compactCall;
     private android.window.OnBackInvokedCallback backCallback;
     private boolean startPending,permissionsInFlight,unlockRequested,permissionSettingsRequired,settingsOpen;
     private String failureMessage="";
@@ -71,7 +71,11 @@ public class TransivaCallUiActivity extends Activity {
         LinearLayout audioRow=new LinearLayout(this);mute=button("Mic aktif");speaker=button("Speaker");audioRow.addView(mute,new LinearLayout.LayoutParams(0,dp(48),1));audioRow.addView(speaker,new LinearLayout.LayoutParams(0,dp(48),1));controls.addView(audioRow);
         LinearLayout cameraRow=new LinearLayout(this);camera=button("Kamera aktif");swap=button("Ganti kamera");cameraRow.addView(camera,new LinearLayout.LayoutParams(0,dp(48),1));cameraRow.addView(swap,new LinearLayout.LayoutParams(0,dp(48),1));cameraRow.setVisibility(video?View.VISIBLE:View.GONE);controls.addView(cameraRow);root.addView(controls);
         actions=new LinearLayout(this);accept=button("Terima");end=button(incoming?"Tolak":"Akhiri");accept.setVisibility(incoming?View.VISIBLE:View.GONE);actions.addView(accept,new LinearLayout.LayoutParams(0,dp(48),1));actions.addView(end,new LinearLayout.LayoutParams(0,dp(48),1));root.addView(actions);setContentView(root);
-        root.setOnApplyWindowInsetsListener((v,insets)->{if(Build.VERSION.SDK_INT>=30){Insets bars=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());insetLeft=bars.left;insetTop=bars.top;insetRight=bars.right;insetBottom=bars.bottom;}else{insetLeft=insets.getSystemWindowInsetLeft();insetTop=insets.getSystemWindowInsetTop();insetRight=insets.getSystemWindowInsetRight();insetBottom=insets.getSystemWindowInsetBottom();}applyPadding();return insets;});root.requestApplyInsets();
+        // System bars/cutout/IME belong to DriverResponsiveUi at the content container.
+        root.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{
+            if(r-l!=or-ol||b-t!=ob-ot)applyCallSize(r-l,b-t);
+        });
+        DriverResponsiveUi.apply(this);
         accept.setOnClickListener(v->requestStart());end.setOnClickListener(v->hangup());mute.setOnClickListener(v->{WebRtcSessionEngine e=WebRtcCallForegroundService.current();if(e!=null)e.toggleMute();});speaker.setOnClickListener(v->{WebRtcSessionEngine e=WebRtcCallForegroundService.current();if(e!=null)e.toggleSpeaker();});camera.setOnClickListener(v->{WebRtcSessionEngine e=WebRtcCallForegroundService.current();if(e!=null)e.toggleCamera();});swap.setOnClickListener(v->{WebRtcSessionEngine e=WebRtcCallForegroundService.current();if(e!=null)e.switchCamera();});
     }
     private boolean permission(){return checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED&&(!video||checkSelfPermission(Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED);}
@@ -171,8 +175,20 @@ public class TransivaCallUiActivity extends Activity {
     @Override public void onBackPressed(){if(video&&startedSession){backToChat=true;if(enterPip())return;backToChat=false;Toast.makeText(this,"PiP tidak tersedia; suara tetap berjalan",Toast.LENGTH_SHORT).show();}openChat();finish();}
     @Override protected void onUserLeaveHint(){super.onUserLeaveHint();if(video&&startedSession&&Build.VERSION.SDK_INT<31)enterPip();}
     @RequiresApi(26)
-    @Override public void onPictureInPictureModeChanged(boolean pip,Configuration config){super.onPictureInPictureModeChanged(pip,config);pipEntering=false;header.setVisibility(pip?View.GONE:View.VISIBLE);controls.setVisibility(pip?View.GONE:View.VISIBLE);actions.setVisibility(pip?View.GONE:View.VISIBLE);applyPadding();if(local!=null)local.setVisibility(!pip&&WebRtcCallForegroundService.current()!=null&&WebRtcCallForegroundService.current().cameraEnabled?View.VISIBLE:View.INVISIBLE);WebRtcSessionEngine e=WebRtcCallForegroundService.current();if(e!=null)e.setVisible(pip||resumed);if(pip&&backToChat){backToChat=false;openChat();}}
-    private void applyPadding(){boolean pip=Build.VERSION.SDK_INT>=26&&isInPictureInPictureMode();root.setPadding(pip?0:dp(12)+insetLeft,pip?0:dp(12)+insetTop,pip?0:dp(12)+insetRight,pip?0:dp(12)+insetBottom);}
+    @Override public void onPictureInPictureModeChanged(boolean pip,Configuration config){super.onPictureInPictureModeChanged(pip,config);DriverResponsiveUi.apply(this);pipEntering=false;header.setVisibility(pip?View.GONE:View.VISIBLE);controls.setVisibility(pip?View.GONE:View.VISIBLE);actions.setVisibility(pip?View.GONE:View.VISIBLE);applyPadding();if(local!=null)local.setVisibility(!pip&&WebRtcCallForegroundService.current()!=null&&WebRtcCallForegroundService.current().cameraEnabled?View.VISIBLE:View.INVISIBLE);WebRtcSessionEngine e=WebRtcCallForegroundService.current();if(e!=null)e.setVisible(pip||resumed);if(pip&&backToChat){backToChat=false;openChat();}}
+    private void applyCallSize(int width,int height){
+        boolean compact=width>height;
+        if(compact==compactCall)return;
+        compactCall=compact;
+        name.setTextSize(compact?17:21);
+        status.setTextSize(compact?11:13);
+        // Keep all actions reachable in a short landscape window.
+        for(Button button:new Button[]{mute,speaker,camera,swap,accept,end}){
+            android.view.ViewGroup.LayoutParams p=button.getLayoutParams();
+            p.height=dp(compact?40:48);button.setLayoutParams(p);
+        }
+    }
+    private void applyPadding(){boolean pip=Build.VERSION.SDK_INT>=26&&isInPictureInPictureMode();root.setPadding(pip?0:dp(12),pip?0:dp(12),pip?0:dp(12),pip?0:dp(12));}
     private void openChat(){WebRtcSessionEngine e=WebRtcCallForegroundService.current();String order=e!=null?e.orderId:getIntent().getStringExtra("order_id");if(order==null||order.isEmpty())return;Intent i=new Intent();i.setClassName(this,getPackageName().endsWith(".driver")?"com.transiva.app.DriverChatRoomActivity":"com.transiva.app.CustomerChatRoomActivity");i.putExtra("order_id",order).putExtra("order_source",e!=null?e.source:getIntent().getStringExtra("source")).putExtra("source",e!=null?e.source:getIntent().getStringExtra("source")).putExtra("participant_name",e!=null?e.peer:getIntent().getStringExtra("peer_name"));i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP);startActivity(i);}
     @Override protected void onResume(){super.onResume();resumed=true;
         if(settingsOpen){settingsOpen=false;startPending=permission();if(!startPending)permissionRetry("Izin belum diberikan. Anda dapat membukanya lagi melalui Setelan.");}

@@ -435,8 +435,8 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
                     mine ? "#FFFFFF" : "#0F172A",
                     false);
             bubble.setPadding(dp(13), dp(9), dp(13), dp(9));
-            bubble.setMaxWidth((int)(
-                    getResources().getDisplayMetrics().widthPixels * 0.75));
+            bubble.setMaxWidth(Math.min(dp(520), (int)(DriverResponsiveUi.availableWidth(this) * 0.75)));
+            bubble.setTag("transiva_chat_bubble");
             bubble.setBackground(
                     mine
                             ? gradient("#086BFF", "#2EA2FF", 17)

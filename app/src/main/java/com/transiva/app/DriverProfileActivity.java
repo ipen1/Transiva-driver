@@ -53,8 +53,8 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().setStatusBarColor(DriverThemeTokens.color(this, "#0B7CFF"));
-        getWindow().setNavigationBarColor(DriverThemeTokens.color(this, "#071426"));
+        DriverSystemBars.setStatusBarColor(this, DriverThemeTokens.color(this, "#0B7CFF"));
+        DriverSystemBars.setNavigationBarColor(this, DriverThemeTokens.color(this, "#071426"));
 
         session = new SessionManager(this);
         if (!validDriverSession()) {

@@ -44,8 +44,8 @@ public class PinActivity extends PinActivityLayer1 {
         super.onCreate(savedInstanceState);
 
         try {
-            getWindow().setStatusBarColor(Color.parseColor("#081423"));
-            getWindow().setNavigationBarColor(Color.parseColor("#081423"));
+            DriverSystemBars.setStatusBarColor(this, Color.parseColor("#081423"));
+            DriverSystemBars.setNavigationBarColor(this, Color.parseColor("#081423"));
         } catch (Exception ignored) {}
 
         session = new SessionManager(this);

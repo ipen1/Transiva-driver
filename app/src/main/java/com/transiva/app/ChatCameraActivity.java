@@ -32,6 +32,7 @@ public class ChatCameraActivity
 
     private PreviewView previewView;
     private ImageCapture imageCapture;
+    private Preview boundPreview;
     private ExecutorService cameraExecutor;
     private Button captureButton;
     private boolean capturing;
@@ -45,11 +46,11 @@ public class ChatCameraActivity
     ) {
         super.onCreate(savedInstanceState);
 
-        getWindow().setStatusBarColor(
+        DriverSystemBars.setStatusBarColor(this, 
                 Color.BLACK
         );
 
-        getWindow().setNavigationBarColor(
+        DriverSystemBars.setNavigationBarColor(this, 
                 Color.BLACK
         );
 
@@ -163,6 +164,8 @@ public class ChatCameraActivity
                                 new Preview.Builder()
                                         .build();
 
+                        boundPreview = preview;
+                        updateCameraRotation();
                         preview.setSurfaceProvider(
                                 previewView
                                         .getSurfaceProvider()
@@ -177,6 +180,7 @@ public class ChatCameraActivity
                                         .setJpegQuality(95)
                                         .build();
 
+                        updateCameraRotation();
                         provider.unbindAll();
 
                         boundCamera = provider.bindToLifecycle(
@@ -204,6 +208,19 @@ public class ChatCameraActivity
                         this
                 )
         );
+    }
+
+    @Override public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        previewView.post(this::updateCameraRotation);
+        DriverResponsiveUi.apply(this);
+    }
+
+    private void updateCameraRotation() {
+        if (previewView == null || previewView.getDisplay() == null) return;
+        int rotation = previewView.getDisplay().getRotation();
+        if (boundPreview != null) boundPreview.setTargetRotation(rotation);
+        if (imageCapture != null) imageCapture.setTargetRotation(rotation);
     }
 
     private void applyFlash() {

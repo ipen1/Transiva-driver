@@ -39,8 +39,8 @@ public class DriverBpjsActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().setStatusBarColor(DriverThemeTokens.color(this, "#0B7CFF"));
-        getWindow().setNavigationBarColor(DriverThemeTokens.color(this, "#071426"));
+        DriverSystemBars.setStatusBarColor(this, DriverThemeTokens.color(this, "#0B7CFF"));
+        DriverSystemBars.setNavigationBarColor(this, DriverThemeTokens.color(this, "#071426"));
 
         session = new SessionManager(this);
         if (!validDriverSession()) {
@@ -97,7 +97,15 @@ public class DriverBpjsActivity extends Activity {
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
 
         content.addView(buildHeader());
-        content.addView(buildBpjsCard(), bpjsCardLp());
+        View card = buildBpjsCard();
+        content.addView(card, bpjsCardLp());
+        content.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{
+            if(r-l!=or-ol){
+                android.view.ViewGroup.LayoutParams params=card.getLayoutParams();
+                int height=Math.round(Math.max(1,r-l-v.getPaddingLeft()-v.getPaddingRight())*(879f/1440f));
+                if(params.height!=height){params.height=height;card.setLayoutParams(params);}
+            }
+        });
         content.addView(buildBenefitsCard(), sectionLp());
 
         loading = new ProgressBar(this);
@@ -285,7 +293,7 @@ public class DriverBpjsActivity extends Activity {
     }
 
     private LinearLayout.LayoutParams bpjsCardLp() {
-        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        int screenWidth = DriverResponsiveUi.availableWidth(this);
         int availableWidth = Math.max(dp(280), screenWidth - dp(28));
         int cardHeight = Math.round(availableWidth * (879f / 1440f));
 

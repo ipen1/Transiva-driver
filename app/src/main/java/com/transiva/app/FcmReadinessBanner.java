@@ -13,7 +13,8 @@ final class FcmReadinessBanner {
     private static final WeakHashMap<Activity,State> STATES=new WeakHashMap<>();
     private static final Handler MAIN=new Handler(Looper.getMainLooper());
     static void attach(Activity a){
-        String name=a.getClass().getSimpleName();if(!name.equals("CustomerDashboardActivity")&&!name.equals("DriverDashboardActivity"))return;
+        // Type checks survive R8 class renaming.
+        if(!(a instanceof DriverDashboardActivity))return;
         detach(a);if(FcmTokenCoordinator.disabled())return;
         View root=a.findViewById(android.R.id.content);if(!(root instanceof FrameLayout))return;
         State state=new State(a,(FrameLayout)root);STATES.put(a,state);state.tick.run();

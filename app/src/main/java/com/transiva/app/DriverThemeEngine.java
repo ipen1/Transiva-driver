@@ -51,8 +51,8 @@ public final class DriverThemeEngine {
 
     public static void applySystemBars(android.app.Activity activity) {
         if (activity == null) return;
-        activity.getWindow().setStatusBarColor(DriverThemeTokens.background(activity));
-        activity.getWindow().setNavigationBarColor(DriverThemeTokens.background(activity));
+        DriverSystemBars.setStatusBarColor(activity, DriverThemeTokens.background(activity));
+        DriverSystemBars.setNavigationBarColor(activity, DriverThemeTokens.background(activity));
     }
 
 

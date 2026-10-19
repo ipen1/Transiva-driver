@@ -45,7 +45,7 @@ public class DriverMerchantChatActivity extends Activity {
         orderId=safe(getIntent().getStringExtra("order_id"));
         orderDbId=safe(getIntent().getStringExtra("order_db_id"));
         merchantName=first(getIntent().getStringExtra("merchant_name"),"Merchant");
-        getWindow().setStatusBarColor(Color.parseColor("#0B7CFF"));
+        DriverSystemBars.setStatusBarColor(this, Color.parseColor("#0B7CFF"));
         build();
         if(orderId.isEmpty()&&orderDbId.isEmpty()){toast("ID order tidak ditemukan.");send.setEnabled(false);return;}
         load(true);

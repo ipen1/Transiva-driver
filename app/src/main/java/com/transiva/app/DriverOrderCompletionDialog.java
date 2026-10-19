@@ -218,7 +218,7 @@ public final class DriverOrderCompletionDialog {
         dialog.setOnShowListener(d -> {
             Window w = dialog.getWindow();
             if (w != null) {
-                int width = activity.getResources().getDisplayMetrics().widthPixels - dp(activity, 28);
+                int width = DriverResponsiveUi.availableWidth(activity) - dp(activity, 28);
                 w.setLayout(Math.min(width, dp(activity, 520)), WindowManager.LayoutParams.WRAP_CONTENT);
             }
         });

@@ -78,8 +78,8 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
 
         try {
             if (getActionBar() != null) getActionBar().hide();
-            getWindow().setStatusBarColor(DriverThemeTokens.color(this, "#0B3A78"));
-            getWindow().setNavigationBarColor(DriverThemeTokens.background(this));
+            DriverSystemBars.setStatusBarColor(this, DriverThemeTokens.color(this, "#0B3A78"));
+            DriverSystemBars.setNavigationBarColor(this, DriverThemeTokens.background(this));
         } catch (Throwable t) {
             NavigationDiagnostics.error(this, "NAV_WINDOW_SETUP_FAILED", t);
         }

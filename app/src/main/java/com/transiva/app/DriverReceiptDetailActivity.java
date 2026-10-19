@@ -33,9 +33,9 @@ public class DriverReceiptDetailActivity extends Activity {
 
     private void setupBars() {
         try {
-            getWindow().setStatusBarColor(DriverThemeTokens.background(this));
-            getWindow().setNavigationBarColor(DriverThemeTokens.background(this));
-            if (Build.VERSION.SDK_INT >= 23) getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+            DriverSystemBars.setStatusBarColor(this, DriverThemeTokens.background(this));
+            DriverSystemBars.setNavigationBarColor(this, DriverThemeTokens.background(this));
+            
         } catch (Exception ignored) {}
     }
 
