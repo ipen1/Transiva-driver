@@ -21,6 +21,18 @@ public class DriverWindowInsetsTest {
     private static final int BARS = WindowInsetsCompat.Type.systemBars();
     private static final int IME = WindowInsetsCompat.Type.ime();
 
+    private void assertNoRemainingInsets(WindowInsetsCompat remaining) {
+        assertNotNull(remaining);
+        assertEquals(Insets.NONE, remaining.getInsets(BARS | IME | WindowInsetsCompat.Type.displayCutout()));
+    }
+
+    private void assertDispatchCompleted(WindowInsetsCompat remaining, int childCalls) {
+        assertNoRemainingInsets(remaining);
+        // A consumed parent may stop ViewGroup dispatch before reaching children (API 26).
+        // Otherwise the child must be visited and must receive zero insets.
+        assertTrue("Dispatch must be consumed or reach the child", remaining.isConsumed() || childCalls > 0);
+    }
+
     private ActivityScenario<TestHarnessActivity> launch() {
         return ActivityScenario.launch(new Intent(ApplicationProvider.getApplicationContext(), TestHarnessActivity.class));
     }
@@ -74,18 +86,22 @@ public class DriverWindowInsetsTest {
             scenario.onActivity(activity -> {
                 FrameLayout child = host(activity);
                 View content = activity.findViewById(android.R.id.content);
-                final int[] childBottom = {-1};
+                final int[] childCalls = {0};
                 ViewCompat.setOnApplyWindowInsetsListener(child, (v, applied) -> {
-                    childBottom[0] = applied.getInsets(BARS | IME).bottom;
+                    childCalls[0]++;
+                    assertNoRemainingInsets(applied);
                     return applied;
                 });
-                ViewCompat.dispatchApplyWindowInsets(content, insets(0));
+                childCalls[0] = 0;
+                WindowInsetsCompat dispatched = ViewCompat.dispatchApplyWindowInsets(content, insets(0));
+                assertDispatchCompleted(dispatched, childCalls[0]);
                 assertEquals(24, content.getPaddingTop());
                 assertEquals(48, content.getPaddingBottom());
-                assertEquals(0, childBottom[0]);
                 assertEquals(12, child.getPaddingBottom());
                 DriverResponsiveUi.apply(activity);
-                ViewCompat.dispatchApplyWindowInsets(content, insets(0));
+                childCalls[0] = 0;
+                dispatched = ViewCompat.dispatchApplyWindowInsets(content, insets(0));
+                assertDispatchCompleted(dispatched, childCalls[0]);
                 assertEquals(48, content.getPaddingBottom());
             });
         }
@@ -97,16 +113,20 @@ public class DriverWindowInsetsTest {
             scenario.onActivity(activity -> {
                 FrameLayout child = host(activity);
                 View content = activity.findViewById(android.R.id.content);
-                final int[] childBottom = {-1};
+                final int[] childCalls = {0};
                 ViewCompat.setOnApplyWindowInsetsListener(child, (v, applied) -> {
-                    childBottom[0] = applied.getInsets(BARS | IME).bottom;
+                    childCalls[0]++;
+                    assertNoRemainingInsets(applied);
                     return applied;
                 });
-                ViewCompat.dispatchApplyWindowInsets(content, insets(300));
+                childCalls[0] = 0;
+                WindowInsetsCompat dispatched = ViewCompat.dispatchApplyWindowInsets(content, insets(300));
+                assertDispatchCompleted(dispatched, childCalls[0]);
                 assertEquals(300, content.getPaddingBottom());
-                assertEquals(0, childBottom[0]);
                 assertEquals(12, child.getPaddingBottom());
-                ViewCompat.dispatchApplyWindowInsets(content, insets(0));
+                childCalls[0] = 0;
+                dispatched = ViewCompat.dispatchApplyWindowInsets(content, insets(0));
+                assertDispatchCompleted(dispatched, childCalls[0]);
                 assertEquals(48, content.getPaddingBottom());
             });
         }
