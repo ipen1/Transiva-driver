@@ -9,11 +9,18 @@
 -keep class com.transiva.app.TransivaBootReceiver { *; }
 -keep class com.transiva.app.LocationService { *; }
 
-# JSON/domain objects are currently mapped manually; keep names conservative for optimized release.
--keep class com.transiva.app.driver.domain.** { *; }
--keep class com.transiva.app.driver.data.** { *; }
+# Domain/data JSON is mapped explicitly; names are not used for reflection.
+# Keep only actual reflection/JNI entry points, not whole application packages.
 
 # WorkManager creates this worker reflectively after process restart.
 -keep class com.transiva.app.FcmRegistrationWorker { public <init>(android.content.Context, androidx.work.WorkerParameters); }
 
 -keep class com.transiva.app.CallDeliveryReceiptWorker { public <init>(android.content.Context, androidx.work.WorkerParameters); }
+
+# Retain source/line information; archive mapping.txt for manual crash deobfuscation.
+-keepattributes SourceFile,LineNumberTable,Signature,InnerClasses,EnclosingMethod
+
+# JavaScript bridge methods may be invoked by name from WebView.
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
