@@ -113,7 +113,10 @@ jobs:
           if-no-files-found: warn
 
       - name: Build signed release APK and AAB
-        run: ./gradlew assembleRelease bundleRelease
+        run: |
+          python3 tools/call_upgrade_regression.py
+          ./gradlew assembleRelease bundleRelease
+          python3 tools/verify_webrtc_jni.py app/build/outputs/mapping/release/mapping.txt
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
