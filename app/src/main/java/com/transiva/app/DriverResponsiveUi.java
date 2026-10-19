@@ -56,29 +56,37 @@ public final class DriverResponsiveUi {
         if (!BASE_PADDING.containsKey(content)) {
             int[] base = {content.getPaddingLeft(), content.getPaddingTop(), content.getPaddingRight(), content.getPaddingBottom()};
             BASE_PADDING.put(content, base);
-            ViewCompat.setOnApplyWindowInsetsListener(content, (v, insets) -> {
-                boolean pip = Build.VERSION.SDK_INT >= 26 && activity.isInPictureInPictureMode();
-                Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
-                Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
-                int maxWidth = fullWidth(activity) ? 0 : dp(activity, 840);
-                int[] p = DriverWindowGeometry.padding(base, bars.left, bars.top, bars.right, bars.bottom,
-                        ime.bottom, pip, v.getWidth(), maxWidth);
-                if (v.getPaddingLeft() != p[0] || v.getPaddingTop() != p[1]
-                        || v.getPaddingRight() != p[2] || v.getPaddingBottom() != p[3])
-                    v.setPadding(p[0], p[1], p[2], p[3]);
-                DriverSystemBars.updateInsets(activity, insets.getInsets(WindowInsetsCompat.Type.systemBars()), pip);
-                // Descendants are already in the safe content rectangle. Never apply bars/IME twice.
-                return new WindowInsetsCompat.Builder(insets)
-                        .setInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()
-                                | WindowInsetsCompat.Type.ime(), Insets.NONE)
-                        .setDisplayCutout(null).build();
-            });
+            ViewCompat.setOnApplyWindowInsetsListener(content, createInsetsListener(activity, base));
             content.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
                 if (r - l != or - ol || b - t != ob - ot) ViewCompat.requestApplyInsets(v);
                 if (r - l != or - ol) resizeBubbles(activity, v);
             });
         }
         ViewCompat.requestApplyInsets(content);
+    }
+
+    /** The same listener used by Android dispatch and direct compat-policy tests.
+     * On API 29 and below, platform WindowInsets cannot carry a synthetic typed IME override.
+     * Keep policy testing before that lossy conversion; test framework dispatch separately.
+     */
+    static androidx.core.view.OnApplyWindowInsetsListener createInsetsListener(Activity activity, int[] base) {
+        return (v, insets) -> {
+            boolean pip = Build.VERSION.SDK_INT >= 26 && activity.isInPictureInPictureMode();
+            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+            int maxWidth = fullWidth(activity) ? 0 : dp(activity, 840);
+            int[] p = DriverWindowGeometry.padding(base, bars.left, bars.top, bars.right, bars.bottom,
+                    ime.bottom, pip, v.getWidth(), maxWidth);
+            if (v.getPaddingLeft() != p[0] || v.getPaddingTop() != p[1]
+                    || v.getPaddingRight() != p[2] || v.getPaddingBottom() != p[3])
+                v.setPadding(p[0], p[1], p[2], p[3]);
+            DriverSystemBars.updateInsets(activity, insets.getInsets(WindowInsetsCompat.Type.systemBars()), pip);
+            // Descendants are already in the safe content rectangle. Never apply bars/IME twice.
+            return new WindowInsetsCompat.Builder(insets)
+                    .setInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()
+                            | WindowInsetsCompat.Type.ime(), Insets.NONE)
+                    .setDisplayCutout(null).build();
+        };
     }
 
     private static void resizeBubbles(Activity activity, View view) {
