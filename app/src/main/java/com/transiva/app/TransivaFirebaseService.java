@@ -58,6 +58,10 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
             RemoteMessage remoteMessage
     ) {
         super.onMessageReceived(remoteMessage);
+        processMessage(remoteMessage,false);
+    }
+
+    private void processMessage(RemoteMessage remoteMessage,boolean verifiedChat) {
         createChannels();
 
         Map<String, String> data =
@@ -65,6 +69,12 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
 
         if(data!=null&&"webrtc_call".equalsIgnoreCase(data.get("type"))&&"incoming_call".equalsIgnoreCase(data.get("event")))CallDeliveryTrace.record(this,data,"PUSH_RECEIVED","");
         if(!FcmSessionTarget.accept(this,data))return;
+
+        // Validate before consuming the FCM dedupe receipt. Side effects remain inside the same session.
+        if(!verifiedChat && data!=null && DriverChatNotificationPolicy.guarded(first(data.get("type"),data.get("notif_type"),data.get("category"),"general"))) {
+            DriverChatNotificationGate.dispatch(this,data,()->processMessage(remoteMessage,true));
+            return;
+        }
 
         if (DriverFcmDeduplicator.isDuplicate(this, remoteMessage.getMessageId(), data)) {
             return;

@@ -100,19 +100,7 @@ public final class DriverMessageUnreadRepository {
             int byRoom = room.isEmpty() ? 0 : p.getInt(ROOM_PREFIX + room, 0);
             int value = Math.max(byOrder, byRoom);
 
-            // One-way migration from the v2.8.18 boolean flags.
-            if (value <= 0) {
-                SharedPreferences legacy = context.getSharedPreferences("transiva", Context.MODE_PRIVATE);
-                boolean old = (!order.isEmpty() && legacy.getBoolean("nav_customer_unread_order_" + order, false))
-                        || (!room.isEmpty() && legacy.getBoolean("nav_customer_unread_room_" + room, false));
-                if (old) {
-                    value = 1;
-                    SharedPreferences.Editor e = p.edit();
-                    if (!order.isEmpty()) e.putInt(ORDER_PREFIX + order, 1);
-                    if (!room.isEmpty()) e.putInt(ROOM_PREFIX + room, 1);
-                    e.apply();
-                }
-            }
+            // Do not migrate ownerless legacy flags into a newly logged-in account.
             return Math.max(0, Math.min(MAX_UNREAD, value));
         } catch (Throwable t) {
             TransivaDiagnostics.error(context, "message", "UNREAD_READ_FAILED", t);
@@ -142,7 +130,10 @@ public final class DriverMessageUnreadRepository {
     }
 
     private static SharedPreferences prefs(Context context) {
-        return context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        SessionManager session=new SessionManager(context);
+        String id=session.getId();if(id==null||id.isEmpty())id=session.getUserId();
+        if(!session.isLoggedIn()||id==null||!id.matches("[0-9]+"))id="none";
+        return context.getApplicationContext().getSharedPreferences(PREFS+"_owner_"+id, Context.MODE_PRIVATE);
     }
 
     private static int bump(int value) { return Math.min(MAX_UNREAD, Math.max(0, value) + 1); }
