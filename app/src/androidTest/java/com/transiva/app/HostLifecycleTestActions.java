@@ -105,6 +105,13 @@ final class HostLifecycleTestActions {
                 if (last == Lifecycle.State.DESTROYED) break;
             } catch (IllegalStateException transitionInProgress) {
                 // ActivityScenario may briefly have no steady state between callbacks.
+            } catch (NullPointerException transitionInProgress) {
+                // ActivityScenario 1.6.x can expose the same transient gap as a
+                // checkNotNull NPE while STARTED is being mapped to a steady state.
+                // Only this exact framework race is retryable; unrelated NPEs fail.
+                String message = transitionInProgress.getMessage();
+                if (message == null || !message.contains("Could not get current state of activity")
+                        || !message.contains("transition is incomplete")) throw transitionInProgress;
             }
             SystemClock.sleep(50L);
         }
