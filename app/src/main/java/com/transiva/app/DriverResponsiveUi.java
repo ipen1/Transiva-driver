@@ -81,11 +81,10 @@ public final class DriverResponsiveUi {
                     || v.getPaddingRight() != p[2] || v.getPaddingBottom() != p[3])
                 v.setPadding(p[0], p[1], p[2], p[3]);
             DriverSystemBars.updateInsets(activity, insets.getInsets(WindowInsetsCompat.Type.systemBars()), pip);
-            // Descendants are already in the safe content rectangle. Never apply bars/IME twice.
-            return new WindowInsetsCompat.Builder(insets)
-                    .setInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()
-                            | WindowInsetsCompat.Type.ime(), Insets.NONE)
-                    .setDisplayCutout(null).build();
+            // Padding owns the complete safe rectangle. Zero typed values alone do not
+            // consume legacy stable/system window flags. API 26 can then dispatch to
+            // children and infer IME again from the root's visible frame.
+            return WindowInsetsCompat.CONSUMED;
         };
     }
 
