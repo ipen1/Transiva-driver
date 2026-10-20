@@ -218,6 +218,10 @@ jobs:
           rm -f gradle/wrapper/gradle-wrapper.jar
           gradle wrapper --gradle-version 8.11.1 --distribution-type bin
           chmod +x gradlew
+      - name: Compile runtime APKs before starting emulator
+        run: ./gradlew assembleDebug assembleDebugAndroidTest -PtransivaCiRuntimeAbi=x86_64 --console=plain
+      - name: Verify runtime CI failure handling
+        run: python3 tools/ci/android_runtime_result_test.py
       - name: Run connected instrumentation tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -226,7 +230,7 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot -memory 3072
           script: bash tools/ci/run_android_runtime_tests.sh
       - name: Print instrumentation failure details
         if: failure()
