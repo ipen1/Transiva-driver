@@ -198,80 +198,23 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         // Marker kendaraan sekarang terikat ke LatLng di peta, sehingga saat pinch zoom
         // kendaraan tetap berada pada koordinat/rute dan tidak mengikuti titik tengah HP.
 
-        backButton = new TextView(this);
-        backButton.setText("‹");
-        backButton.setTextSize(38);
-        backButton.setTextColor(DriverThemeTokens.color(this, "#0B3A78"));
-        backButton.setGravity(Gravity.CENTER);
-        backButton.setBackground(roundRect(DriverThemeTokens.color(this, "#FCFFFFFF"), 20));
-        backButton.setElevation(dp(8));
-        backButton.setOnClickListener(v -> finish());
-        FrameLayout.LayoutParams backLp = new FrameLayout.LayoutParams(dp(54), dp(54));
-        backLp.leftMargin = dp(16);
-        backLp.topMargin = dp(18);
-        page.addView(backButton, backLp);
-
-        routeBadge = new TextView(this);
-        routeBadge.setText("Menyiapkan rute ke " + NavigationInstructionController.destinationLabel(targetMode) + "…");
-        routeBadge.setTextColor(DriverThemeTokens.color(this, "#082F63"));
-        routeBadge.setTextSize(14);
-        routeBadge.setMaxLines(2);
-        routeBadge.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        routeBadge.setGravity(Gravity.CENTER_VERTICAL);
-        routeBadge.setPadding(dp(20), 0, dp(20), 0);
-        routeBadge.setBackground(roundRect(DriverThemeTokens.color(this, "#FCFFFFFF"), 26));
-        routeBadge.setElevation(dp(8));
-        FrameLayout.LayoutParams routeLp = new FrameLayout.LayoutParams(-1, dp(62));
-        routeLp.leftMargin = dp(84);
-        routeLp.rightMargin = dp(18);
-        routeLp.topMargin = dp(18);
-        page.addView(routeBadge, routeLp);
-
-        instructionBadge = new TextView(this);
-        instructionBadge.setText("↑ Ikuti rute");
-        instructionBadge.setTextColor(DriverThemeTokens.color(this, "#0A356C"));
-        instructionBadge.setTextSize(13);
-        instructionBadge.setMaxLines(2);
-        instructionBadge.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        instructionBadge.setGravity(Gravity.CENTER_VERTICAL);
-        instructionBadge.setPadding(dp(18), dp(8), dp(18), dp(8));
-        instructionBadge.setBackground(roundRect(DriverThemeTokens.color(this, "#FAFFFFFF"), 20));
-        instructionBadge.setElevation(dp(6));
-        FrameLayout.LayoutParams instructionLp = new FrameLayout.LayoutParams(-1, dp(54));
-        instructionLp.leftMargin = dp(84);
-        instructionLp.rightMargin = dp(18);
-        instructionLp.topMargin = dp(86);
-        page.addView(instructionBadge, instructionLp);
-
-        LinearLayout bottomActions = new LinearLayout(this);
-        bottomActions.setOrientation(LinearLayout.HORIZONTAL);
-        bottomActions.setGravity(Gravity.CENTER_VERTICAL);
-
-        speedBadge = new TextView(this);
-        speedBadge.setText("0 km/j\nRata-rata 0 km/j");
-        speedBadge.setTextColor(DriverThemeTokens.onAccent(this));
-        speedBadge.setTextSize(16);
-        speedBadge.setPadding(dp(16), dp(10), dp(16), dp(10));
-        speedBadge.setBackground(roundRect(DriverThemeTokens.color(this, "#E6071426"), 22));
-        bottomActions.addView(speedBadge, new LinearLayout.LayoutParams(0, dp(58), 1.25f));
-
-        messageButton = new TextView(this);
-        LinearLayout.LayoutParams msgLp = new LinearLayout.LayoutParams(0, dp(52), 1f);
-        msgLp.setMargins(dp(8), 0, 0, 0);
-        bottomActions.addView(messageButton, msgLp);
-
-        callButton = new TextView(this);
-        LinearLayout.LayoutParams callLp = new LinearLayout.LayoutParams(0, dp(52), 0.9f);
-        callLp.setMargins(dp(8), 0, 0, 0);
-        bottomActions.addView(callButton, callLp);
-
-        FrameLayout.LayoutParams bottomLp = new FrameLayout.LayoutParams(-1, dp(62));
-        bottomLp.leftMargin = dp(18);
-        bottomLp.rightMargin = dp(18);
-        bottomLp.bottomMargin = dp(24);
-        bottomLp.gravity = Gravity.BOTTOM;
-        page.addView(bottomActions, bottomLp);
-        communicationController = new NavigationCommunicationController(this, order, messageButton, callButton);
+        LinearLayout header=new LinearLayout(this);header.setOrientation(LinearLayout.VERTICAL);header.setPadding(dp(14),dp(10),dp(14),dp(10));
+        header.setBackground(roundRect(DriverThemeTokens.surface(this),22));header.setElevation(dp(6));
+        FrameLayout.LayoutParams headLp=new FrameLayout.LayoutParams(-1,-2,Gravity.TOP);headLp.setMargins(dp(12),dp(12),dp(12),0);
+        android.widget.ScrollView headerScroll=new android.widget.ScrollView(this);headerScroll.setTag("navigation_header_container");headerScroll.setVerticalScrollBarEnabled(false);headerScroll.addView(header,new android.widget.ScrollView.LayoutParams(-1,-2));page.addView(headerScroll,headLp);
+        page.addOnLayoutChangeListener((v,l,t,rr,b,ol,ot,orr,ob)->{int desired=header.getMeasuredHeight(),limit=Math.max(dp(100),page.getHeight()-dp(130));int height=Math.min(desired,limit);FrameLayout.LayoutParams hp=(FrameLayout.LayoutParams)headerScroll.getLayoutParams();if(height>0&&hp.height!=height){hp.height=height;headerScroll.setLayoutParams(hp);}});
+        LinearLayout titleRow=new LinearLayout(this);titleRow.setGravity(Gravity.CENTER_VERTICAL);header.addView(titleRow,new LinearLayout.LayoutParams(-1,-2));
+        backButton=new TextView(this);backButton.setText("‹");backButton.setTextSize(32);backButton.setGravity(Gravity.CENTER);backButton.setTextColor(DriverThemeTokens.textPrimary(this));backButton.setContentDescription("Kembali dari navigasi");backButton.setOnClickListener(v->finish());titleRow.addView(backButton,new LinearLayout.LayoutParams(dp(48),dp(48)));
+        routeBadge=new TextView(this);routeBadge.setText("Menyiapkan rute…");routeBadge.setTextColor(DriverThemeTokens.textPrimary(this));routeBadge.setTextSize(14);routeBadge.setTypeface(Typeface.DEFAULT,Typeface.BOLD);routeBadge.setMaxLines(3);routeBadge.setPadding(dp(6),0,0,0);titleRow.addView(routeBadge,new LinearLayout.LayoutParams(0,-2,1));
+        instructionBadge=new TextView(this);instructionBadge.setText("↑ Ikuti rute");instructionBadge.setTextColor(DriverThemeTokens.textPrimary(this));instructionBadge.setTextSize(15);instructionBadge.setMaxLines(3);instructionBadge.setTypeface(Typeface.DEFAULT,Typeface.BOLD);instructionBadge.setPadding(dp(12),dp(10),dp(12),dp(10));instructionBadge.setBackground(roundRect(DriverThemeTokens.surfaceAlt(this),14));LinearLayout.LayoutParams instructionLp=new LinearLayout.LayoutParams(-1,-2);instructionLp.topMargin=dp(6);header.addView(instructionBadge,instructionLp);
+        // Options are inserted into this measured column, avoiding absolute vertical offsets.
+        header.setTag("navigation_header");
+        LinearLayout bottomActions=new LinearLayout(this);bottomActions.setGravity(Gravity.CENTER_VERTICAL);bottomActions.setPadding(dp(8),dp(8),dp(8),dp(8));bottomActions.setBackground(roundRect(DriverThemeTokens.surface(this),22));bottomActions.setElevation(dp(6));
+        speedBadge=new TextView(this);speedBadge.setText("0 km/j\nRata-rata 0 km/j");speedBadge.setTextColor(DriverThemeTokens.textPrimary(this));speedBadge.setTextSize(12);speedBadge.setGravity(Gravity.CENTER);speedBadge.setMaxLines(3);bottomActions.addView(speedBadge,new LinearLayout.LayoutParams(0,-2,1.15f));
+        messageButton=new TextView(this);LinearLayout.LayoutParams msgLp=new LinearLayout.LayoutParams(0,dp(48),1);msgLp.leftMargin=dp(6);bottomActions.addView(messageButton,msgLp);
+        callButton=new TextView(this);LinearLayout.LayoutParams callLp=new LinearLayout.LayoutParams(0,dp(48),1);callLp.leftMargin=dp(6);bottomActions.addView(callButton,callLp);
+        FrameLayout.LayoutParams bottomLp=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);bottomLp.setMargins(dp(12),0,dp(12),dp(22));page.addView(bottomActions,bottomLp);
+        communicationController=new NavigationCommunicationController(this,order,messageButton,callButton);
 
         TextView attribution = new TextView(this);
         attribution.setText("© OpenStreetMap contributors");
@@ -363,7 +306,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
             else { lat = coord("pickup_lat", "user_lat"); lng = coord("pickup_lng", "user_lng"); }
         }
         if (!valid(lat, lng)) { TransivaDiagnostics.event(this,"navigation","EXTERNAL_TARGET_INVALID"); return; }
-        NavigationExternalController.open(this, lat, lng,liveRoutes==null?vehicleType:liveRoutes.profile());
+        if(NavigationExternalController.open(this, lat, lng,liveRoutes==null?vehicleType:liveRoutes.profile()))NavigationGuidanceService.stop(this);
     }
 
     protected android.graphics.drawable.GradientDrawable roundRect(int color, int radiusDp) {
@@ -447,6 +390,9 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
     protected void handleNavigationLocationFix(Location raw, SmoothLocationEngine.Fix fix) {
         if (fix == null || fix.location == null) return;
         Location l = fix.location;
+        if(lastFixRealtimeMs>0&&SystemClock.elapsedRealtime()-lastFixRealtimeMs>12000){
+            lastMatchedProgressMeters=Double.NaN;lastMatchedRawLat=Double.NaN;lastMatchedRawLng=Double.NaN;lastMatchRealtimeMs=0;
+        }
         lastLocation = new Location(l);
         driverLat = l.getLatitude(); driverLng = l.getLongitude();
         lastFixRealtimeMs = SystemClock.elapsedRealtime();

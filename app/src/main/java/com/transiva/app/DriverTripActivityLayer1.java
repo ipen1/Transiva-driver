@@ -121,6 +121,9 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected boolean overviewRoutesLoaded = false;
     protected DriverUiScope tripRouteScope;
     protected long tripRouteGeneration;
+    protected DriverSessionOwner tripRequestOwner;
+    protected String tripRequestKey="";
+    protected final NavigationRecoveryPolicy tripRecovery=new NavigationRecoveryPolicy();
     protected String appliedAgreedRouteHash="";
     protected boolean overviewMapApplied = false;
     protected String lastOverviewRouteStatus = "";
@@ -298,6 +301,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
                     refreshButtons();
                     mainHandler.postDelayed(() -> updateMap(), 250);
                     if(next.equals("finished") || next.equals("completed")){
+                        NavigationSessionStore.clear(this);NavigationGuidanceService.stop(this);
                         final String finishedOrderId = orderId();
                         final String finishedInternalId = internalId();
                         final String finishedSource = isPickupOrder() ? "pickup_orders" : "orders";

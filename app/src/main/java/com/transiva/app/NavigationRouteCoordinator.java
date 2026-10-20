@@ -11,7 +11,8 @@ public final class NavigationRouteCoordinator implements AutoCloseable {
         void ready(long generation,StableRouteEngine.RouteSet routes);
         void failed(Exception error);
     }
-    private final Activity activity;
+    private final android.content.Context context;
+    private final java.util.function.BooleanSupplier alive;
     private final Handler main;
     private final Callback callback;
     private final DriverSessionOwner initialOwner;
@@ -20,14 +21,16 @@ public final class NavigationRouteCoordinator implements AutoCloseable {
     private Future<?> future;
     private DriverSessionOwner requestOwner;
     private volatile boolean busy,closed;
-    public NavigationRouteCoordinator(Activity a,Handler main,Callback callback){activity=a;this.main=main;this.callback=callback;initialOwner=DriverSessionOwner.capture(a);}
-    public boolean valid(){return !closed&&!activity.isFinishing()&&!activity.isDestroyed()&&initialOwner.current();}
+    private String activeKey="";
+    public NavigationRouteCoordinator(Activity a,Handler main,Callback callback){this(a,main,()->!a.isFinishing()&&!a.isDestroyed(),callback);}
+    public NavigationRouteCoordinator(android.content.Context c,Handler main,java.util.function.BooleanSupplier alive,Callback callback){context=c;this.alive=alive;this.main=main;this.callback=callback;initialOwner=DriverSessionOwner.capture(c);}
+    public boolean valid(){return !closed&&alive.getAsBoolean()&&initialOwner.current();}
     public boolean busy(){return busy;}
     public void request(String key,double fromLat,double fromLng,double toLat,double toLng,String profile,double heading,boolean force){
-        if(!valid())return;
-        cancelCurrent();long generation=gate.begin(key);busy=true;
+        if(!valid()||(busy&&key.equals(activeKey)))return;
+        activeKey=key;cancelCurrent();long generation=gate.begin(key);busy=true;
         final DriverSessionOwner[] slot=new DriverSessionOwner[1];
-        if(!initialOwner.runIfCurrent(()->slot[0]=DriverSessionOwner.capture(activity))){busy=false;return;}
+        if(!initialOwner.runIfCurrent(()->slot[0]=DriverSessionOwner.capture(context))){busy=false;return;}
         DriverSessionOwner captured=slot[0];requestOwner=captured;
         try{future=io.submit(()->{
             StableRouteEngine.RouteSet result=null;Exception failure=null;

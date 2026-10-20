@@ -10,14 +10,18 @@ import java.util.Locale;
 
 /** Indonesian TTS guidance; no session credentials are stored or sent to a speech service. */
 public final class NavigationVoiceController implements AutoCloseable {
-    private final Activity activity;
+    private final Context context;
+    private final java.util.function.BooleanSupplier alive;
     private final NavigationVoicePolicy policy=new NavigationVoicePolicy();
     private TextToSpeech engine;
     private boolean ready,closed,enabled=true,resumed,initialized;
     private String route="";
     private java.util.function.Consumer<Boolean> statusListener;
     public NavigationVoiceController(Activity a){
-        activity=a;
+        this(a,()->!a.isFinishing()&&!a.isDestroyed());
+    }
+    public NavigationVoiceController(Context a,java.util.function.BooleanSupplier lifetime){
+        context=a;alive=lifetime;
         engine=new TextToSpeech(a.getApplicationContext(),status->new android.os.Handler(android.os.Looper.getMainLooper()).post(()->{
             if(closed||engine==null)return;
             initialized=true;
@@ -31,12 +35,12 @@ public final class NavigationVoiceController implements AutoCloseable {
     }
     public void status(java.util.function.Consumer<Boolean> callback){statusListener=callback;if(initialized)callback.accept(ready);}
     public void route(String key){if(!route.equals(key)){route=key;policy.reset();if(engine!=null)engine.stop();}}
-    public void enabled(boolean value){enabled=value;if(!value&&engine!=null)engine.stop();if(value&&initialized&&!ready)Toast.makeText(activity,"Suara Bahasa Indonesia belum siap. Periksa pengaturan Text-to-speech HP.",Toast.LENGTH_LONG).show();}
+    public void enabled(boolean value){enabled=value;if(!value&&engine!=null)engine.stop();if(value&&initialized&&!ready)Toast.makeText(context,"Suara Bahasa Indonesia belum siap. Periksa pengaturan Text-to-speech HP.",Toast.LENGTH_LONG).show();}
     public boolean enabled(){return enabled;}
     public void resumed(boolean value){resumed=value;if(!value&&engine!=null)engine.stop();}
     public void speak(int index,double meters,String text,boolean arrival,double speedMps){
-        if(closed||!resumed||!enabled||!ready||engine==null||activity.isFinishing()||activity.isDestroyed())return;
-        AudioManager audio=(AudioManager)activity.getSystemService(Context.AUDIO_SERVICE);
+        if(closed||!resumed||!enabled||!ready||engine==null||!alive.getAsBoolean())return;
+        AudioManager audio=(AudioManager)context.getSystemService(Context.AUDIO_SERVICE);
         if(audio!=null&&audio.getMode()!=AudioManager.MODE_NORMAL)return;
         long now=SystemClock.elapsedRealtime();if(!policy.shouldSpeak(index,meters,speedMps,arrival,now))return;
         String prefix=arrival||meters<=18?"":"Dalam "+Math.round(meters/10)*10+" meter, ";

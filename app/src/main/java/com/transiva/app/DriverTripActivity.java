@@ -62,9 +62,11 @@ import java.text.NumberFormat;
 import java.util.Locale;
 import android.util.Base64;
 public class DriverTripActivity extends DriverTripActivityLayer2 {
-    private boolean realtimeTripRunning=false;
+    private boolean realtimeTripRunning=false,realtimeBusy;
+    private long realtimeGeneration;
+    private DriverApiClient realtimeClient;
     private String realtimeSignature="";
-    private final Runnable realtimeTripPoll=new Runnable(){ public void run(){ if(!realtimeTripRunning||order==null||session==null)return; refreshTripRealtime(); mainHandler.postDelayed(this,3000L); } };
+    private final Runnable realtimeTripPoll=new Runnable(){ public void run(){ if(!realtimeTripRunning||order==null||session==null)return; refreshTripRealtime(); if(tripRecovery.due(android.os.SystemClock.elapsedRealtime()))requestStableRoute(true); mainHandler.postDelayed(this,3000L); } };
 
 
     @Override protected void onCreate(Bundle b){
@@ -104,34 +106,39 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         }, 250L);
     }
     @Override protected void onResume(){ super.onResume(); realtimeTripRunning=true; mainHandler.removeCallbacks(realtimeTripPoll); mainHandler.post(realtimeTripPoll); try{ if(mapView!=null) mapView.onResume(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_RESUME_FAILED",e); } if(order != null) startLocationWatch(); if(communicationController!=null) communicationController.onStart(); }
-    @Override protected void onPause(){ destinationExtension.close(); realtimeTripRunning=false; mainHandler.removeCallbacks(realtimeTripPoll); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView!=null) mapView.onPause(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_PAUSE_FAILED",e); } super.onPause(); }
-    @Override protected void onDestroy(){ tripRouteGeneration++; if(tripRouteScope!=null)tripRouteScope.close(); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView != null) mapView.onDestroy(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_DESTROY_FAILED",e); } super.onDestroy(); }
+    @Override protected void onPause(){ realtimeGeneration++;realtimeBusy=false;if(realtimeClient!=null)realtimeClient.shutdown(); destinationExtension.close(); realtimeTripRunning=false; mainHandler.removeCallbacks(realtimeTripPoll); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView!=null) mapView.onPause(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_PAUSE_FAILED",e); } super.onPause(); }
+    @Override protected void onDestroy(){ realtimeGeneration++;if(realtimeClient!=null)realtimeClient.shutdown(); tripRouteGeneration++; if(tripRequestOwner!=null)tripRequestOwner.close();if(tripRouteScope!=null)tripRouteScope.close(); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView != null) mapView.onDestroy(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_DESTROY_FAILED",e); } super.onDestroy(); }
     @Override public void onLowMemory(){ super.onLowMemory(); try{ if(mapView!=null) mapView.onLowMemory(); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } }
 
     private SmartWaitingTextView waitingView;
     private void refreshTripRealtime(){
-        final String key=orderId();
-        if(isPickupOrder()){
-            DriverNetworkExecutor.execute(() -> {try{
-                JSONObject body=new JSONObject().put("order_id",key).put("source","pickup_orders");
-                com.transiva.app.driver.data.DriverApiClient.Result result=new com.transiva.app.driver.data.DriverApiClient(session).post("smart_waiting.php",body);
-                JSONObject state=result.body.optJSONObject("smart_waiting");
-                mainHandler.post(() -> {try{order.put("smart_waiting",state);}catch(Exception ignored){}if(waitingView!=null)waitingView.bind(state);});
-            }catch(Exception ignored){} });return;
-        }
-        DriverNetworkExecutor.execute(()->{ try{
-            JSONObject q=new JSONObject().put("order_id",key);
-            com.transiva.app.driver.data.DriverApiClient.Result rr=new com.transiva.app.driver.data.DriverApiClient(session).post("driver_trip_realtime.php",q);
-            JSONObject fresh=rr.body.optJSONObject("order"); if(fresh==null)return;
-            JSONObject snapshot=fresh.optJSONObject("server_route");
-            String sig=(snapshot==null?"":snapshot.optLong("version")+":"+snapshot.optString("route_hash"))+"|"+fresh.optString("customer_received")+"|"+fresh.optString("status")+"|"+fresh.optString("price")+"|"+String.valueOf(fresh.optJSONObject("ecosystem"))+"|"+String.valueOf(fresh.optJSONObject("extra_fare_request"))+"|"+fresh.optString("price_change_status")+"|"+fresh.optString("delivery_lat")+"|"+fresh.optString("delivery_lng")+"|"+String.valueOf(fresh.optJSONObject("destination_extension"));
-            JSONObject waiting=fresh.optJSONObject("smart_waiting");
-            JSONObject activeWaiting=waiting==null?null:waiting.optJSONObject("active");
-            sig+="|WAIT:"+(activeWaiting==null?0:activeWaiting.optLong("id"));
-            mainHandler.post(() -> { if(order!=null)try{order.put("smart_waiting",waiting);}catch(Exception ignored){} if(waitingView!=null)waitingView.bind(waiting); });
-            if(sig.equals(realtimeSignature))return; realtimeSignature=sig;
-            mainHandler.post(()->{ try{ order=fresh; saveActiveOrder(); renderOrder(); refreshButtons(); }catch(Exception ignored){} });
-        }catch(Exception ignored){} });
+        if(realtimeBusy||!realtimeTripRunning||tripRouteScope==null||!tripRouteScope.alive())return;
+        final String key=orderId(),before=status();final boolean pickup=isPickupOrder();
+        final long generation=++realtimeGeneration;final DriverApiClient client=new DriverApiClient(session);realtimeClient=client;realtimeBusy=true;
+        boolean queued=tripRouteScope.execute(()->{
+            try{
+                JSONObject query=new JSONObject().put("order_id",key);if(pickup)query.put("source","pickup_orders");
+                DriverApiClient.Result result=client.post(pickup?"smart_waiting.php":"driver_trip_realtime.php",query);
+                final JSONObject state=result.body.optJSONObject("smart_waiting"),fresh=result.body.optJSONObject("order");
+                tripRouteScope.post(()->{
+                    if(generation!=realtimeGeneration||!realtimeTripRunning||!key.equals(orderId())||pickup!=isPickupOrder()||!before.equals(status()))return;
+                    try{
+                        if(pickup){order.put("smart_waiting",state);if(waitingView!=null)waitingView.bind(state);}
+                        else if(fresh!=null){
+                            String incoming=first(fresh.optString("order_id"),fresh.optString("id"));if(!key.equals(incoming))return;
+                            JSONObject routeSnapshot=fresh.optJSONObject("server_route");
+                            String signature=fresh.optString("status")+"|"+fresh.optString("customer_received")+"|"+fresh.optString("price")+"|"+fresh.optString("delivery_lat")+"|"+fresh.optString("delivery_lng")+"|"+String.valueOf(fresh.optJSONObject("ecosystem"))+"|"+String.valueOf(fresh.optJSONObject("destination_extension"))+"|"+String.valueOf(fresh.optJSONObject("extra_fare_request"))+"|"+fresh.optString("price_change_status")+"|"+(routeSnapshot==null?"":routeSnapshot.optString("route_hash")+":"+routeSnapshot.optLong("version"));
+                            JSONObject waiting=fresh.optJSONObject("smart_waiting");order.put("smart_waiting",waiting);if(waitingView!=null)waitingView.bind(waiting);
+                            if(signature.equals(realtimeSignature))return;realtimeSignature=signature;
+                            order=fresh;saveActiveOrder();renderOrder();refreshButtons();requestStableRoute(false);
+                            String next=status();if("finished".equals(next)||"completed".equals(next)||next.contains("cancel")){NavigationSessionStore.clear(this);NavigationGuidanceService.stop(this);}
+                        }
+                    }catch(Exception error){TransivaDiagnostics.error(this,"navigation","TRIP_REFRESH_APPLY_FAILED",error);}
+                });
+            }catch(Exception error){TransivaDiagnostics.error(this,"navigation","TRIP_REFRESH_FAILED",error);}
+            finally{client.shutdown();tripRouteScope.post(()->{if(generation==realtimeGeneration)realtimeBusy=false;});}
+        });
+        if(!queued){realtimeBusy=false;client.shutdown();}
     }
 
     protected void loadSession(){

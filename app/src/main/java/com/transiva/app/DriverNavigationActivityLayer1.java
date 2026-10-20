@@ -405,6 +405,7 @@ abstract class DriverNavigationActivityLayer1 extends Activity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == 801 && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
             NavigationDiagnostics.event(this, "NAV_LOCATION_PERMISSION_GRANTED", null);
+            if(liveRoutes!=null&&activityResumed)liveRoutes.resumed(true);
             startLocationWatch();
         } else if (requestCode == 801) {
             NavigationDiagnostics.event(this, "NAV_LOCATION_PERMISSION_DENIED", null);
@@ -449,6 +450,7 @@ abstract class DriverNavigationActivityLayer1 extends Activity {
                                                          android.content.res.Configuration newConfig) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
         inPictureInPicture = isInPictureInPictureMode;
+        if(navigationRoot!=null){View header=navigationRoot.findViewWithTag("navigation_header_container");if(header!=null)header.setVisibility(isInPictureInPictureMode?View.GONE:View.VISIBLE);}
 
         // PiP is map-first: remove every large overlay that can collapse into a
         // white vertical pill/button on narrow OEM launchers.

@@ -294,32 +294,38 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         appliedAgreedRouteHash=routeKey;return true;
     }
     private String tripRouteKey(){
-        return order==null?"":order.optString("order_id",order.optString("id"))+"|"+status()+"|"+coord("pickup_lat","user_lat")+"|"+coord("pickup_lng","user_lng")+"|"+coord("delivery_lat","destination_lat")+"|"+coord("delivery_lng","destination_lng")+"|"+DriverEcosystemFeatures.from(order).waypoints.toString();
+        return order==null?"":order.optString("order_id",order.optString("id"))+"|"+order.optString("source",orderKind)+"|"+status()+"|"+coord("pickup_lat","user_lat")+"|"+coord("pickup_lng","user_lng")+"|"+coord("delivery_lat","destination_lat")+"|"+coord("delivery_lng","destination_lng")+"|"+DriverEcosystemFeatures.from(order).waypoints.toString();
     }
     protected void requestStableRoute(boolean force){
         if("delivery".equals(routeTargetMode()) && applyAgreedServerRoute())return;
         if(tripRouteScope==null||!tripRouteScope.alive()||googleMap==null||!valid(lastDriverLat,lastDriverLng))return;
         final double pLat=coord("pickup_lat","user_lat"),pLng=coord("pickup_lng","user_lng"),dLat=coord("delivery_lat","destination_lat"),dLng=coord("delivery_lng","destination_lng");
-        if(!valid(pLat,pLng)||!valid(dLat,dLng)||routeRequestInFlight)return;
+        if(!valid(pLat,pLng)||!valid(dLat,dLng))return;
+        String latestKey=tripRouteKey();
+        if(routeRequestInFlight){if(latestKey.equals(tripRequestKey))return;if(tripRequestOwner!=null)tripRequestOwner.close();routeRequestInFlight=false;tripRouteGeneration++;tripRecovery.reset();}
+        if(latestKey.equals(tripRequestKey)&&tripRecovery.needed()&&!tripRecovery.due(android.os.SystemClock.elapsedRealtime()))return;
         if(!valid(tripStartLat,tripStartLng)){tripStartLat=lastDriverLat;tripStartLng=lastDriverLng;}
         final boolean extensionRoute=extensionNeedsArrival();final JSONArray stops;
         try{stops=new JSONArray(DriverEcosystemFeatures.from(order).waypoints.toString());}catch(Exception e){return;}
         final String key=tripRouteKey();long now=System.currentTimeMillis();
-        if(!force&&overviewRoutesLoaded&&key.equals(lastOverviewRouteStatus)&&now-lastRouteRequestAt<45000)return;
-        final double startLat=tripStartLat,startLng=tripStartLng,extensionLat=lastDriverLat,extensionLng=lastDriverLng;
-        final long generation=++tripRouteGeneration;routeRequestInFlight=true;lastRouteRequestAt=now;
+        if(!force&&!tripRecovery.needed()&&overviewRoutesLoaded&&key.equals(lastOverviewRouteStatus)&&now-lastRouteRequestAt<45000)return;
+        final double startLat=lastDriverLat,startLng=lastDriverLng,extensionLat=lastDriverLat,extensionLng=lastDriverLng;
+        final long generation=++tripRouteGeneration;tripRequestKey=key;
+        final DriverSessionOwner[] captured=new DriverSessionOwner[1];
+        if(!tripRouteScope.owner.runIfCurrent(()->captured[0]=DriverSessionOwner.capture(this)))return;
+        final DriverSessionOwner requestOwner=captured[0];tripRequestOwner=requestOwner;routeRequestInFlight=true;lastRouteRequestAt=now;
         boolean queued=tripRouteScope.execute(()->{
             try{
-                StableRouteEngine.Result first=StableRouteEngine.fetchOverview(tripRouteScope.owner,startLat,startLng,pLat,pLng);
+                StableRouteEngine.Result first=StableRouteEngine.fetchOverview(requestOwner,startLat,startLng,pLat,pLng);
                 double a=extensionRoute?extensionLat:pLat,b=extensionRoute?extensionLng:pLng,meters=0,seconds=0;
                 JSONArray delivery=new JSONArray();
                 if(extensionRoute)for(int i=0;i<stops.length();i++){
                     JSONObject stop=stops.optJSONObject(i);if(stop==null||"arrived".equals(stop.optString("status")))continue;
                     double x=stop.optDouble("latitude"),y=stop.optDouble("longitude");if(!valid(x,y))continue;
-                    StableRouteEngine.Result leg=StableRouteEngine.fetchOverview(tripRouteScope.owner,a,b,x,y);
+                    StableRouteEngine.Result leg=StableRouteEngine.fetchOverview(requestOwner,a,b,x,y);
                     for(int n=0;n<leg.latLngPoints.length();n++)delivery.put(leg.latLngPoints.opt(n));meters+=leg.distanceMeters;seconds+=leg.durationSeconds;a=x;b=y;
                 }
-                StableRouteEngine.Result last=StableRouteEngine.fetchOverview(tripRouteScope.owner,a,b,dLat,dLng);
+                StableRouteEngine.Result last=StableRouteEngine.fetchOverview(requestOwner,a,b,dLat,dLng);
                 for(int n=0;n<last.latLngPoints.length();n++)delivery.put(last.latLngPoints.opt(n));meters+=last.distanceMeters;seconds+=last.durationSeconds;
                 final String points=delivery.toString();final double totalMeters=meters,totalSeconds=seconds;
                 tripRouteScope.post(()->{
@@ -327,11 +333,11 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
                     if(!key.equals(tripRouteKey())){requestStableRoute(true);return;}
                     pendingPickupRoutePoints=first.pointsJson();pendingPickupRouteKm=first.distanceMeters/1000;pendingPickupRouteSeconds=first.durationSeconds;
                     pendingDeliveryRoutePoints=points;pendingDeliveryRouteKm=totalMeters/1000;pendingDeliveryRouteSeconds=totalSeconds;
-                    overviewRoutesLoaded=true;lastOverviewRouteStatus=key;applyPendingRoute();
+                    tripRecovery.reset();overviewRoutesLoaded=true;lastOverviewRouteStatus=key;applyPendingRoute();
                 });
-            }catch(Exception e){tripRouteScope.post(()->{if(generation==tripRouteGeneration){routeRequestInFlight=false;if(!key.equals(tripRouteKey()))requestStableRoute(true);}});}
+            }catch(Exception e){tripRouteScope.post(()->{if(generation==tripRouteGeneration){routeRequestInFlight=false;tripRecovery.failed(android.os.SystemClock.elapsedRealtime());if(!key.equals(tripRouteKey())){tripRecovery.reset();requestStableRoute(true);}}});}finally{requestOwner.close();}
         });
-        if(!queued)routeRequestInFlight=false;
+        if(!queued){routeRequestInFlight=false;requestOwner.close();tripRecovery.failed(android.os.SystemClock.elapsedRealtime());}
     }
 
     protected void applyPendingRoute(){

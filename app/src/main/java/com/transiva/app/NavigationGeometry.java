@@ -11,6 +11,11 @@ public final class NavigationGeometry {
         double p=Math.toRadians(x-a),q=Math.toRadians(y-b),v=Math.sin(p/2)*Math.sin(p/2)+Math.cos(Math.toRadians(a))*Math.cos(Math.toRadians(x))*Math.sin(q/2)*Math.sin(q/2);
         return 6371000*2*Math.atan2(Math.sqrt(Math.max(0,v)),Math.sqrt(Math.max(0,1-v)));
     }
+    public static double distanceTo(org.json.JSONArray geometry,double lat,double lng){
+        java.util.ArrayList<double[]> points=new java.util.ArrayList<>();java.util.ArrayList<Double> cumulative=new java.util.ArrayList<>();double length=0;
+        for(int i=0;i<geometry.length();i++){org.json.JSONArray xy=geometry.optJSONArray(i);if(xy==null||xy.length()<2)continue;double[] p={xy.optDouble(0),xy.optDouble(1)};if(!points.isEmpty()){double[] q=points.get(points.size()-1);length+=meters(q[0],q[1],p[0],p[1]);}points.add(p);cumulative.add(length);}
+        return project(points,cumulative,lat,lng,Double.NaN).distance;
+    }
     public static Projection project(List<double[]> points,List<Double> cumulative,double lat,double lng,double prior){
         double best=Double.POSITIVE_INFINITY,bearing=Double.NaN,progress=0;
         double sx=111320*Math.max(.15,Math.cos(Math.toRadians(lat))),sy=111320;

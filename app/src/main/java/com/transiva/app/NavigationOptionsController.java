@@ -14,10 +14,12 @@ final class NavigationOptionsController {
     private final TextView profile,sound,choices;
     private boolean enabled=true,ready;
     NavigationOptionsController(Activity a,FrameLayout root,Listener l){
-        activity=a;listener=l;LinearLayout row=new LinearLayout(a);row.setOrientation(LinearLayout.HORIZONTAL);row.setPadding(0,0,0,0);
+        activity=a;listener=l;LinearLayout row=new LinearLayout(a);row.setOrientation(LinearLayout.HORIZONTAL);row.setPadding(0,dp(a,8),0,0);
         profile=button(a,"Profil");sound=button(a,"Suara aktif");choices=button(a,"Pilihan rute");
-        for(TextView b:new TextView[]{profile,sound,choices}){LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(a,48),1);lp.setMargins(dp(a,3),0,dp(a,3),0);row.addView(b,lp);}
-        FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(-1,dp(a,48));lp.leftMargin=dp(a,15);lp.rightMargin=dp(a,15);lp.topMargin=dp(a,147);root.addView(row,lp);
+        for(TextView b:new TextView[]{profile,sound,choices}){LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.setMargins(dp(a,3),0,dp(a,3),0);row.addView(b,lp);}
+        android.view.View header=root.findViewWithTag("navigation_header");
+        if(header instanceof LinearLayout)((LinearLayout)header).addView(row,new LinearLayout.LayoutParams(-1,-2));
+        else root.addView(row,new FrameLayout.LayoutParams(-1,-2,Gravity.TOP));
         profile.setOnClickListener(v->new AlertDialog.Builder(a).setTitle("Profil rute kendaraan").setMessage("Profil motor memerlukan provider khusus. Jika belum tersedia, label rute mobil akan ditampilkan.").setPositiveButton("Motor",(d,w)->listener.profile("motor")).setNeutralButton("Mobil",(d,w)->listener.profile("car")).setNegativeButton("Batal",null).show());
         sound.setOnClickListener(v->{enabled=!enabled;updateVoice();listener.voice(enabled);});choices.setOnClickListener(v->listener.alternatives());
     }
@@ -30,6 +32,6 @@ final class NavigationOptionsController {
         String[] labels=new String[routes.size()];for(int i=0;i<labels.length;i++){StableRouteEngine.Result r=routes.get(i);labels[i]=String.format(Locale.US,"Rute %d%s • %.1f km • ±%d menit%s",i+1,i==selected?" (aktif)":"",r.distanceMeters/1000,Math.max(1,(int)Math.ceil(r.durationSeconds/60)),r.summary.isEmpty()?"":"\n"+r.summary);}
         new AlertDialog.Builder(activity).setTitle("Pilih rute perjalanan").setSingleChoiceItems(labels,selected,(d,w)->{d.dismiss();pick.accept(w);}).setNegativeButton("Tutup",null).show();
     }
-    private static TextView button(Activity a,String text){TextView b=new TextView(a);b.setText(text);b.setTextSize(12);b.setGravity(Gravity.CENTER);b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);b.setTextColor(DriverThemeTokens.textPrimary(a));b.setBackgroundColor(DriverThemeTokens.surface(a));b.setElevation(dp(a,4));return b;}
+    private static TextView button(Activity a,String text){TextView b=new TextView(a);b.setText(text);b.setTextSize(11);b.setMaxLines(2);b.setMinHeight(dp(a,48));b.setPadding(dp(a,3),dp(a,3),dp(a,3),dp(a,3));b.setGravity(Gravity.CENTER);b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);b.setTextColor(DriverThemeTokens.textPrimary(a));android.graphics.drawable.GradientDrawable bg=DriverNavigationUi.roundRect(DriverThemeTokens.surface(a),dp(a,12));bg.setStroke(dp(a,1),DriverThemeTokens.border(a));b.setBackground(bg);b.setElevation(dp(a,1));return b;}
     private static int dp(Activity a,int value){return Math.round(value*a.getResources().getDisplayMetrics().density);}
 }

@@ -474,7 +474,7 @@ abstract class DriverNavigationActivityLayer2 extends DriverNavigationActivityLa
                 }
             }
 
-            if (bestDistance > NavigationRoutePolicy.ROUTE_MATCH_MAX_DISTANCE_M) {
+            if (bestDistance > Math.max(12d,Math.min(NavigationRoutePolicy.ROUTE_MATCH_MAX_DISTANCE_M,lastGpsAccuracyM*1.5d))) {
                 return new SnapPoint(lat, lng, currentBearing, false, routeProgressIndex, 0d,
                         Double.isNaN(previousProgress) ? routeProgressMeters(routeProgressIndex) : previousProgress);
             }
