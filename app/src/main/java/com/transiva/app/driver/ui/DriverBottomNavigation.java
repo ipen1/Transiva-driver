@@ -40,6 +40,10 @@ public final class DriverBottomNavigation {
     private DriverBottomNavigation() {
     }
 
+    public static int height(Activity activity){
+        float font=Math.max(1f,activity.getResources().getConfiguration().fontScale);
+        return dp(activity,Math.max(72,Math.round(52+14*font)));
+    }
     public static View build(Activity activity, ActiveItem activeItem) {
         LinearLayout navigation = new LinearLayout(activity);
         navigation.setOrientation(LinearLayout.HORIZONTAL);
@@ -76,18 +80,10 @@ public final class DriverBottomNavigation {
     }
 
     /** Refresh only the Pesan label without rebuilding the whole navigation bar. */
-    public static void refreshUnread(Activity activity, View navigationView) {
-        if (!(navigationView instanceof LinearLayout) || activity == null) return;
-        try {
-            LinearLayout navigation = (LinearLayout) navigationView;
-            if (navigation.getChildCount() <= 2) return;
-            View chat = navigation.getChildAt(2);
-            if (!(chat instanceof LinearLayout)) return;
-            LinearLayout root = (LinearLayout) chat;
-            if (root.getChildCount() <= 1 || !(root.getChildAt(1) instanceof TextView)) return;
-            int unread = DriverMessageUnreadRepository.totalUnread(activity);
-            ((TextView) root.getChildAt(1)).setText(unread > 0 ? "Pesan • " + unread : "Pesan");
-        } catch (Throwable ignored) { }
+    public static void refreshUnread(Activity activity,View navigationView){
+        if(activity==null||navigationView==null)return;
+        TextView badge=navigationView.findViewWithTag("driver_nav_unread");
+        if(badge!=null){int count=DriverMessageUnreadRepository.totalUnread(activity);badge.setText(count>99?"99+":String.valueOf(count));badge.setVisibility(count>0?View.VISIBLE:View.GONE);}
     }
 
     private static void add(LinearLayout navigation, View item) {
@@ -107,7 +103,9 @@ public final class DriverBottomNavigation {
         LinearLayout root = new LinearLayout(activity);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER);
-        root.setPadding(dp(activity, 4), dp(activity, 4), dp(activity, 4), dp(activity, 4));
+        root.setPadding(dp(activity, 2), dp(activity, 4), dp(activity, 2), dp(activity, 4));
+        root.setMinimumHeight(dp(activity,64));
+        root.setContentDescription(label);
         root.setClickable(!active);
         root.setFocusable(!active);
 
@@ -130,16 +128,20 @@ public final class DriverBottomNavigation {
         }
         icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         icon.setAlpha(active ? 1f : 0.62f);
-        root.addView(icon, new LinearLayout.LayoutParams(dp(activity, 22), dp(activity, 22)));
+        android.widget.FrameLayout iconBox=new android.widget.FrameLayout(activity);
+        iconBox.addView(icon,new android.widget.FrameLayout.LayoutParams(dp(activity,24),dp(activity,24),Gravity.CENTER));
+        if(item==ActiveItem.CHAT){
+            TextView badge=new TextView(activity);badge.setTag("driver_nav_unread");badge.setTextSize(9);badge.setTextColor(android.graphics.Color.WHITE);badge.setGravity(Gravity.CENTER);
+            GradientDrawable badgeBg=new GradientDrawable();badgeBg.setColor(android.graphics.Color.parseColor("#DC2626"));badgeBg.setCornerRadius(dp(activity,10));badge.setBackground(badgeBg);
+            int count=DriverMessageUnreadRepository.totalUnread(activity);badge.setText(count>99?"99+":String.valueOf(count));badge.setVisibility(count>0?View.VISIBLE:View.GONE);
+            iconBox.addView(badge,new android.widget.FrameLayout.LayoutParams(dp(activity,22),dp(activity,18),Gravity.TOP|Gravity.END));
+        }
+        root.addView(iconBox,new LinearLayout.LayoutParams(-1,dp(activity,30)));
 
         TextView title = new TextView(activity);
-        if (item == ActiveItem.CHAT) {
-            int unread = DriverMessageUnreadRepository.totalUnread(activity);
-            title.setText(unread > 0 ? label + " • " + unread : label);
-        } else {
-            title.setText(label);
-        }
-        title.setTextSize(9f);
+        title.setText(label);
+        title.setTextSize(11f);
+        title.setSingleLine(true);title.setEllipsize(android.text.TextUtils.TruncateAt.END);
         title.setGravity(Gravity.CENTER);
         title.setIncludeFontPadding(false);
         title.setTextColor(active ? DriverThemeTokens.accent(activity) : DriverThemeTokens.textSecondary(activity));
