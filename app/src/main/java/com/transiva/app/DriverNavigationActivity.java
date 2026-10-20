@@ -115,7 +115,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         // P0: render a lightweight navigation shell first. Heavy MapLibre startup is
         // deferred until the Activity is already visible, avoiding OEM/GPU startup stalls.
         buildUiShell();
-        instructionController = new NavigationInstructionController(instructionBadge);
+        instructionController = new NavigationInstructionController(instructionBadge,targetMode);
         if (pipController != null) pipController.configure();
 
         main.postDelayed(() -> initNativeMap(savedInstanceState), 120L);
@@ -141,7 +141,8 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         } catch (Exception e) { TransivaDiagnostics.error(this,"navigation","ORDER_JSON_PARSE_FAILED",e); }
         try {
             String mode = first(getIntent().getStringExtra("target"), getIntent().getStringExtra("target_mode"));
-            if (mode.toLowerCase(Locale.US).contains("delivery")) targetMode = "delivery";
+            if (mode.trim().toLowerCase(Locale.US).matches("waypoint_[0-9]+")) targetMode = mode.trim().toLowerCase(Locale.US);
+            else if (mode.toLowerCase(Locale.US).contains("delivery")) targetMode = "delivery";
             else if (mode.toLowerCase(Locale.US).contains("pickup")) targetMode = "pickup";
             else targetMode = routeTargetMode();
         } catch (Exception e) { TransivaDiagnostics.error(this,"navigation","TARGET_MODE_PARSE_FAILED",e); }
@@ -200,7 +201,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         page.addView(backButton, backLp);
 
         routeBadge = new TextView(this);
-        routeBadge.setText(targetMode.equals("delivery") ? "Menyiapkan rute ke pengantaran…" : "Menyiapkan rute ke pickup…");
+        routeBadge.setText("Menyiapkan rute ke " + NavigationInstructionController.destinationLabel(targetMode) + "…");
         routeBadge.setTextColor(DriverThemeTokens.color(this, "#082F63"));
         routeBadge.setTextSize(17);
         routeBadge.setTypeface(Typeface.DEFAULT, Typeface.BOLD);

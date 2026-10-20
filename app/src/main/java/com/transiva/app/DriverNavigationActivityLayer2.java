@@ -208,8 +208,8 @@ abstract class DriverNavigationActivityLayer2 extends DriverNavigationActivityLa
                     final int mins = Math.max(1, (int) Math.ceil(pendingRouteSeconds / 60d));
                     main.postDelayed(() -> {
                         if (!isFinishing() && routePoints.size() >= 2) {
-                            routeBadge.setText(String.format(Locale.US, "%s • %.1f km • %d menit",
-                                    targetMode.equals("delivery") ? "Menuju pengantaran" : "Menuju penjemputan",
+                            routeBadge.setText(String.format(Locale.US, "Menuju %s • %.1f km • %d menit",
+                                    NavigationInstructionController.destinationLabel(targetMode),
                                     pendingRouteKm, mins));
                         }
                     }, 260L);
@@ -234,7 +234,7 @@ abstract class DriverNavigationActivityLayer2 extends DriverNavigationActivityLa
     protected void showRouteLoading(int percent) {
         if (routeBadge == null) return;
         int p = Math.max(0, Math.min(100, percent));
-        String target = targetMode.equals("delivery") ? "tujuan" : "pickup";
+        String target = NavigationInstructionController.destinationLabel(targetMode);
         routeBadge.setText(String.format(Locale.US, "Membuat rute ke %s • %d%%", target, p));
     }
 

@@ -11,9 +11,22 @@ import java.util.Locale;
 /** Owns maneuver selection and instruction text rendering. */
 public final class NavigationInstructionController {
     private final TextView badge;
+    private final String destination;
     private long lastUiAt;
 
-    public NavigationInstructionController(TextView badge) { this.badge = badge; }
+    public NavigationInstructionController(TextView badge) { this(badge,"tujuan"); }
+
+    public NavigationInstructionController(TextView badge,String mode) {
+        this.badge=badge;this.destination=destinationLabel(mode);
+    }
+
+    public static String destinationLabel(String mode) {
+        String value=mode==null?"":mode.trim().toLowerCase(Locale.US);
+        if(value.matches("waypoint_[0-9]+"))return "tujuan tambahan";
+        if("pickup".equals(value))return "penjemputan";
+        if("delivery".equals(value))return "pengantaran";
+        return "tujuan";
+    }
 
     public void update(JSONArray maneuvers, double progressMeters) {
         if (badge == null) return;
@@ -36,10 +49,10 @@ public final class NavigationInstructionController {
         String type = next.optString("type", "").toLowerCase(Locale.US);
         String road = next.optString("name", "").trim();
         String arrow = "↑", action = "Terus lurus";
-        if (modifier.contains("left")) { arrow = "↰"; action = "Belok kiri"; }
+        if (type.contains("arrive")) { arrow = "⚑"; action = "Tiba di " + destination; }
+        else if (modifier.contains("left")) { arrow = "↰"; action = "Belok kiri"; }
         else if (modifier.contains("right")) { arrow = "↱"; action = "Belok kanan"; }
         else if (modifier.contains("uturn")) { arrow = "↶"; action = "Putar balik"; }
-        else if (type.contains("arrive")) { arrow = "⚑"; action = "Tiba di pengantaran"; }
         String dist;
         if (remaining >= 1000d) dist = String.format(Locale.US, "%.1f km", remaining / 1000d);
         else if (remaining >= 100d) dist = String.format(Locale.US, "%.0f m", Math.round(remaining / 50d) * 50d);
