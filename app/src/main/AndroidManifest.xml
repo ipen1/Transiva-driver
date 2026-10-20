@@ -94,6 +94,7 @@
             android:exported="false"
             android:stopWithTask="false" />
 
+        <service android:name=".NavigationGuidanceService" android:exported="false" android:foregroundServiceType="location" android:stopWithTask="true" />
         <service
             android:name=".LocationService"
             android:enabled="true"
