@@ -96,7 +96,7 @@ public class TransivaDriverApplication extends Application implements Applicatio
     }
     public void onActivityStopped(Activity a) {}
     public void onActivitySaveInstanceState(Activity a, Bundle b) {}
-    public void onActivityDestroyed(Activity a) {FcmReadinessBanner.detach(a);}
+    public void onActivityDestroyed(Activity a) {DriverAppSettings.release(a);FcmReadinessBanner.detach(a);}
     @Override
     public void onTrimMemory(int level) {
         super.onTrimMemory(level);

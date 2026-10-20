@@ -32,15 +32,18 @@ import java.nio.charset.StandardCharsets;
 
 /** Pengaturan lokal khusus sisi driver. */
 public class DriverSettingsActivity extends Activity {
+    private DriverUiScope uiScope;
 
     private static final String DEVICE_URL = "https://transiva.my.id/server/driver_device_native.php";
     private TextView deviceNameView;
     private TextView deviceMetaView;
     private TextView resetDeviceButton;
     private volatile boolean resettingDevice = false;
+    private TextView overlayStatusView,callStatusView;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        uiScope=new DriverUiScope(this);
         setContentView(buildScreen());
         DriverAppSettings.apply(this);
         loadDeviceStatus();
@@ -49,6 +52,8 @@ public class DriverSettingsActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         DriverAppSettings.apply(this);
+        if(overlayStatusView!=null)overlayStatusView.setText(overlayStatusText());
+        if(callStatusView!=null)callStatusView.setText(fullScreenCallStatusText());
         if (!resettingDevice && deviceNameView != null) loadDeviceStatus();
     }
 
@@ -113,7 +118,7 @@ public class DriverSettingsActivity extends Activity {
         LinearLayout overlayLabels = new LinearLayout(this);
         overlayLabels.setOrientation(LinearLayout.VERTICAL);
         overlayLabels.addView(text("Izin Tampil di Atas Aplikasi Lain", 15, "#0B3A78", true));
-        overlayLabels.addView(text(overlayStatusText(), 11, "#64748B", false));
+        overlayStatusView=text(overlayStatusText(),12,"#64748B",false);overlayLabels.addView(overlayStatusView);
         overlayRow.addView(overlayLabels, new LinearLayout.LayoutParams(0, -2, 1));
         overlayRow.addView(text("›", 30, "#0B7CFF", true));
         overlayRow.setOnClickListener(v -> explainAndOpenOverlaySettings());
@@ -130,7 +135,7 @@ public class DriverSettingsActivity extends Activity {
         LinearLayout fullCallLabels = new LinearLayout(this);
         fullCallLabels.setOrientation(LinearLayout.VERTICAL);
         fullCallLabels.addView(text("Layar Panggilan Masuk", 15, "#0B3A78", true));
-        fullCallLabels.addView(text(fullScreenCallStatusText(), 11, "#64748B", false));
+        callStatusView=text(fullScreenCallStatusText(),12,"#64748B",false);fullCallLabels.addView(callStatusView);
         fullCallRow.addView(fullCallLabels, new LinearLayout.LayoutParams(0, -2, 1));
         fullCallRow.addView(text("›", 30, "#0B7CFF", true));
         fullCallRow.setOnClickListener(v -> openFullScreenCallSettings());
@@ -362,14 +367,14 @@ public class DriverSettingsActivity extends Activity {
             return;
         }
         setDeviceUi("Memuat perangkat saat ini…", "Memeriksa binding perangkat Driver.", false);
-        DriverNetworkExecutor.execute(() -> {
+        uiScope.execute(() -> {
             try {
                 JSONObject response = requestDevice("GET", null);
                 boolean success = response.optBoolean("success", false);
                 if (!success) throw new Exception(response.optString("message", "Gagal membaca perangkat."));
                 JSONObject device = response.optJSONObject("device");
                 if (device == null) {
-                    runOnUiThread(() -> setDeviceUi(
+                    uiScope.post(() -> setDeviceUi(
                             "Belum ada perangkat terhubung",
                             "Login ulang akan mengikat akun ini ke perangkat Driver yang digunakan.",
                             false));
@@ -384,10 +389,10 @@ public class DriverSettingsActivity extends Activity {
                         + " • ID " + localShort
                         + (lastSeen.isEmpty() || "null".equalsIgnoreCase(lastSeen) ? "" : " • aktif " + lastSeen);
                 final String finalName = serverName;
-                runOnUiThread(() -> setDeviceUi(finalName, meta, true));
+                uiScope.post(() -> setDeviceUi(finalName, meta, true));
             } catch (Exception e) {
                 final String msg = e.getMessage() == null ? "Gagal memuat status perangkat." : e.getMessage();
-                runOnUiThread(() -> setDeviceUi(
+                uiScope.post(() -> setDeviceUi(
                         Build.MANUFACTURER + " " + Build.MODEL,
                         "Status server belum dapat dimuat • " + msg,
                         true));
@@ -453,12 +458,7 @@ public class DriverSettingsActivity extends Activity {
             conn.setRequestProperty("Accept", "application/json");
             conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
             conn.setRequestProperty("Cache-Control", "no-store");
-            String token = new SessionManager(this).getToken();
-            if (token != null && !token.trim().isEmpty()) {
-                conn.setRequestProperty("Authorization", "Bearer " + token.trim());
-            }
-            conn.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(this));
-            conn.setRequestProperty("X-App-Scope", "driver");
+            uiScope.owner.pin(conn);
             if ("POST".equals(method)) {
                 conn.setDoOutput(true);
                 try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(conn.getOutputStream(), StandardCharsets.UTF_8))) {
@@ -469,13 +469,14 @@ public class DriverSettingsActivity extends Activity {
             InputStream stream = status >= 200 && status < 400 ? conn.getInputStream() : conn.getErrorStream();
             String raw = readStream(stream);
             if (raw.trim().isEmpty()) throw new Exception("Server tidak mengirim respons.");
+            uiScope.owner.check();
             JSONObject json = new JSONObject(raw);
             if (status < 200 || status >= 400) {
                 throw new Exception(json.optString("message", "HTTP " + status));
             }
             return json;
         } finally {
-            if (conn != null) conn.disconnect();
+            if (conn != null) {uiScope.owner.release(conn);conn.disconnect();}
         }
     }
 
@@ -548,4 +549,5 @@ public class DriverSettingsActivity extends Activity {
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
+    @Override protected void onDestroy(){if(uiScope!=null)uiScope.close();super.onDestroy();}
 }

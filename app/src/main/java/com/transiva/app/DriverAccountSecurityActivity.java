@@ -25,6 +25,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
 public class DriverAccountSecurityActivity extends Activity {
+    private DriverUiScope uiScope;
     public static final String EXTRA_MODE = "mode";
     public static final String MODE_USERNAME = "username";
     public static final String MODE_PASSWORD = "password";
@@ -46,6 +47,7 @@ public class DriverAccountSecurityActivity extends Activity {
             startActivity(new Intent(this, LoginActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));
             finish(); return;
         }
+        uiScope=new DriverUiScope(this);
         setContentView(build());
         DriverAppSettings.apply(this);
     }
@@ -106,9 +108,9 @@ public class DriverAccountSecurityActivity extends Activity {
         } catch(Exception e){return;}
 
         loading=true; save.setEnabled(false);
-        boolean accepted=DriverNetworkExecutor.execute(()->{
+        boolean accepted=uiScope.execute(()->{
             Result r=request(payload);
-            runOnUiThread(()->{
+            uiScope.post(()->{
                 loading=false; save.setEnabled(true); show(r.message,r.ok);
                 if(r.ok){
                     currentPassword.setText("");
@@ -130,16 +132,15 @@ public class DriverAccountSecurityActivity extends Activity {
             c=com.transiva.app.driver.data.DriverConnectionRepository.open(URL_ACCOUNT);
             c.setRequestMethod("POST"); c.setConnectTimeout(10000); c.setReadTimeout(15000); c.setDoOutput(true); c.setUseCaches(false);
             c.setRequestProperty("Accept","application/json"); c.setRequestProperty("Content-Type","application/json; charset=UTF-8");
-            c.setRequestProperty("Authorization","Bearer "+safe(session.getToken()));
-            c.setRequestProperty("X-Device-UUID",DeviceIdentityManager.getInstallationUuid(this));
-            c.setRequestProperty("X-App-Scope","driver");
+            uiScope.owner.pin(c);
             try(BufferedWriter w=new BufferedWriter(new OutputStreamWriter(c.getOutputStream(),StandardCharsets.UTF_8))){w.write(payload.toString());}
             int status=c.getResponseCode(); InputStream is=status>=200&&status<400?c.getInputStream():c.getErrorStream();
             String raw=read(is); JSONObject j=raw.isEmpty()?new JSONObject():new JSONObject(raw);
+            uiScope.owner.check();
             boolean ok=status>=200&&status<300&&j.optBoolean("success",false);
             return new Result(ok,j.optString("message",ok?"Berhasil disimpan.":"Gagal menyimpan."),j.optString("username",""));
         }catch(Exception e){return new Result(false,"Tidak dapat terhubung ke server.","");}
-        finally{if(c!=null)c.disconnect();}
+        finally{uiScope.owner.release(c);if(c!=null)c.disconnect();}
     }
 
     private String read(InputStream is)throws Exception{
@@ -155,4 +156,5 @@ public class DriverAccountSecurityActivity extends Activity {
     private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
     private String safe(String v){return v==null?"":v.trim();}
     private static final class Result{final boolean ok;final String message,username;Result(boolean o,String m,String u){ok=o;message=m;username=u;}}
+    @Override protected void onDestroy(){if(uiScope!=null)uiScope.close();super.onDestroy();}
 }

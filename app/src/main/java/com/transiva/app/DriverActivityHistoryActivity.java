@@ -30,6 +30,7 @@ import java.util.Date;
 import android.widget.HorizontalScrollView;
 
 public class DriverActivityHistoryActivity extends Activity {
+    private DriverUiScope uiScope;
     private static final String URL = "https://transiva.my.id/server/driver_activity_history.php";
     private SessionManager session;
     private LinearLayout listBox;
@@ -50,6 +51,7 @@ public class DriverActivityHistoryActivity extends Activity {
         DriverSystemBars.setNavigationBarColor(this, Color.parseColor("#071426"));
         session = new SessionManager(this);
         if (!validDriverSession()) { redirectLogin(); return; }
+        uiScope=new DriverUiScope(this);
         setContentView(buildScreen());
         DriverAppSettings.apply(this);
         loadActivities();
@@ -102,7 +104,7 @@ public class DriverActivityHistoryActivity extends Activity {
         listBox=new LinearLayout(this);listBox.setOrientation(LinearLayout.VERTICAL);content.addView(listBox);
         moreButton=text("Muat 10 aktivitas berikutnya  ↓",13,"#0B7CFF",true);moreButton.setGravity(Gravity.CENTER);moreButton.setPadding(dp(8),dp(12),dp(8),dp(12));moreButton.setVisibility(View.GONE);
         moreButton.setOnClickListener(v->{visibleCount+=10;renderList();});content.addView(moreButton,sectionLp());
-        shell.addView(DriverBottomNavigation.build(this, DriverBottomNavigation.ActiveItem.ACTIVITY),new LinearLayout.LayoutParams(-1,dp(62)));
+        shell.addView(DriverBottomNavigation.build(this, DriverBottomNavigation.ActiveItem.ACTIVITY),new LinearLayout.LayoutParams(-1,DriverBottomNavigation.height(this)));
         return page;
     }
 
@@ -152,12 +154,12 @@ public class DriverActivityHistoryActivity extends Activity {
     private void loadActivities(){
         if(progress==null||loading)return;loading=true;
         if(cached.length()==0)progress.setVisibility(View.VISIBLE);
-        DriverNetworkExecutor.execute(()->{
+        uiScope.execute(()->{
             try{
                 String endpoint=URL+"?driver="+URLEncoder.encode(clean(session.getUsername()),StandardCharsets.UTF_8.name())+"&_="+System.currentTimeMillis();
-                JSONObject result=DriverMessageApi.get(session,endpoint);
-                runOnUiThread(()->{loading=false;render(result);});
-            }catch(Exception e){runOnUiThread(()->{
+                JSONObject result=DriverMessageApi.get(session,endpoint,uiScope.owner);
+                uiScope.post(()->{loading=false;render(result);});
+            }catch(Exception e){uiScope.post(()->{
                 loading=false;progress.setVisibility(View.GONE);
                 stateText.setText(cached.length()>0?"Data terakhir • sinkronisasi gagal":"Gagal terhubung ke database");
                 if(cached.length()==0)Toast.makeText(this,"Aktivitas gagal dimuat",Toast.LENGTH_SHORT).show();
@@ -182,7 +184,7 @@ public class DriverActivityHistoryActivity extends Activity {
         canceledCount.setText(String.valueOf(summary.optInt("canceled",0)));
         JSONArray next=r.optJSONArray("activities");if(next==null)next=new JSONArray();
         if(!next.toString().equals(cached.toString())){cached=next;renderList();}
-        else if(listBox.getChildCount()==0)renderList();
+        else renderList();
     }
     private boolean matches(JSONObject o){
         String status=first(o.optString("activity_kind"),o.optString("status"));
@@ -238,7 +240,7 @@ public class DriverActivityHistoryActivity extends Activity {
     private LinearLayout card(){ LinearLayout v=new LinearLayout(this); v.setOrientation(LinearLayout.VERTICAL); v.setPadding(dp(14),dp(13),dp(14),dp(13)); v.setBackground(round("#FFFFFF",18)); v.setElevation(dp(2)); return v; }
     private LinearLayout.LayoutParams sectionLp(){ LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2); p.setMargins(0,0,0,dp(10)); return p; }
     private LinearLayout.LayoutParams statLp(boolean margin){ LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1); if(margin)p.setMargins(dp(8),0,0,0); return p; }
-    private TextView text(String s,int size,String color,boolean bold){ TextView t=new TextView(this); t.setText(s); t.setTextSize(size); t.setTextColor(Color.parseColor(color)); t.setTypeface(Typeface.DEFAULT,bold?Typeface.BOLD:Typeface.NORMAL); t.setPadding(0,dp(2),0,dp(2)); return t; }
+    private TextView text(String s,int size,String color,boolean bold){ TextView t=new TextView(this); t.setText(s); t.setTextSize(size); t.setTextColor(DriverThemeTokens.textColor(this, color)); t.setTypeface(Typeface.DEFAULT,bold?Typeface.BOLD:Typeface.NORMAL); t.setPadding(0,dp(2),0,dp(2)); return t; }
     private GradientDrawable round(String color,int radius){ GradientDrawable g=new GradientDrawable(); g.setColor(Color.parseColor(color)); g.setCornerRadius(dp(radius)); return g; }
     private GradientDrawable gradient(String a,String b,int radius){ GradientDrawable g=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{Color.parseColor(a),Color.parseColor(b)}); g.setCornerRadius(dp(radius)); return g; }
     private String statusLabel(String s){ s=s.toLowerCase(Locale.US); if(s.contains("cancel"))return "Dibatalkan"; if(s.contains("finish")||s.contains("complete")||s.equals("done")||s.equals("delivered"))return "Selesai"; return "Berjalan"; }
@@ -276,4 +278,5 @@ public class DriverActivityHistoryActivity extends Activity {
     private String first(String...v){ for(String s:v)if(!clean(s).isEmpty())return clean(s); return ""; }
     private String clean(String v){ return v==null?"":v.trim(); }
     private int dp(int v){ return Math.round(v*getResources().getDisplayMetrics().density); }
+    @Override protected void onDestroy(){if(uiScope!=null)uiScope.close();super.onDestroy();}
 }

@@ -74,6 +74,9 @@ public class SessionManager {
      * session.saveUser(user);
      */
     public boolean saveUser(JSONObject user) {
+        synchronized(SessionManager.class){return saveUserLocked(user);}
+    }
+    private boolean saveUserLocked(JSONObject user) {
         try {
             JSONObject clean = normalizeUser(user);
 
@@ -228,6 +231,9 @@ public class SessionManager {
     }
 
     public void forceLogout(String reason) {
+        synchronized(SessionManager.class){forceLogoutLocked(reason);}
+    }
+    private void forceLogoutLocked(String reason) {
         try {
             String fcmToken = prefs.getString("fcm_token", "");
             long fcmSavedAt = prefs.getLong("fcm_token_saved_at", 0L);

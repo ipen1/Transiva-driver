@@ -44,6 +44,7 @@ import java.util.Locale;
 
 /** Peta sosial driver: hanya driver online + idle dalam radius 20 km. */
 public class DriverLocationActivity extends FragmentActivity implements OnMapReadyCallback {
+    private DriverUiScope uiScope;
     private static final int REQ_LOCATION = 9231;
     private static final long REFRESH_MS = 15000L;
     private static final String BASE = "https://transiva.my.id/server/";
@@ -73,6 +74,7 @@ public class DriverLocationActivity extends FragmentActivity implements OnMapRea
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         session = new SessionManager(this);
+        uiScope=new DriverUiScope(this);
         if (!session.isLoggedIn()) { finish(); return; }
         locationClient = LocationServices.getFusedLocationProviderClient(this);
         mapHostId = View.generateViewId();
@@ -152,16 +154,18 @@ public class DriverLocationActivity extends FragmentActivity implements OnMapRea
     private void updateMyLocationAndDrivers() {
         if (requestInFlight || ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return;
         try {
-            locationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null).addOnSuccessListener(location -> {
+            locationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null).addOnSuccessListener(this, location -> {
+                if(!uiScope.alive())return;
                 if (location == null) {
-                    locationClient.getLastLocation().addOnSuccessListener(last -> {
+                    locationClient.getLastLocation().addOnSuccessListener(this, last -> {
+                        if(!uiScope.alive())return;
                         if (last == null) { loading.setVisibility(View.GONE); toast("Lokasi belum tersedia. Pastikan GPS aktif."); return; }
                         acceptLocation(last);
                     });
                     return;
                 }
                 acceptLocation(location);
-            }).addOnFailureListener(e -> { loading.setVisibility(View.GONE); toast("Gagal membaca lokasi."); });
+            }).addOnFailureListener(this, e -> {if(!uiScope.alive())return; loading.setVisibility(View.GONE); toast("Gagal membaca lokasi."); });
         } catch (SecurityException ignored) {}
     }
 
@@ -177,34 +181,38 @@ public class DriverLocationActivity extends FragmentActivity implements OnMapRea
     private void loadDrivers(Location location) {
         requestInFlight = true; loading.setVisibility(View.VISIBLE);
         final String url = BASE + "driver_nearby_map.php?lat=" + String.format(Locale.US,"%.7f",location.getLatitude()) + "&lng=" + String.format(Locale.US,"%.7f",location.getLongitude()) + "&radius_km=20&_=" + System.currentTimeMillis();
-        DriverNetworkExecutor.execute(() -> {
+        uiScope.execute(() -> {
             try {
-                JSONObject response = DriverMessageApi.get(session, url);
+                JSONObject response = DriverMessageApi.get(session,url,uiScope.owner);
                 JSONArray drivers = response.optJSONArray("drivers");
-                runOnUiThread(() -> renderDrivers(drivers));
+                uiScope.post(() -> renderDrivers(drivers));
             } catch (Exception e) {
-                runOnUiThread(() -> toast("Gagal memuat lokasi driver."));
+                uiScope.post(() -> toast("Gagal memuat lokasi driver."));
             } finally {
-                requestInFlight=false; runOnUiThread(() -> loading.setVisibility(View.GONE));
+                requestInFlight=false; uiScope.post(() -> loading.setVisibility(View.GONE));
             }
         });
     }
 
     private void renderDrivers(JSONArray drivers) {
         if (map == null) return;
-        map.clear(); hideDriverCard();
-        if (drivers == null) return;
+        String selected=selectedDriver==null?"":selectedDriver.optString("username","");
+        boolean found=false;map.clear();
+        if (drivers == null) {hideDriverCard();return;}
         for (int i=0;i<drivers.length();i++) {
             JSONObject d=drivers.optJSONObject(i); if(d==null) continue;
             double lat=d.optDouble("latitude",0), lng=d.optDouble("longitude",0); if(lat==0&&lng==0) continue;
             String type=d.optString("driver_type","bike");
             Marker marker=map.addMarker(new MarkerOptions().position(new LatLng(lat,lng)).title(d.optString("name","Driver")).icon(vehicleIcon(type)).anchor(.5f,.5f));
             if(marker!=null) marker.setTag(d);
+            if(!selected.isEmpty()&&selected.equals(d.optString("username"))){showDriver(d);found=true;}
         }
+        if(!found&&!selected.isEmpty())hideDriverCard();
     }
 
     private BitmapDescriptor vehicleIcon(String type) {
         int res = getResources().getIdentifier(type.toLowerCase().contains("car") ? "map_car_top" : "map_motor_top", "drawable", getPackageName());
+        if(res==0)return BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE);
         Drawable drawable = ContextCompat.getDrawable(this,res);
         if(drawable==null) return BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE);
         int w=dp(42), h=dp(42); Bitmap bitmap=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888); Canvas c=new Canvas(bitmap); drawable.setBounds(0,0,w,h); drawable.draw(c); return BitmapDescriptorFactory.fromBitmap(bitmap);
@@ -224,13 +232,13 @@ public class DriverLocationActivity extends FragmentActivity implements OnMapRea
         JSONObject target=selectedDriver; if(target==null)return;
         String username=target.optString("username",""); if(username.isEmpty())return;
         greetButton.setEnabled(false); greetButton.setText("Mengirim…");
-        DriverNetworkExecutor.execute(() -> {
+        uiScope.execute(() -> {
             try {
                 JSONObject body=new JSONObject(); body.put("target_username",username);
-                JSONObject r=DriverMessageApi.post(session,BASE+"driver_send_greeting.php",body);
-                runOnUiThread(() -> { greetButton.setText("✓ Tersapa"); toast(r.optString("message","Sapaan terkirim 👋")); });
+                JSONObject r=DriverMessageApi.post(session,BASE+"driver_send_greeting.php",body,uiScope.owner);
+                uiScope.post(() -> { greetButton.setText("✓ Tersapa"); toast(r.optString("message","Sapaan terkirim 👋")); });
             } catch(Exception e) {
-                runOnUiThread(() -> { greetButton.setEnabled(true); greetButton.setText("👋  Sapa"); toast("Sapaan belum berhasil dikirim."); });
+                uiScope.post(() -> { greetButton.setEnabled(true); greetButton.setText("👋  Sapa"); toast("Sapaan belum berhasil dikirim."); });
             }
         });
     }
@@ -242,4 +250,5 @@ public class DriverLocationActivity extends FragmentActivity implements OnMapRea
     private TextView text(String value,float size,String color,boolean bold){ TextView t=new TextView(this); t.setText(value); t.setTextSize(size); t.setTextColor(Color.parseColor(color)); if(bold)t.setTypeface(android.graphics.Typeface.DEFAULT,android.graphics.Typeface.BOLD); return t; }
     private int dp(int v){ return Math.round(v*getResources().getDisplayMetrics().density); }
     private void toast(String s){ Toast.makeText(this,s,Toast.LENGTH_SHORT).show(); }
+    @Override protected void onDestroy(){if(uiScope!=null)uiScope.close();super.onDestroy();}
 }

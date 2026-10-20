@@ -48,6 +48,10 @@ public final class DriverThemeTokens {
      * Brand/status colors are intentionally preserved, while surfaces and text
      * always follow the Transiva preference rather than the OEM/system theme.
      */
+    public static int textColor(Context c,String value){
+        if("#FFFFFF".equalsIgnoreCase(value)||"#FFFFFFFF".equalsIgnoreCase(value))return onAccent(c);
+        return color(c,value);
+    }
     public static int color(Context c, String legacyHex) {
         String h = legacyHex == null ? "" : legacyHex.trim().toUpperCase(Locale.US);
         switch (h) {

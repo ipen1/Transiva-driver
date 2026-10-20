@@ -56,6 +56,7 @@ import java.util.Map;
 import java.util.Set;
 abstract class DriverDashboardActivityLayer1 extends Activity
         implements DriverDashboardContract.View {
+    protected DriverUiScope dashboardScope;
 
     protected static final int REQ_LOCATION = 8702;
     protected static final int REQ_BACKGROUND_LOCATION = 8703;
@@ -365,7 +366,7 @@ abstract class DriverDashboardActivityLayer1 extends Activity
         TextView text = new TextView(this);
         text.setText(value);
         text.setTextSize(sp);
-        text.setTextColor(DriverThemeTokens.color(this, color));
+        text.setTextColor(DriverThemeTokens.textColor(this, color));
         if (bold) text.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         return text;
     }

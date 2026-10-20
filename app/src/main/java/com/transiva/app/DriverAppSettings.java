@@ -141,6 +141,12 @@ public final class DriverAppSettings {
         }
     }
 
+    public static void release(Activity activity){
+        View content=activity.findViewById(android.R.id.content);
+        if(content!=null)removeDynamicViewWatcher(content);
+        synchronized(APPLIED_ACTIVITY_THEMES){APPLIED_ACTIVITY_THEMES.remove(activity);}
+    }
+
     /** Bisa dipanggil setelah sebuah dialog atau card dinamis baru dibuat. */
     public static void applyToView(Context context, View view) {
         if (view != null && isDarkMode(context)) {
@@ -260,6 +266,7 @@ public final class DriverAppSettings {
 
         // Tulisan putih di atas kartu biru tetap putih.
         if (isNearWhite(current)) return;
+        if(Color.green(current)>110&&Color.green(current)>Color.red(current)*1.4f&&Color.green(current)>Color.blue(current)*1.2f)return;
 
         if (isDarkText(current)) {
             text.setTextColor(DARK_TEXT);

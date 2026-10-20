@@ -22,6 +22,7 @@ import org.json.JSONObject;
 import java.util.Locale;
 
 public class DriverBpjsActivity extends Activity {
+    private DriverUiScope uiScope;
 
     private static final String PROFILE_ENDPOINT = "driver_profile_native.php?v=";
 
@@ -48,6 +49,7 @@ public class DriverBpjsActivity extends Activity {
             return;
         }
 
+        uiScope=new DriverUiScope(this);
         api = new DriverApiClient(session);
         setContentView(buildScreen());
         DriverAppSettings.apply(this);
@@ -63,6 +65,7 @@ public class DriverBpjsActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if(uiScope!=null)uiScope.close();
         if (api != null) api.shutdown();
         super.onDestroy();
     }
@@ -306,17 +309,17 @@ public class DriverBpjsActivity extends Activity {
         if (loadingData || api == null) return;
         setLoading(true);
 
-        api.executor().execute(() -> {
+        uiScope.execute(() -> {
             try {
                 DriverApiClient.Result result = api.get(PROFILE_ENDPOINT + System.currentTimeMillis());
                 JSONObject profile = result.body.optJSONObject("profile");
                 if (profile == null) throw new IllegalStateException("Data profil kosong.");
-                runOnUiThread(() -> {
+                uiScope.post(() -> {
                     bindProfile(profile);
                     setLoading(false);
                 });
             } catch (Exception error) {
-                runOnUiThread(() -> setLoading(false));
+                uiScope.post(() -> setLoading(false));
             }
         });
     }

@@ -147,7 +147,7 @@ abstract class TransivaFirebaseServiceLayer2 extends TransivaFirebaseServiceLaye
         }
 
         if (isWallet(type)) {
-            Intent intent = new Intent(this, DriverTopUpActivity.class);
+            Intent intent = new Intent(this,type.startsWith("driver_wallet_transfer")?DriverEarningsActivity.class:DriverTopUpActivity.class);
             intent.putExtra("from_fcm", true);
             return intent;
         }

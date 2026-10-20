@@ -30,6 +30,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
 public class ChangePinActivity extends Activity {
+    private DriverUiScope uiScope;
 
     private static final String CHANGE_PIN_URL = "https://transiva.my.id/server/pin_change.php";
     private static final int TIMEOUT_MS = 25000;
@@ -60,6 +61,7 @@ public class ChangePinActivity extends Activity {
             return;
         }
 
+        uiScope=new DriverUiScope(this);
         setContentView(buildScreen());
         DriverAppSettings.apply(this);
     }
@@ -171,16 +173,16 @@ public class ChangePinActivity extends Activity {
         }
 
         setLoading(true);
-        DriverNetworkExecutor.execute(() -> {
+        uiScope.execute(() -> {
             ApiResult result = changePin(oldPin, newPin);
-            mainHandler.post(() -> {
+            uiScope.post(() -> {
                 setLoading(false);
                 showMessage(result.message, result.success);
                 if (result.success) {
                     oldPinInput.setText("");
                     newPinInput.setText("");
                     confirmPinInput.setText("");
-                    mainHandler.postDelayed(this::finish, 900);
+                    mainHandler.postDelayed(()->{if(uiScope.alive())finish();},900);
                 }
             });
         });
@@ -198,9 +200,7 @@ public class ChangePinActivity extends Activity {
             connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
             connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty("Authorization", "Bearer " + safe(session.getToken()));
-            connection.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(this));
-            connection.setRequestProperty("X-App-Scope", "driver");
+            uiScope.owner.pin(connection);
             connection.setRequestProperty("X-Transiva-Client", "Android-Native");
 
             JSONObject payload = new JSONObject();
@@ -217,12 +217,14 @@ public class ChangePinActivity extends Activity {
                     ? connection.getInputStream() : connection.getErrorStream();
             String raw = readStream(stream);
             JSONObject json = raw.isEmpty() ? new JSONObject() : new JSONObject(raw);
+            uiScope.owner.check();
             boolean success = json.optBoolean("success", false);
             String message = json.optString("message", success ? "PIN berhasil diubah." : "Gagal mengubah PIN.");
             return new ApiResult(success, message);
         } catch (Exception e) {
             return new ApiResult(false, "Tidak dapat terhubung ke server. Coba lagi.");
         } finally {
+            uiScope.owner.release(connection);
             if (connection != null) connection.disconnect();
         }
     }
@@ -322,4 +324,5 @@ public class ChangePinActivity extends Activity {
             this.message = message;
         }
     }
+    @Override protected void onDestroy(){if(uiScope!=null)uiScope.close();mainHandler.removeCallbacksAndMessages(null);super.onDestroy();}
 }

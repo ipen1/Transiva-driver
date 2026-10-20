@@ -54,6 +54,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 abstract class DriverChatRoomActivityLayer1 extends Activity {
+    protected DriverUiScope chatScope;
 
     protected static final String BASE_URL = "https://transiva.my.id/";
     protected static final String GET_CHAT_URL =
@@ -193,7 +194,7 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
         String url = absoluteUrl(rawUrl);
         if (url.isEmpty()) return;
 
-        DriverNetworkExecutor.execute(() -> {
+        chatScope.execute(() -> {
             HttpURLConnection connection = null;
             InputStream inputStream = null;
 
@@ -287,10 +288,10 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
             return;
         }
 
-        DriverNetworkExecutor.execute(() -> {
+        chatScope.execute(() -> {
             try {
                 JSONObject response =
-                        DriverMessageApi.post(session, SEND_CHAT_URL, body);
+                        DriverMessageApi.post(session,SEND_CHAT_URL,body,chatScope.owner);
 
                 postUi(() -> {
                     sending = false;
@@ -512,6 +513,7 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if(chatScope==null||!chatScope.alive())return;
         DriverMessageUnreadRepository.markRead(this, orderId, roomId);
         chatVisible = true;
         readVisibilityGeneration++;
@@ -540,16 +542,12 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
     }
 
     /** Post hasil async hanya selama Activity masih hidup. */
-    protected void postUi(Runnable action) {
-        if (action == null || destroyed || isFinishing()) return;
-        main.post(() -> {
-            if (!destroyed && !isFinishing()) action.run();
-        });
-    }
+    protected void postUi(Runnable action){if(chatScope!=null)chatScope.post(action);}
 
     @Override
     protected void onDestroy() {
         destroyed = true;
+        if(chatScope!=null)chatScope.close();
         DriverChatNotificationPoller.clearOpenRoom(roomId);
         main.removeCallbacks(readReceiptRunnable);
         main.removeCallbacksAndMessages(null);

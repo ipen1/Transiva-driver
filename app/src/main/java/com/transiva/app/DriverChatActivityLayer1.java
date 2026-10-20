@@ -273,7 +273,7 @@ abstract class DriverChatActivityLayer1 extends Activity {
         TextView view = new TextView(this);
         view.setText(value);
         view.setTextSize(sp);
-        view.setTextColor(Color.parseColor(color));
+        view.setTextColor(DriverThemeTokens.textColor(this, color));
         if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         return view;
     }

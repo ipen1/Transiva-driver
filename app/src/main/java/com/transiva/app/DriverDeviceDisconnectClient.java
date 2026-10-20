@@ -33,14 +33,11 @@ public final class DriverDeviceDisconnectClient {
 
     public static void disconnect(Context context, Callback callback) {
         final Context app = context.getApplicationContext();
+        final DriverSessionOwner owner=DriverSessionOwner.capture(app);
         DriverNetworkExecutor.execute(() -> {
             HttpURLConnection conn = null;
             try {
-                SessionManager session = new SessionManager(app);
-                String token = session.getToken();
-                if (token == null || token.trim().isEmpty()) {
-                    throw new Exception("Sesi Driver tidak tersedia. Silakan login kembali.");
-                }
+                owner.check();
 
                 JSONObject body = new JSONObject();
                 body.put("action", "disconnect_device");
@@ -55,9 +52,7 @@ public final class DriverDeviceDisconnectClient {
                 conn.setRequestProperty("Accept", "application/json");
                 conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
                 conn.setRequestProperty("Cache-Control", "no-store");
-                conn.setRequestProperty("Authorization", "Bearer " + token.trim());
-                conn.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(app));
-                conn.setRequestProperty("X-App-Scope", "driver");
+                owner.pin(conn);
 
                 try (BufferedWriter writer = new BufferedWriter(
                         new OutputStreamWriter(conn.getOutputStream(), StandardCharsets.UTF_8))) {
@@ -70,17 +65,27 @@ public final class DriverDeviceDisconnectClient {
                 String raw = readStream(stream);
                 if (raw.trim().isEmpty()) throw new Exception("Server tidak mengirim respons.");
 
+                owner.check();
                 JSONObject json = new JSONObject(raw);
                 if (status < 200 || status >= 400 || !json.optBoolean("success", false)) {
                     throw new Exception(json.optString("message", "Gagal melepas perangkat Driver."));
                 }
 
-                MAIN.post(callback::onSuccess);
+                MAIN.post(()->owner.runIfCurrent(()->{
+                    if(context instanceof android.app.Activity && ((android.app.Activity)context).isDestroyed()){
+                        new SessionManager(app).forceLogout("driver_device_disconnected");return;
+                    }
+                    callback.onSuccess();
+                }));
             } catch (Exception e) {
                 final String message = e.getMessage() == null || e.getMessage().trim().isEmpty()
                         ? "Gagal melepas perangkat Driver." : e.getMessage().trim();
-                MAIN.post(() -> callback.onError(message));
+                MAIN.post(()->owner.runIfCurrent(()->{
+                    if(context instanceof android.app.Activity&&(((android.app.Activity)context).isFinishing()||((android.app.Activity)context).isDestroyed()))return;
+                    callback.onError(message);
+                }));
             } finally {
+                owner.release(conn);
                 if (conn != null) conn.disconnect();
             }
         });

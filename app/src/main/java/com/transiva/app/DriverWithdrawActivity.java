@@ -42,6 +42,9 @@ import java.text.NumberFormat;
 import java.util.Locale;
 
 public class DriverWithdrawActivity extends Activity {
+    private DriverUiScope uiScope;
+    private DriverWalletRecovery recovery;
+    private boolean walletBusy;
 
     private static final String BASE_URL = "https://transiva.my.id/";
     private static final String SERVER = BASE_URL + "server/";
@@ -73,13 +76,29 @@ public class DriverWithdrawActivity extends Activity {
         try { username = safe(sessionManager.getUsername()); } catch (Exception ignored) {}
         if (username.length() == 0) username = "Driver";
 
+        uiScope=new DriverUiScope(this);
+        if(!sessionManager.isLoggedIn()||!"driver".equals(sessionManager.normalizeRole(sessionManager.getRole()))||!uiScope.owner.userId().matches("[0-9]+")){finish();return;}
+        balance=parseLong(sessionManager.getBalance());
         buildUi();
+        recovery=new DriverWalletRecovery(this,uiScope,"withdraw",new DriverWalletRecovery.Host(){
+            public void busy(boolean value){walletBusy=value;submitBtn.setEnabled(!value&&!loading);submitBtn.setText(value?"Memeriksa operasi…":"Ajukan Withdraw  →");}
+            public void completed(JSONObject receipt){
+                if(receipt.has("balance")){balance=receipt.optLong("balance");balanceText.setText(rupiah(balance));uiScope.owner.runIfCurrent(()->sessionManager.put("balance",String.valueOf(balance)));}
+                if(receipt.optBoolean("success")){amountInput.setText("");noteInput.setText("");}
+                loadAll(false);
+            }
+            public void retry(JSONObject payload){if(payload!=null)PremiumDialogs.builder(DriverWithdrawActivity.this)
+                .setTitle("Kirim ulang pengajuan yang sama?").setMessage("ID, nominal, dan rekening tetap sama. Hasil tidak diubah oleh tombol Periksa hasil.")
+                .setPositiveButton("Kirim ulang",(d,w)->recovery.submit(payload)).setNegativeButton("Batal",null).show();}
+        });
         loadAll(true);
     }
 
     @Override protected void onResume() {
         super.onResume();
+        if(uiScope==null||!uiScope.alive())return;
         loadAll(false);
+        if(recovery!=null)recovery.restore();
     }
 
     private void buildUi() {
@@ -282,12 +301,12 @@ public class DriverWithdrawActivity extends Activity {
     private void loadAll(boolean show) {
         if (loading) return;
         setBusy(true, show);
-        DriverNetworkExecutor.execute(() -> {
+        uiScope.execute(() -> {
             String balanceJson = "", wdJson = "";
             try { balanceJson = get(SERVER + "driver_wallet_summary.php?v=" + System.currentTimeMillis()); } catch (Exception ignored) {}
             try { wdJson = get(SERVER + "getDriverWithdrawals.php?v=" + System.currentTimeMillis()); } catch (Exception ignored) {}
             final String fb = balanceJson, fw = wdJson;
-            mainHandler.post(() -> {
+            uiScope.post(() -> {
                 setBusy(false, false);
                 showBalance(fb);
                 showHistory(fw);
@@ -297,10 +316,11 @@ public class DriverWithdrawActivity extends Activity {
 
     private void showBalance(String json) {
         try {
-            JSONObject o = new JSONObject(json);
-            balance = o.optBoolean("success", false) ? o.optLong("balance", 0) : 0;
-        } catch (Exception e) { balance = 0; }
-        balanceText.setText(rupiah(balance));
+            JSONObject result=new JSONObject(json);
+            if(!result.optBoolean("success")||!result.has("balance"))throw new IllegalStateException();
+            balance=result.getLong("balance");balanceText.setText(rupiah(balance));
+            uiScope.owner.runIfCurrent(()->sessionManager.put("balance",String.valueOf(balance)));
+        }catch(Exception error){balanceText.setText(rupiah(balance)+" • belum diperbarui");}
     }
 
     private void showHistory(String json) {
@@ -400,66 +420,24 @@ public class DriverWithdrawActivity extends Activity {
                 .show();
     }
 
-    private void submitWithdraw(long amount, String bank, String accNo, String accName, String note) {
-        if (loading) return;
-        setBusy(true, true);
-        submitBtn.setText("Memproses...");
-        DriverNetworkExecutor.execute(() -> {
-            try {
-                JSONObject p = new JSONObject();
-                p.put("username", username);
-                p.put("amount", amount);
-                String method = isEwallet(bank)
-                        ? "ewallet"
-                        : "bank";
-                p.put("method", method);
-                p.put("bank_name", bank);
-                p.put("account_number", accNo);
-                p.put("account_name", accName);
-                p.put("note", note);
-                p.put("request_id", "WD-" + System.currentTimeMillis() + "-" + java.util.UUID.randomUUID().toString().substring(0, 8));
-                JSONObject res = post(SERVER + "requestDriverWithdraw.php", p);
-                boolean ok = res.optBoolean("success", false);
-                String msg = firstNonEmpty(res.optString("message"), ok ? "WD berhasil diajukan" : "WD gagal");
-                mainHandler.post(() -> {
-                    setBusy(false, false);
-                    submitBtn.setText("Ajukan Withdraw  →");
-                    Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
-                    if (ok) {
-                        amountInput.setText("");
-                        noteInput.setText("");
-                        accountNumberInput.setText("");
-                        accountNameInput.setText("");
-                        otherBankInput.setText("");
-                        bankSpinner.setSelection(0);
-                    }
-                    loadAll(false);
-                });
-            } catch (Exception e) {
-                mainHandler.post(() -> {
-                    setBusy(false, false);
-                    submitBtn.setText("Ajukan Withdraw  →");
-                    showInfo("Gagal", "Koneksi gagal mengajukan WD.");
-                });
-            }
-        });
+    private void submitWithdraw(long amount,String bank,String accNo,String accName,String note) {
+        if(loading||walletBusy||!uiScope.alive())return;
+        try {
+            JSONObject payload=new JSONObject().put("amount",amount).put("method",isEwallet(bank)?"ewallet":"bank")
+                .put("bank_name",bank).put("account_number",accNo).put("account_name",accName).put("note",note)
+                .put("request_id","WD-"+java.util.UUID.randomUUID().toString());
+            recovery.submit(payload);
+        }catch(Exception error){showInfo("Pengajuan belum dapat dimulai","Data pengajuan tidak valid.");}
     }
 
     private void setBusy(boolean b, boolean show) {
         loading = b;
         if (progressBar != null) progressBar.setVisibility(b && show ? View.VISIBLE : View.GONE);
-        if (submitBtn != null) submitBtn.setEnabled(!b);
+        if (submitBtn != null) submitBtn.setEnabled(!b&&!walletBusy);
         if (backBtn != null) backBtn.setEnabled(!b);
     }
 
-    private void applySecurityHeaders(HttpURLConnection c) {
-        String token = sessionManager == null ? "" : sessionManager.getToken();
-        if (token != null && !token.trim().isEmpty()) {
-            c.setRequestProperty("Authorization", "Bearer " + token.trim());
-        }
-        c.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(this));
-        c.setRequestProperty("X-App-Scope", "driver");
-    }
+    private void applySecurityHeaders(HttpURLConnection c) throws Exception {uiScope.owner.pin(c);}
 
     private String get(String link) throws Exception {
         HttpURLConnection c = com.transiva.app.driver.data.DriverConnectionRepository.open(link);
@@ -467,25 +445,7 @@ public class DriverWithdrawActivity extends Activity {
         c.setRequestMethod("GET"); c.setRequestProperty("Accept", "application/json");
         applySecurityHeaders(c);
         InputStream is = c.getResponseCode() >= 400 ? c.getErrorStream() : c.getInputStream();
-        String body = read(is); c.disconnect(); return body;
-    }
-
-    private JSONObject post(String link, JSONObject payload) throws Exception {
-        HttpURLConnection c = com.transiva.app.driver.data.DriverConnectionRepository.open(link);
-        c.setConnectTimeout(TIMEOUT_MS); c.setReadTimeout(TIMEOUT_MS);
-        c.setRequestMethod("POST"); c.setDoOutput(true);
-        c.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-        c.setRequestProperty("Accept", "application/json");
-        applySecurityHeaders(c);
-        String requestId = payload == null ? "" : payload.optString("request_id", "");
-        if (!requestId.isEmpty()) c.setRequestProperty("Idempotency-Key", requestId);
-        OutputStream os = c.getOutputStream();
-        BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(os, StandardCharsets.UTF_8));
-        bw.write(payload == null ? "{}" : payload.toString()); bw.flush(); bw.close(); os.close();
-        InputStream is = c.getResponseCode() >= 400 ? c.getErrorStream() : c.getInputStream();
-        String body = read(is); c.disconnect();
-        if (body == null || body.trim().length() == 0) return new JSONObject();
-        return new JSONObject(body);
+        String body = read(is);uiScope.owner.check();uiScope.owner.release(c);c.disconnect();return body;
     }
 
     private String read(InputStream is) throws Exception {
@@ -528,4 +488,5 @@ public class DriverWithdrawActivity extends Activity {
     private String statusStroke(String s) { if ("approved".equals(s)) return "#A7F3D0"; if ("rejected".equals(s)) return "#FECACA"; return "#FDE68A"; }
     private void showInfo(String title, String msg) { try { PremiumDialogs.builder(this).setTitle(title).setMessage(msg).setPositiveButton("OK", null).show(); } catch (Exception ignored) {} }
     private int dp(int v) { return (int)(v * getResources().getDisplayMetrics().density + 0.5f); }
+    @Override protected void onDestroy(){if(uiScope!=null)uiScope.close();super.onDestroy();}
 }

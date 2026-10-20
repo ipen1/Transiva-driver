@@ -33,6 +33,7 @@ import java.text.NumberFormat;
 import java.util.Locale;
 
 public class DriverReceiptHistoryActivity extends Activity {
+    private DriverUiScope uiScope;
     private static final String API_URL = "https://transiva.my.id/server/getDriverReceipts.php";
     private static final int TIMEOUT_MS = 20000;
 
@@ -54,6 +55,7 @@ public class DriverReceiptHistoryActivity extends Activity {
         setupBars();
         session = new SessionManager(this);
         try { username = firstNonEmpty(session.getUsername(), session.getName()); } catch (Exception ignored) {}
+        uiScope=new DriverUiScope(this);
         buildUi();
         loadReceipts();
     }
@@ -146,11 +148,11 @@ public class DriverReceiptHistoryActivity extends Activity {
         }
         loading=true;
         if(receipts.length()==0)progressBar.setVisibility(View.VISIBLE);
-        DriverNetworkExecutor.execute(()->{
+        uiScope.execute(()->{
             String body="";
             try{body=get(API_URL+"?v="+System.currentTimeMillis());}catch(Exception ignored){}
             final String result=body;
-            mainHandler.post(()->{
+            uiScope.post(()->{
                 loading=false;progressBar.setVisibility(View.GONE);
                 if(result.isEmpty()){
                     if(receipts.length()==0)renderEmpty("⚠️","Gagal Memuat Riwayat","Periksa koneksi lalu coba lagi.");
@@ -351,13 +353,10 @@ public class DriverReceiptHistoryActivity extends Activity {
         c.setReadTimeout(TIMEOUT_MS);
         c.setRequestMethod("GET");
         c.setRequestProperty("Accept", "application/json");
-        String token = session == null ? "" : firstNonEmpty(session.getToken());
-        if (!token.isEmpty()) c.setRequestProperty("Authorization", "Bearer " + token);
-        c.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(this));
-        c.setRequestProperty("X-App-Scope", "driver");
+        uiScope.owner.pin(c);
         InputStream is = c.getResponseCode() >= 400 ? c.getErrorStream() : c.getInputStream();
         String r = read(is);
-        c.disconnect();
+        uiScope.owner.check();uiScope.owner.release(c);c.disconnect();
         return r;
     }
     private String read(InputStream is) throws Exception {
@@ -379,4 +378,5 @@ public class DriverReceiptHistoryActivity extends Activity {
     private String rupiah(double v) { return "Rp " + NumberFormat.getNumberInstance(new Locale("id", "ID")).format((long) v); }
     private String firstNonEmpty(String... vals) { if (vals == null) return ""; for (String v: vals) if (v != null && v.trim().length() > 0 && !"null".equalsIgnoreCase(v.trim())) return v.trim(); return ""; }
     private int dp(int v) { return (int)(v * getResources().getDisplayMetrics().density + 0.5f); }
+    @Override protected void onDestroy(){if(uiScope!=null)uiScope.close();super.onDestroy();}
 }

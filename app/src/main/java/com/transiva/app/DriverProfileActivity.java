@@ -26,6 +26,7 @@ import org.json.JSONObject;
 import java.text.NumberFormat;
 import java.util.Locale;
 public class DriverProfileActivity extends DriverProfileActivityLayer1 {
+    private DriverUiScope uiScope;
     private LinearLayout performanceOptions, accountDetails, locationDetails, documentDetails;
     private ScrollView profileScroll;
     private boolean hasProfile;
@@ -62,6 +63,7 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
             return;
         }
 
+        uiScope=new DriverUiScope(this);
         api = new DriverApiClient(session);
         setContentView(buildScreen());
         DriverAppSettings.apply(this);
@@ -80,6 +82,7 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
 
     @Override
     protected void onDestroy() {
+        if(uiScope!=null)uiScope.close();
         if (api != null) api.shutdown();
         super.onDestroy();
     }
@@ -130,7 +133,7 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
 
         shell.addView(
                 DriverBottomNavigation.build(this, DriverBottomNavigation.ActiveItem.PROFILE),
-                new LinearLayout.LayoutParams(-1, dp(66))
+                new LinearLayout.LayoutParams(-1, DriverBottomNavigation.height(this))
         );
 
         loading = new ProgressBar(this);
@@ -410,24 +413,24 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
         if (loadingData || api == null) return;
         setLoading(true);
 
-        api.executor().execute(() -> {
+        uiScope.execute(() -> {
             try {
                 DriverApiClient.Result result = api.get(PROFILE_ENDPOINT + System.currentTimeMillis());
                 JSONObject profile = result.body.optJSONObject("profile");
                 if (profile == null) throw new IllegalStateException("Data profil kosong.");
-                session.updateDriverRuntime(profile);
-                runOnUiThread(() -> {
+                uiScope.owner.runIfCurrent(()->session.updateDriverRuntime(profile));
+                uiScope.post(() -> {
                     bindProfile(profile);
                     setLoading(false);
                 });
             } catch (DriverApiClient.ApiException error) {
-                runOnUiThread(() -> {
+                uiScope.post(() -> {
                     setLoading(false);
                     showInfo(error.status == 401 ? "Sesi Berakhir" : "Profil Gagal Dimuat",
                             error.status == 401 ? "Silakan login kembali." : first(error.getMessage(), "Tidak dapat mengambil profil driver."));
                 });
             } catch (Exception error) {
-                runOnUiThread(() -> {
+                uiScope.post(() -> {
                     setLoading(false);
                     showInfo("Profil Gagal Dimuat", first(error.getMessage(), "Data profil tidak valid."));
                 });

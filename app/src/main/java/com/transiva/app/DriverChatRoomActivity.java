@@ -63,6 +63,8 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
         DriverSystemBars.setNavigationBarColor(this, Color.parseColor("#071426"));
 
         session = new SessionManager(this);
+        chatScope=new DriverUiScope(this);
+        if(!chatScope.alive()){finish();return;}
         readIntent();
         DriverMessageUnreadRepository.markRead(this, orderId, roomId);
         setContentView(buildScreen());
@@ -383,7 +385,7 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
         setSendingEnabled(false);
         progress.setVisibility(View.VISIBLE);
 
-        DriverNetworkExecutor.execute(() -> {
+        chatScope.execute(() -> {
             try {
                 ChatImageProcessor.ImagePayload payload =
                         ChatImageProcessor.fromUri(
@@ -414,7 +416,7 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
         setSendingEnabled(false);
         progress.setVisibility(View.VISIBLE);
 
-        DriverNetworkExecutor.execute(() -> {
+        chatScope.execute(() -> {
             File file = new File(path);
 
             try {
@@ -451,14 +453,10 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
                 addPendingPhotoBubble(payload);
         scrollBottom();
 
-        DriverNetworkExecutor.execute(() -> {
+        chatScope.execute(() -> {
             try {
                 JSONObject response =
-                        DriverChatMediaApi.uploadImagePair(
-                                UPLOAD_IMAGE_URL,
-                                roomId,
-                                "driver",
-                                payload);
+                        DriverMessageApi.uploadImagePair(session,UPLOAD_IMAGE_URL,orderId,orderSource,roomId,payload,chatScope.owner);
 
                 postUi(() -> {
                     uploading = false;

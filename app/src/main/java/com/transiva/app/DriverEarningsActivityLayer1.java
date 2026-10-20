@@ -232,9 +232,7 @@ abstract class DriverEarningsActivityLayer1 extends Activity {
         view.setText(value);
         view.setTextSize(size);
 
-        view.setTextColor(
-                Color.parseColor(color)
-        );
+        view.setTextColor(DriverThemeTokens.textColor(this,color));
 
         view.setIncludeFontPadding(false);
 

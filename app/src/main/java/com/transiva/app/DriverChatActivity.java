@@ -37,6 +37,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 public class DriverChatActivity extends DriverChatActivityLayer1 {
+    private DriverUiScope uiScope;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -52,6 +53,7 @@ public class DriverChatActivity extends DriverChatActivityLayer1 {
             return;
         }
 
+        uiScope=new DriverUiScope(this);
         setContentView(buildScreen());
         DriverAppSettings.apply(this);
         DriverChatNotificationPoller.requestPermission(this);
@@ -163,7 +165,7 @@ public class DriverChatActivity extends DriverChatActivityLayer1 {
                         this,
                         DriverBottomNavigation.ActiveItem.CHAT
                 ),
-                new LinearLayout.LayoutParams(-1, dp(66))
+                new LinearLayout.LayoutParams(-1, DriverBottomNavigation.height(this))
         );
 
         progress = new ProgressBar(this);
@@ -232,7 +234,7 @@ public class DriverChatActivity extends DriverChatActivityLayer1 {
         progress.setVisibility(View.VISIBLE);
         render();
 
-        DriverNetworkExecutor.execute(() -> {
+        uiScope.execute(() -> {
             try {
                 // Endpoint ini melakukan autentikasi driver dari Bearer token.
                 // Jangan memakai endpoint customer dengan driver_id karena endpoint
@@ -258,7 +260,7 @@ public class DriverChatActivity extends DriverChatActivityLayer1 {
                     }
                 }
 
-                main.post(() -> {
+                uiScope.post(() -> {
                     java.util.Set<String> activeIds = new java.util.HashSet<>();
                     for (JSONObject item : fresh) {
                         boolean ended = item.optBoolean("is_history", false)
@@ -275,7 +277,7 @@ public class DriverChatActivity extends DriverChatActivityLayer1 {
                 });
 
             } catch (Exception error) {
-                main.post(() -> {
+                uiScope.post(() -> {
                     loading = false;
                     progress.setVisibility(View.GONE);
                     render();
@@ -296,12 +298,7 @@ public class DriverChatActivity extends DriverChatActivityLayer1 {
             connection.setReadTimeout(20000);
             connection.setUseCaches(false);
             connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty(
-                    "Authorization",
-                    "Bearer " + session.getToken()
-            );
-            connection.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(this));
-            connection.setRequestProperty("X-App-Scope", "driver");
+            uiScope.owner.pin(connection);
 
             int status = connection.getResponseCode();
             InputStream input = status >= 200 && status < 400
@@ -349,9 +346,11 @@ public class DriverChatActivity extends DriverChatActivityLayer1 {
                         response.optString("message", "HTTP " + status));
             }
 
+            uiScope.owner.check();
             return response;
 
         } finally {
+            uiScope.owner.release(connection);
             if (connection != null) connection.disconnect();
         }
     }
@@ -361,7 +360,7 @@ public class DriverChatActivity extends DriverChatActivityLayer1 {
 
         listBox.removeAllViews();
 
-        if (loading) {
+        if (loading && conversations.isEmpty()) {
             addState(
                     "Memuat percakapan...",
                     "Daftar pesan driver sedang diperbarui."
@@ -376,6 +375,7 @@ public class DriverChatActivity extends DriverChatActivityLayer1 {
                     || DriverMessageStatus.isEnded(
                     item.optString("status", ""));
 
+            if(history && item.optString("last_message","").trim().isEmpty() && item.optInt("last_message_id",0)==0)continue;
             if (selectedTab.equals("history") == history) {
                 filtered.add(item);
             }
@@ -406,4 +406,5 @@ public class DriverChatActivity extends DriverChatActivityLayer1 {
             listBox.addView(conversationCard(item));
         }
     }
+    @Override protected void onDestroy(){if(uiScope!=null)uiScope.close();super.onDestroy();}
 }

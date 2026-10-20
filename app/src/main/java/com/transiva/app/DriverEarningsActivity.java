@@ -24,6 +24,8 @@ import com.transiva.app.driver.domain.DriverDashboardState;
 import java.text.NumberFormat;
 import java.util.Locale;
 public class DriverEarningsActivity extends DriverEarningsActivityLayer1 {
+    private DriverUiScope uiScope;
+    private TextView walletSync;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -45,6 +47,7 @@ public class DriverEarningsActivity extends DriverEarningsActivityLayer1 {
             return;
         }
 
+        uiScope=new DriverUiScope(this);
         setContentView(buildScreen());
         DriverAppSettings.apply(this);
     }
@@ -56,6 +59,7 @@ public class DriverEarningsActivity extends DriverEarningsActivityLayer1 {
 
         // Tampilkan cache terlebih dahulu agar UI tidak kosong, kemudian langsung
         // sinkronkan dengan endpoint dashboard yang juga dipakai halaman utama.
+        if(uiScope==null||!uiScope.alive())return;
         renderCachedBalance();
         realtimeHandler.removeCallbacks(realtimeRefresh);
         realtimeHandler.post(realtimeRefresh);
@@ -70,6 +74,7 @@ public class DriverEarningsActivity extends DriverEarningsActivityLayer1 {
 
     @Override
     protected void onDestroy() {
+        if(uiScope!=null)uiScope.close();
         screenVisible = false;
         realtimeHandler.removeCallbacksAndMessages(null);
         if (dashboardRepository != null) dashboardRepository.destroy();
@@ -85,14 +90,16 @@ public class DriverEarningsActivity extends DriverEarningsActivityLayer1 {
     protected void loadRealtimeWallet() {
         if (refreshInFlight || dashboardRepository == null || !screenVisible) return;
         refreshInFlight = true;
+        if(walletSync!=null)walletSync.setText("Memperbarui saldo…");
 
         dashboardRepository.loadDashboard(new DriverDashboardRepository.DashboardCallback() {
             @Override
             public void onSuccess(DriverDashboardState state) {
-                runOnUiThread(() -> {
+                uiScope.post(() -> {
                     refreshInFlight = false;
                     if (!screenVisible || state == null) return;
 
+                    if(walletSync!=null)walletSync.setText("Saldo diperbarui • "+new java.text.SimpleDateFormat("HH:mm",java.util.Locale.getDefault()).format(new java.util.Date()));
                     balanceText.setText(rupiah(state.balance));
                     if (todayEarningText != null) todayEarningText.setText(rupiah(state.todayEarning));
                     if (pendingDepositText != null) pendingDepositText.setText(rupiah(state.pendingDeposit));
@@ -106,8 +113,10 @@ public class DriverEarningsActivity extends DriverEarningsActivityLayer1 {
 
             @Override
             public void onError(int httpCode, String code, String message) {
-                runOnUiThread(() -> {
+                uiScope.post(() -> {
                     refreshInFlight = false;
+                    if(!screenVisible)return;
+                    if(walletSync!=null)walletSync.setText("Data terakhir • pembaruan gagal. Ketuk untuk mencoba lagi.");
                     if (httpCode == 401 || httpCode == 403
                             || "UNAUTHORIZED".equalsIgnoreCase(code)
                             || "SESSION_EXPIRED".equalsIgnoreCase(code)) {
@@ -191,6 +200,10 @@ public class DriverEarningsActivity extends DriverEarningsActivityLayer1 {
         content.setOrientation(
                 LinearLayout.VERTICAL
         );
+        walletSync=new TextView(this);walletSync.setTextSize(12);walletSync.setTextColor(DriverThemeTokens.textSecondary(this));
+        walletSync.setText("Saldo terakhir • menunggu pembaruan");walletSync.setPadding(0,dp(8),0,dp(8));
+        walletSync.setOnClickListener(v->loadRealtimeWallet());content.addView(walletSync);
+
 
         content.setPadding(
                 dp(14),
@@ -448,7 +461,7 @@ public class DriverEarningsActivity extends DriverEarningsActivityLayer1 {
                 ),
                 new LinearLayout.LayoutParams(
                         -1,
-                        dp(66)
+                        DriverBottomNavigation.height(this)
                 )
         );
 

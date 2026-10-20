@@ -70,15 +70,15 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
     protected void sendEmergency() {
         showLoading(true);
         DriverNetworkRepository api = new DriverNetworkRepository(session);
-        api.executor().execute(() -> {
+        dashboardScope.execute(() -> {
             try {
                 JSONObject body = session.getLastLocationJson();
                 body.put("message", "Membutuhkan bantuan darurat");
                 body.put("current_order_id", clean(session.get("current_order_id")));
                 api.post("driver_sos_native.php", body);
-                runOnUiThread(() -> { showLoading(false); showMessage("SOS terkirim ke seluruh driver dan admin."); });
+                dashboardScope.post(() -> { showLoading(false); showMessage("SOS terkirim ke seluruh driver dan admin."); });
             } catch (Exception error) {
-                runOnUiThread(() -> { showLoading(false); showMessage("SOS gagal dikirim. Hubungi admin melalui telepon bila kondisi darurat."); });
+                dashboardScope.post(() -> { showLoading(false); showMessage("SOS gagal dikirim. Hubungi admin melalui telepon bila kondisi darurat."); });
             }
         });
     }

@@ -355,7 +355,7 @@ abstract class DriverProfileActivityLayer1 extends Activity {
         TextView view = new TextView(this);
         view.setText(value == null ? "" : value);
         view.setTextSize(size);
-        view.setTextColor(Color.parseColor(color));
+        view.setTextColor(DriverThemeTokens.textColor(this, color));
         view.setIncludeFontPadding(false);
         if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         return view;

@@ -39,6 +39,7 @@ import java.util.Locale;
 import java.util.UUID;
 
 public class DriverTopUpActivity extends Activity {
+    private DriverUiScope uiScope;
     private static final String BASE_URL = "https://transiva.my.id/";
     private static final int MIN_DEPOSIT = 10000;
     private static final int REQ_PAY = 7301;
@@ -62,6 +63,7 @@ public class DriverTopUpActivity extends Activity {
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         session = new SessionManager(this);
+        uiScope=new DriverUiScope(this);
         build();
     }
 
@@ -171,11 +173,11 @@ public class DriverTopUpActivity extends Activity {
         if(proofUri==null){info("Bukti Transfer","Pilih foto bukti transfer terlebih dahulu.");return;}
         setBusy(true,"Mengirim deposit manual..."); manualSubmitButton.setEnabled(false);
         final Uri uri=proofUri;
-        DriverNetworkExecutor.execute(() -> {
+        uiScope.execute(() -> {
             try {
                 JSONObject j=uploadManual(amount,uri); boolean ok=j.optBoolean("success",false); String msg=j.optString("message",ok?"Deposit dikirim":"Deposit gagal");
-                main.post(() -> { manualSubmitButton.setEnabled(true); setBusy(false,msg); if(ok){ proofUri=null; proofNameText.setText("Belum ada bukti dipilih"); amountInput.setText(""); loadState(false); info("Deposit Terkirim","Deposit manual menunggu verifikasi admin."); } else info("Deposit Manual",msg); });
-            } catch(Exception e){ main.post(() -> {manualSubmitButton.setEnabled(true);setBusy(false,"Koneksi bermasalah");info("Deposit Manual","Gagal mengirim deposit manual.");}); }
+                uiScope.post(() -> { manualSubmitButton.setEnabled(true); setBusy(false,msg); if(ok){ proofUri=null; proofNameText.setText("Belum ada bukti dipilih"); amountInput.setText(""); loadState(false); info("Deposit Terkirim","Deposit manual menunggu verifikasi admin."); } else info("Deposit Manual",msg); });
+            } catch(Exception e){ uiScope.post(() -> {manualSubmitButton.setEnabled(true);setBusy(false,"Koneksi bermasalah");info("Deposit Manual","Gagal mengirim deposit manual.");}); }
         });
     }
 
@@ -183,15 +185,15 @@ public class DriverTopUpActivity extends Activity {
         String boundary="----Transiva"+System.currentTimeMillis(); HttpURLConnection c=null;
         try {
             c=com.transiva.app.driver.data.DriverConnectionRepository.open(BASE_URL+"server/uploadDeposit.php"); c.setRequestMethod("POST"); c.setConnectTimeout(TIMEOUT); c.setReadTimeout(TIMEOUT); c.setDoOutput(true);
-            c.setRequestProperty("Accept","application/json"); c.setRequestProperty("Authorization","Bearer "+session.getToken().trim()); c.setRequestProperty("X-Device-UUID",DeviceIdentityManager.getInstallationUuid(this)); c.setRequestProperty("X-App-Scope","driver"); c.setRequestProperty("Content-Type","multipart/form-data; boundary="+boundary);
+            c.setRequestProperty("Accept","application/json"); uiScope.owner.pin(c); c.setRequestProperty("Content-Type","multipart/form-data; boundary="+boundary);
             String crlf="\r\n"; OutputStream out=c.getOutputStream();
             out.write(("--"+boundary+crlf+"Content-Disposition: form-data; name=\"amount\""+crlf+crlf+amount+crlf).getBytes(StandardCharsets.UTF_8));
             String name=displayName(uri); String mime=getContentResolver().getType(uri); if(mime==null)mime="image/jpeg";
             out.write(("--"+boundary+crlf+"Content-Disposition: form-data; name=\"proof\"; filename=\""+name.replace("\"","")+"\""+crlf+"Content-Type: "+mime+crlf+crlf).getBytes(StandardCharsets.UTF_8));
             try(InputStream in=getContentResolver().openInputStream(uri)){ byte[] buf=new byte[8192]; int n; while(in!=null&&(n=in.read(buf))>0)out.write(buf,0,n); }
             out.write((crlf+"--"+boundary+"--"+crlf).getBytes(StandardCharsets.UTF_8)); out.flush(); out.close();
-            int code=c.getResponseCode(); InputStream is=(code>=200&&code<300)?c.getInputStream():c.getErrorStream(); String raw=read(is); return raw.trim().isEmpty()?new JSONObject():new JSONObject(raw);
-        } finally {if(c!=null)c.disconnect();}
+            int code=c.getResponseCode(); InputStream is=(code>=200&&code<300)?c.getInputStream():c.getErrorStream(); String raw=read(is); return raw.trim().isEmpty()?new JSONObject():checkedJson(raw);
+        } finally {if(c!=null){uiScope.owner.release(c);c.disconnect();}}
     }
 
     private void infoCard() {
@@ -207,11 +209,11 @@ public class DriverTopUpActivity extends Activity {
 
     private void loadState(boolean showBusy) {
         if (showBusy) progress.setVisibility(View.VISIBLE);
-        DriverNetworkExecutor.execute(() -> {
+        uiScope.execute(() -> {
             try {
                 JSONObject wallet = getJson(BASE_URL+"server/driver_wallet_summary.php");
                 JSONObject act = getJson(BASE_URL+"server/driver_midtrans_active.php");
-                main.post(() -> {
+                uiScope.post(() -> {
                     progress.setVisibility(View.GONE);
                     if(wallet.optBoolean("success",false)) {
                         balanceText.setText(rupiah(wallet.optDouble("balance",0)));
@@ -220,7 +222,7 @@ public class DriverTopUpActivity extends Activity {
                     if(act.optBoolean("success",false)) applyActiveState(act);
                 });
             } catch(Exception e) {
-                main.post(() -> { progress.setVisibility(View.GONE); setStatus("Tidak dapat memperbarui status deposit."); });
+                uiScope.post(() -> { progress.setVisibility(View.GONE); setStatus("Tidak dapat memperbarui status deposit."); });
             }
         });
     }
@@ -253,24 +255,24 @@ public class DriverTopUpActivity extends Activity {
             if(cooldownSeconds<=0){ cooldownText.setVisibility(View.GONE); if(activeOrderId.isEmpty()) setDepositEnabled(true); setStatus("Anda dapat membuat deposit baru."); return; }
             cooldownText.setText("Deposit baru tersedia dalam 00:"+String.format(Locale.US,"%02d",cooldownSeconds)); cooldownSeconds--; main.postDelayed(this,1000);
         }};
-        main.post(cooldownTicker);
+        uiScope.post(cooldownTicker);
     }
 
     private void createPayment() {
         int amount=parse(amountInput.getText().toString()); if(amount<MIN_DEPOSIT){info("Nominal Tidak Valid","Minimal deposit Rp10.000.");return;}
         setBusy(true,"Menyiapkan transaksi...");
-        DriverNetworkExecutor.execute(() -> {
+        uiScope.execute(() -> {
             try {
                 JSONObject req=new JSONObject(); req.put("amount",amount);
                 JSONObject j=postJson(BASE_URL+"server/driver_midtrans_create.php",req,UUID.randomUUID().toString());
                 boolean ok=j.optBoolean("success",false); String msg=j.optString("message","Gagal membuat deposit"); String url=j.optString("redirect_url",""); String order=j.optString("order_id",""); int cd=j.optInt("cooldown_seconds",0);
-                main.post(() -> {
+                uiScope.post(() -> {
                     setBusy(false,msg);
                     if(!ok){ if(cd>0) startCooldown(cd); info("Deposit",msg); loadState(false); return; }
                     activeOrderId=order; activePaymentUrl=url; activeAmountValue=j.optInt("amount",amount); loadState(false);
                     if(!url.isEmpty()) openPayment(url,order,activeAmountValue);
                 });
-            } catch(Exception e) { main.post(() -> { setBusy(false,"Koneksi bermasalah"); info("Koneksi","Gagal menghubungi server pembayaran."); }); }
+            } catch(Exception e) { uiScope.post(() -> { setBusy(false,"Koneksi bermasalah"); info("Koneksi","Gagal menghubungi server pembayaran."); }); }
         });
     }
 
@@ -296,17 +298,17 @@ public class DriverTopUpActivity extends Activity {
     private void checkActivePayment(int attempt) {
         if(activeOrderId.isEmpty()){ loadState(false); return; }
         setStatus(attempt==0?"Memeriksa status pembayaran...":"Menunggu konfirmasi Midtrans...");
-        DriverNetworkExecutor.execute(() -> {
+        uiScope.execute(() -> {
             try {
                 JSONObject b=new JSONObject(); b.put("order_id",activeOrderId); JSONObject j=postJson(BASE_URL+"server/driver_midtrans_status.php",b,null); JSONObject d=j.optJSONObject("deposit"); String st=d==null?"":d.optString("status",""); int balance=j.optInt("balance",0);
-                main.post(() -> {
+                uiScope.post(() -> {
                     balanceText.setText(rupiah(balance));
                     if("PAID".equalsIgnoreCase(st)){ activeOrderId=""; activePaymentUrl=""; setStatus("✅ Deposit berhasil. Saldo sudah masuk otomatis."); loadState(false); info("Deposit Berhasil","Pembayaran sudah terkonfirmasi dan saldo driver telah ditambahkan."); }
                     else if("CANCELLED".equalsIgnoreCase(st)||"EXPIRED".equalsIgnoreCase(st)||"FAILED".equalsIgnoreCase(st)){ loadState(false); }
                     else if(attempt<3) main.postDelayed(() -> checkActivePayment(attempt+1),2500);
                     else loadState(false);
                 });
-            } catch(Exception e){ main.post(() -> loadState(false)); }
+            } catch(Exception e){ uiScope.post(() -> loadState(false)); }
         });
     }
 
@@ -322,15 +324,15 @@ public class DriverTopUpActivity extends Activity {
 
     private void cancelActive() {
         final String order=activeOrderId; setBusy(true,"Membatalkan transaksi..."); cancelButton.setEnabled(false);
-        DriverNetworkExecutor.execute(() -> {
+        uiScope.execute(() -> {
             try {
                 JSONObject b=new JSONObject(); b.put("order_id",order); JSONObject j=postJson(BASE_URL+"server/driver_midtrans_cancel.php",b,UUID.randomUUID().toString()); boolean ok=j.optBoolean("success",false); String msg=j.optString("message","Gagal membatalkan deposit"); int cd=j.optInt("cooldown_seconds",0);
-                main.post(() -> {
+                uiScope.post(() -> {
                     cancelButton.setEnabled(true); setBusy(false,msg);
                     if(ok){ activeOrderId=""; activePaymentUrl=""; activeCard.setVisibility(View.GONE); startCooldown(cd>0?cd:60); loadState(false); info("Deposit Dibatalkan","Transaksi berhasil dibatalkan. Deposit baru dapat dibuat setelah 1 menit."); }
                     else { info("Tidak Dapat Dibatalkan",msg); checkActivePayment(0); }
                 });
-            } catch(Exception e){ main.post(() -> { cancelButton.setEnabled(true); setBusy(false,"Koneksi bermasalah"); info("Koneksi","Gagal membatalkan transaksi."); }); }
+            } catch(Exception e){ uiScope.post(() -> { cancelButton.setEnabled(true); setBusy(false,"Koneksi bermasalah"); info("Koneksi","Gagal membatalkan transaksi."); }); }
         });
     }
 
@@ -339,11 +341,10 @@ public class DriverTopUpActivity extends Activity {
     private JSONObject request(String method,String u,JSONObject body,String idem)throws Exception{
         HttpURLConnection c=null; try{
             c=com.transiva.app.driver.data.DriverConnectionRepository.open(u); c.setRequestMethod(method); c.setConnectTimeout(TIMEOUT); c.setReadTimeout(TIMEOUT); c.setRequestProperty("Accept","application/json");
-            String token=session==null?"":session.getToken(); if(token!=null&&!token.trim().isEmpty()) c.setRequestProperty("Authorization","Bearer "+token.trim());
-            c.setRequestProperty("X-Device-UUID",DeviceIdentityManager.getInstallationUuid(this)); c.setRequestProperty("X-App-Scope","driver"); if(idem!=null&&!idem.isEmpty())c.setRequestProperty("Idempotency-Key",idem);
+            uiScope.owner.pin(c); if(idem!=null&&!idem.isEmpty())c.setRequestProperty("Idempotency-Key",idem);
             if(body!=null){ c.setDoOutput(true); c.setRequestProperty("Content-Type","application/json; charset=utf-8"); byte[] bytes=body.toString().getBytes(StandardCharsets.UTF_8); try(OutputStream out=c.getOutputStream()){out.write(bytes);} }
-            int code=c.getResponseCode(); InputStream is=(code>=200&&code<300)?c.getInputStream():c.getErrorStream(); String raw=read(is); return raw.trim().isEmpty()?new JSONObject():new JSONObject(raw);
-        } finally { if(c!=null)c.disconnect(); }
+            int code=c.getResponseCode(); InputStream is=(code>=200&&code<300)?c.getInputStream():c.getErrorStream(); String raw=read(is); return raw.trim().isEmpty()?new JSONObject():checkedJson(raw);
+        } finally { if(c!=null){uiScope.owner.release(c);c.disconnect();} }
     }
     private String read(InputStream in)throws Exception{if(in==null)return"";BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8));StringBuilder s=new StringBuilder();String l;while((l=r.readLine())!=null)s.append(l);r.close();return s.toString();}
     private void setBusy(boolean b,String m){progress.setVisibility(b?View.VISIBLE:View.GONE);if(payButton!=null&&activeOrderId.isEmpty()&&cooldownSeconds<=0){payButton.setEnabled(!b);payButton.setAlpha(b?.65f:1f);}setStatus(m);}
@@ -360,4 +361,6 @@ public class DriverTopUpActivity extends Activity {
     private GradientDrawable gradient(String a,String b,int r){GradientDrawable g=new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,new int[]{DriverThemeTokens.color(this, a),DriverThemeTokens.color(this, b)});g.setCornerRadius(dp(r));return g;}
     private int dp(int v){return(int)(v*getResources().getDisplayMetrics().density+.5f);}
     private void info(String t,String m){try{PremiumDialogs.builder(this).setTitle(t).setMessage(m).setPositiveButton("OK",null).show();}catch(Exception ignored){}}
+    @Override protected void onDestroy(){if(uiScope!=null)uiScope.close();super.onDestroy();}
+    private JSONObject checkedJson(String raw) throws Exception {uiScope.owner.check();return new JSONObject(raw);}
 }

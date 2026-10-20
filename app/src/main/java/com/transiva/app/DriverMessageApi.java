@@ -24,7 +24,7 @@ public final class DriverMessageApi {
             SessionManager session,
             String endpoint
     ) throws Exception {
-        return request(session, "GET", endpoint, null);
+        return request(session, "GET", endpoint, null,DriverSessionOwner.capture(session.getContext()));
     }
 
     public static JSONObject post(
@@ -32,8 +32,11 @@ public final class DriverMessageApi {
             String endpoint,
             JSONObject body
     ) throws Exception {
-        return request(session, "POST", endpoint, body);
+        return request(session, "POST", endpoint, body,DriverSessionOwner.capture(session.getContext()));
     }
+
+    public static JSONObject get(SessionManager session,String endpoint,DriverSessionOwner owner)throws Exception{return request(session,"GET",endpoint,null,owner);}
+    public static JSONObject post(SessionManager session,String endpoint,JSONObject body,DriverSessionOwner owner)throws Exception{return request(session,"POST",endpoint,body,owner);}
 
     public static JSONObject uploadImagePair(
             SessionManager session,
@@ -42,6 +45,17 @@ public final class DriverMessageApi {
             String orderSource,
             String roomId,
             ChatImageProcessor.ImagePayload payload
+    ) throws Exception {
+        return uploadImagePair(session,endpoint,orderId,orderSource,roomId,payload,DriverSessionOwner.capture(session.getContext()));
+    }
+
+    public static JSONObject uploadImagePair(
+            SessionManager session,
+            String endpoint,
+            String orderId,
+            String orderSource,
+            String roomId,
+            ChatImageProcessor.ImagePayload payload, DriverSessionOwner owner
     ) throws Exception {
         if (payload == null
                 || payload.previewWebp == null
@@ -52,6 +66,7 @@ public final class DriverMessageApi {
         String boundary =
                 "----TransivaDriverChat" + System.currentTimeMillis();
 
+        owner.check();
         HttpURLConnection connection = null;
 
         try {
@@ -62,12 +77,7 @@ public final class DriverMessageApi {
             connection.setUseCaches(false);
             connection.setDoOutput(true);
             connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty(
-                    "Authorization",
-                    "Bearer " + session.getToken()
-            );
-            connection.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(session.getContext()));
-            connection.setRequestProperty("X-App-Scope", "driver");
+            owner.pin(connection);
             connection.setRequestProperty(
                     "Content-Type",
                     "multipart/form-data; boundary=" + boundary
@@ -104,9 +114,10 @@ public final class DriverMessageApi {
                 output.flush();
             }
 
-            return readResponse(connection);
+            JSONObject result=readResponse(connection);owner.check();return result;
 
         } finally {
+            owner.release(connection);
             if (connection != null) connection.disconnect();
         }
     }
@@ -120,7 +131,20 @@ public final class DriverMessageApi {
             File file,
             long durationMs
     ) throws Exception {
+        return uploadVoice(session,endpoint,orderId,orderSource,roomId,file,durationMs,DriverSessionOwner.capture(session.getContext()));
+    }
+
+    public static JSONObject uploadVoice(
+            SessionManager session,
+            String endpoint,
+            String orderId,
+            String orderSource,
+            String roomId,
+            File file,
+            long durationMs, DriverSessionOwner owner
+    ) throws Exception {
         String boundary = "----TransivaDriverVoice" + System.currentTimeMillis();
+        owner.check();
         HttpURLConnection connection = null;
         try {
             connection = com.transiva.app.driver.data.DriverConnectionRepository.open(endpoint);
@@ -130,9 +154,7 @@ public final class DriverMessageApi {
             connection.setUseCaches(false);
             connection.setDoOutput(true);
             connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty("Authorization", "Bearer " + session.getToken());
-            connection.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(session.getContext()));
-            connection.setRequestProperty("X-App-Scope", "driver");
+            owner.pin(connection);
             connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
             try (OutputStream output = connection.getOutputStream()) {
                 writeField(output, boundary, "order_id", orderId);
@@ -144,8 +166,8 @@ public final class DriverMessageApi {
                 output.write(("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
                 output.flush();
             }
-            return readResponse(connection);
-        } finally { if (connection != null) connection.disconnect(); }
+            JSONObject result=readResponse(connection);owner.check();return result;
+        } finally {owner.release(connection); if (connection != null) connection.disconnect(); }
     }
 
     private static byte[] readFile(File file) throws Exception {
@@ -158,8 +180,9 @@ public final class DriverMessageApi {
             SessionManager session,
             String method,
             String endpoint,
-            JSONObject body
+            JSONObject body,DriverSessionOwner owner
     ) throws Exception {
+        owner.check();
         HttpURLConnection connection = null;
 
         try {
@@ -170,12 +193,7 @@ public final class DriverMessageApi {
             connection.setUseCaches(false);
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Cache-Control", "no-cache");
-            connection.setRequestProperty(
-                    "Authorization",
-                    "Bearer " + session.getToken()
-            );
-            connection.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(session.getContext()));
-            connection.setRequestProperty("X-App-Scope", "driver");
+            owner.pin(connection);
 
             if (body != null) {
                 connection.setDoOutput(true);
@@ -192,9 +210,10 @@ public final class DriverMessageApi {
                 }
             }
 
-            return readResponse(connection);
+            JSONObject result=readResponse(connection);owner.check();return result;
 
         } finally {
+            owner.release(connection);
             if (connection != null) connection.disconnect();
         }
     }

@@ -119,13 +119,13 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
     protected void uploadVoiceNote(File file, long durationMs) {
         if (readOnly || uploading || file == null) return;
         uploading = true; voiceButton.setEnabled(false);
-        DriverNetworkExecutor.execute(() -> {
+        chatScope.execute(() -> {
             try {
-                JSONObject upload = DriverMessageApi.uploadVoice(session, UPLOAD_VOICE_URL, orderId, orderSource, roomId, file, durationMs);
+                JSONObject upload = DriverMessageApi.uploadVoice(session,UPLOAD_VOICE_URL,orderId,orderSource,roomId,file,durationMs,chatScope.owner);
                 if (!upload.optBoolean("success", false)) throw new IllegalStateException(upload.optString("message", "Upload voice note gagal"));
                 String audioUrl = upload.optString("url", upload.optString("audio_url", ""));
                 JSONObject body = new JSONObject(); body.put("order_id", orderId); body.put("order_db_id", orderDbId); body.put("source", orderSource); body.put("room_id", roomId); body.put("sender_type", "driver"); body.put("message", ChatVoiceNote.encode(audioUrl, durationMs));
-                JSONObject sent = DriverMessageApi.post(session, SEND_CHAT_URL, body);
+                JSONObject sent = DriverMessageApi.post(session,SEND_CHAT_URL,body,chatScope.owner);
                 postUi(() -> { uploading=false; voiceButton.setEnabled(!readOnly); voiceButton.setText("🎙"); if (sent.optBoolean("success", false)) loadMessages(false); else toast(sent.optString("message", "Voice note gagal dikirim")); });
             } catch (Exception e) { postUi(() -> { uploading=false; voiceButton.setEnabled(!readOnly); voiceButton.setText("🎙"); statusText.setText("Voice note pending • jaringan"); toast(first(e.getMessage(), "Voice note gagal dikirim")); }); }
             finally { file.delete(); }
@@ -153,7 +153,7 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
         if (showLoading) progress.setVisibility(View.VISIBLE);
         int requestedLastId = 0;
 
-        DriverNetworkExecutor.execute(() -> {
+        chatScope.execute(() -> {
             try {
                 String endpoint = GET_CHAT_URL
                         + "?order_id="
@@ -180,7 +180,7 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
                 }
 
                 JSONObject response =
-                        DriverMessageApi.get(session, endpoint);
+                        DriverMessageApi.get(session,endpoint,chatScope.owner);
 
                 postUi(() -> {
                     loading = false;
@@ -326,7 +326,7 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
                 SystemClock.elapsedRealtime() - focusedSinceElapsedMs
         );
 
-        DriverNetworkExecutor.execute(() -> {
+        chatScope.execute(() -> {
             try {
                 if (generation != readVisibilityGeneration || !isChatActuallyVisible()) return;
 
@@ -338,7 +338,7 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
                         + "&visible_ms=" + visibleMs
                         + "&read_through_id=" + readThroughId;
 
-                String raw = DriverMessageApi.get(session, endpoint).toString();
+                String raw = DriverMessageApi.get(session,endpoint,chatScope.owner).toString();
                 JSONObject result = new JSONObject(raw == null ? "{}" : raw);
 
                 if (result.optBoolean("success", false)) {

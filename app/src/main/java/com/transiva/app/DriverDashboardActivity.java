@@ -66,6 +66,7 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         requestGpsAfterLogin = getIntent() != null
                 && getIntent().getBooleanExtra("request_gps_after_login", false);
         if (!validSession()) return;
+        dashboardScope=new DriverUiScope(this);
         offerCountdownController = new DashboardOfferCountdownController(this, () -> {
             if (presenter != null) handler.postDelayed(() -> presenter.load(false), 350L);
         });
@@ -73,7 +74,7 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
             @Override public void onCancelConfirmed(DriverOrder order, String reason) {
                 // Prevent a cancelled order from leaving a ghost Pesan badge. If
                 // cancellation fails, a later FCM message can mark it unread again.
-                if (order != null) DriverMessageUnreadRepository.clearOrder(DriverDashboardActivity.this, order.id);
+                // Keep unread markers until the server confirms cancellation.
                 DriverBottomNavigation.refreshUnread(DriverDashboardActivity.this, bottomNavigationView);
                 if (presenter != null) presenter.cancelOrder(order.id, clean(order.source), clean(order.status), reason);
             }
@@ -198,6 +199,7 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
     }
 
     @Override protected void onDestroy() {
+        if(dashboardScope!=null)dashboardScope.close();
         if (refreshController != null) refreshController.destroy();
         handler.removeCallbacksAndMessages(null);
         if (presenter != null) presenter.destroy();
@@ -263,7 +265,7 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
 
         bottomNavigationView = DriverBottomNavigation.build(
                 this, DriverBottomNavigation.ActiveItem.HOME);
-        shell.addView(bottomNavigationView, new LinearLayout.LayoutParams(-1, dp(66)));
+        shell.addView(bottomNavigationView, new LinearLayout.LayoutParams(-1, DriverBottomNavigation.height(this)));
 
         loading = new ProgressBar(this);
         loading.setVisibility(View.GONE);
@@ -350,8 +352,8 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
                 .setPositiveButton("KIRIM SOS", (d, w) -> sendEmergency())
                 .show());
 
-        LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, dp(72), 1.6f);
-        LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(0, dp(72), 0.8f);
+        LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, DriverBottomNavigation.height(this), 1.6f);
+        LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(0, DriverBottomNavigation.height(this), 0.8f);
         right.setMargins(dp(9), 0, 0, 0);
         row.addView(status, left);
         row.addView(sosButton, right);
@@ -504,20 +506,20 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
     protected void saveGrowthSettings(long goal, String mode, String label) {
         showLoading(true);
         DriverNetworkRepository api = new DriverNetworkRepository(session);
-        api.executor().execute(() -> {
+        dashboardScope.execute(() -> {
             try {
                 JSONObject body = new JSONObject();
                 body.put("daily_goal", goal);
                 body.put("destination_mode", mode);
                 body.put("destination_label", label);
                 api.postIdempotent("driver_growth_native.php", body);
-                runOnUiThread(() -> {
+                dashboardScope.post(() -> {
                     showLoading(false);
                     Toast.makeText(this, "Driver Growth disimpan", Toast.LENGTH_SHORT).show();
                     if (presenter != null) presenter.load(false);
                 });
             } catch (Exception error) {
-                runOnUiThread(() -> {
+                dashboardScope.post(() -> {
                     showLoading(false);
                     Toast.makeText(this, "Gagal menyimpan Driver Growth: " + error.getMessage(), Toast.LENGTH_LONG).show();
                 });
@@ -622,25 +624,29 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
             int fill = mixWithWhite(accent, current ? 0.87f : 0.94f);
             box.setBackground(roundStrokeColor(fill, accent, dp(14), current ? 2 : 1));
 
-            TextView number = text("ID " + row.id, 8, "#FFFFFF", true);
+            TextView number = text("ID " + row.id, 10, "#FFFFFF", true);
             number.setGravity(Gravity.CENTER);
             number.setBackground(roundStrokeColor(accent, accent, dp(999), 1));
             box.addView(number, new LinearLayout.LayoutParams(dp(36), dp(22)));
 
-            TextView label = text(name, 8, "#0B3A78", true);
+            TextView label = text(name, 11, "#0B3A78", true);
             label.setGravity(Gravity.CENTER);
             label.setMaxLines(2);
-            LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(dp(72), dp(27));
+            LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(dp(84), -2);
             labelLp.topMargin = dp(3);
             box.addView(label, labelLp);
 
-            TextView count = text(drivers + " driver aktif", 8, "#475569", false);
+            TextView count = text(drivers + " driver aktif", 10, "#475569", false);
             count.setGravity(Gravity.CENTER);
             box.addView(count);
 
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(84), dp(72));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(96), -2);
             if (i > 0) lp.setMargins(dp(5), 0, 0, 0);
             clusterGrid.addView(box, lp);
         }
+    }
+    @Override public void onOrderCancelled(String id){
+        DriverMessageUnreadRepository.clearOrder(this,id);
+        DriverBottomNavigation.refreshUnread(this,bottomNavigationView);
     }
 }

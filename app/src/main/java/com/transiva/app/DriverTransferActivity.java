@@ -23,12 +23,30 @@ import java.util.*;
 public class DriverTransferActivity extends FragmentActivity {
     private static final String BASE="https://transiva.my.id/server/";
     private SessionManager session;
+    private DriverUiScope uiScope;
+    private DriverWalletRecovery recovery;
+    private boolean operationBusy;
     private EditText recipient, amount, note;
     private Button submit;
     private TextView quotaInfo, balanceInfo;
     private final Handler main=new Handler(Looper.getMainLooper());
 
-    @Override protected void onCreate(Bundle b){ super.onCreate(b); session=new SessionManager(this); if(!session.isLoggedIn()){finish();return;} setContentView(screen()); DriverAppSettings.apply(this); }
+    @Override protected void onCreate(Bundle b){
+        super.onCreate(b);session=new SessionManager(this);
+        if(!session.isLoggedIn()||!"driver".equals(session.normalizeRole(session.getRole()))){finish();return;}
+        uiScope=new DriverUiScope(this);if(!uiScope.owner.userId().matches("[0-9]+")){finish();return;}setContentView(screen());DriverAppSettings.apply(this);
+        recovery=new DriverWalletRecovery(this,uiScope,"transfer",new DriverWalletRecovery.Host(){
+            public void busy(boolean value){loading(value);}
+            public void completed(JSONObject receipt){
+                if(receipt.has("balance")){long balance=receipt.optLong("balance");uiScope.owner.runIfCurrent(()->session.put("balance",String.valueOf(balance)));balanceInfo.setText("Saldo: "+money(balance));}
+                if(receipt.optBoolean("success"))finish();
+            }
+            public void retry(JSONObject payload){if(payload!=null)authenticateTransfer(payload,payload.optString("recipient"),payload.optLong("amount"),payload.optString("request_id"));}
+        });
+    }
+    @Override protected void onResume(){super.onResume();if(recovery!=null)recovery.restore();}
+    @Override protected void onDestroy(){if(uiScope!=null)uiScope.close();main.removeCallbacksAndMessages(null);super.onDestroy();}
+
 
     private View screen(){
         ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(DriverThemeTokens.color(this, "#F6F9FE"));
@@ -45,16 +63,18 @@ public class DriverTransferActivity extends FragmentActivity {
     }
 
     private void quote(){
+        if(operationBusy||!uiScope.alive())return;
+        final String memo=note.getText().toString().trim();
         String to=recipient.getText().toString().trim(); long val=parse(amount.getText().toString());
         if(to.isEmpty()){info("Penerima belum diisi");return;} if(val<10000){info("Minimal transfer Rp10.000");return;}
-        loading(true); DriverNetworkExecutor.execute(()->{ try{
+        loading(true); uiScope.execute(()->{ try{
             String requestId="DRV-"+System.currentTimeMillis()+"-"+UUID.randomUUID().toString().substring(0,8);
             JSONObject req=baseRequest(); req.put("recipient",to); req.put("amount",val); req.put("request_id",requestId);
             JSONObject q=post("driver_wallet_quote.php",req);
             if(!q.optBoolean("success")) throw new Exception(q.optString("message","Gagal memeriksa transfer"));
             JSONObject d=q.optJSONObject("data"); if(d==null)d=q;
-            JSONObject finalD=d; main.post(()->confirm(finalD,to,val,requestId));
-        }catch(Exception e){main.post(()->{loading(false);info(e.getMessage());});}});
+            d.put("_note",memo);JSONObject finalD=d; uiScope.post(()->confirm(finalD,to,val,requestId));
+        }catch(Exception e){uiScope.post(()->{loading(false);info(e.getMessage());});}});
     }
 
     private void confirm(JSONObject d,String to,long val,String requestId){
@@ -65,6 +85,7 @@ public class DriverTransferActivity extends FragmentActivity {
     }
 
     private void authenticateTransfer(JSONObject q,String to,long val,String requestId){
+        if(!uiScope.alive())return;
         BiometricManager bm=BiometricManager.from(this);
         boolean biometric=bm.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)==BiometricManager.BIOMETRIC_SUCCESS;
 
@@ -111,6 +132,7 @@ public class DriverTransferActivity extends FragmentActivity {
     }
 
     private void showPinDialog(JSONObject q,String to,long val,String requestId){
+        if(!uiScope.alive())return;
         final EditText pin=new EditText(this);
         pin.setHint("6 digit PIN");
         pin.setSingleLine(true);
@@ -138,49 +160,34 @@ public class DriverTransferActivity extends FragmentActivity {
 
     private void verifyPinAndExecute(String pin,JSONObject q,String to,long val,String requestId){
         loading(true);
-        DriverNetworkExecutor.execute(()->{
+        uiScope.execute(()->{
             try{
                 JSONObject req=new JSONObject();
                 req.put("pin",pin);
                 JSONObject r=post("pin_verify.php",req);
                 if(!r.optBoolean("success")) throw new Exception(r.optString("message","PIN tidak valid"));
-                main.post(()->execute(q,to,val,requestId));
+                uiScope.post(()->execute(q,to,val,requestId));
             }catch(Exception e){
-                main.post(()->{ loading(false); info(e.getMessage()); });
+                uiScope.post(()->{ loading(false); info(e.getMessage()); });
             }
         });
     }
 
     private void execute(JSONObject q,String to,long val,String requestId){
-        loading(true); DriverNetworkExecutor.execute(()->{try{
-            JSONObject req=baseRequest(); req.put("recipient",to); req.put("amount",val); req.put("note",note.getText().toString().trim()); req.put("request_id",requestId); req.put("quote_token",q.optString("quote_token"));
-            JSONObject r=post("driver_wallet_transfer.php",req); if(!r.optBoolean("success"))throw new Exception(r.optString("message","Transfer gagal"));
-            JSONObject d=r.optJSONObject("data"); if(d==null)d=r; long bal=d.optLong("balance_after",d.optLong("sender_balance",0)); session.put("balance",String.valueOf(bal));
-            main.post(()->{loading(false);balanceInfo.setText("Saldo: "+money(bal)); PremiumDialogs.builder(this).setTitle("Transfer Berhasil").setMessage(r.optString("message","Dana berhasil dikirim")).setPositiveButton("Selesai",(a,b)->finish()).show();});
-        }catch(Exception e){main.post(()->{loading(false);info(e.getMessage());});}});
+        if(!uiScope.alive())return;
+        if(q.has("operation_owner_id")){recovery.submit(q);return;}
+        try {
+            JSONObject req=baseRequest();req.put("recipient",to);req.put("amount",val);
+            req.put("note",q.optString("note",q.optString("_note",note.getText().toString().trim())));
+            req.put("request_id",requestId);req.put("quote_token",q.optString("quote_token"));
+            recovery.submit(req);
+        }catch(Exception error){loading(false);info("Data transfer tidak valid.");}
     }
 
     private JSONObject baseRequest() throws Exception { JSONObject o=new JSONObject(); o.put("user_id",parse(session.getUserId())); o.put("username",session.getUsername()); return o; }
-    private JSONObject post(String path,JSONObject body)throws Exception{
-        HttpURLConnection c=com.transiva.app.driver.data.DriverConnectionRepository.open(BASE+path);
-        c.setConnectTimeout(15000);c.setReadTimeout(20000);c.setRequestMethod("POST");c.setDoOutput(true);
-        c.setRequestProperty("Content-Type","application/json; charset=UTF-8");
-        c.setRequestProperty("Accept","application/json");
-        String token=session.getToken();
-        if(token!=null && !token.trim().isEmpty()) c.setRequestProperty("Authorization","Bearer "+token.trim());
-        c.setRequestProperty("X-Device-UUID",DeviceIdentityManager.getInstallationUuid(this));
-        c.setRequestProperty("X-App-Scope","driver");
-        byte[] b=body.toString().getBytes(StandardCharsets.UTF_8);
-        try(OutputStream os=c.getOutputStream()){os.write(b);}
-        InputStream in=c.getResponseCode()>=400?c.getErrorStream():c.getInputStream();
-        StringBuilder response=new StringBuilder();
-        if(in!=null){try(BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8))){String l;while((l=r.readLine())!=null)response.append(l);}}
-        c.disconnect();
-        if(response.length()==0) throw new IOException("Respons server kosong");
-        return new JSONObject(response.toString());
-    }
-    private void loading(boolean x){submit.setEnabled(!x);submit.setText(x?"Memproses...":"Periksa & Transfer");}
-    private void info(String m){PremiumDialogs.builder(this).setTitle("Informasi").setMessage(m==null?"Terjadi kesalahan":m).setPositiveButton("OK",null).show();}
+    private JSONObject post(String path,JSONObject body)throws Exception{return DriverWalletTransport.post(uiScope.owner,path,body);}
+    private void loading(boolean x){operationBusy=x;submit.setEnabled(!x);submit.setText(x?"Memproses...":"Periksa & Transfer");recipient.setEnabled(!x);amount.setEnabled(!x);note.setEnabled(!x);}
+    private void info(String m){if(uiScope==null||!uiScope.alive())return;PremiumDialogs.builder(this).setTitle("Informasi").setMessage(m==null?"Terjadi kesalahan":m).setPositiveButton("OK",null).show();}
     private LinearLayout card(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);v.setPadding(dp(16),dp(16),dp(16),dp(16));GradientDrawable g=new GradientDrawable();g.setColor(DriverThemeTokens.surface(this));g.setCornerRadius(dp(18));v.setBackground(g);v.setElevation(dp(2));return v;}
     private EditText input(String h,int type){EditText e=new EditText(this);e.setHint(h);e.setTextSize(14);e.setInputType(type);e.setPadding(dp(13),0,dp(13),0);GradientDrawable g=new GradientDrawable();g.setColor(DriverThemeTokens.color(this, "#F8FAFC"));g.setStroke(dp(1),DriverThemeTokens.color(this, "#DCE6F2"));g.setCornerRadius(dp(12));e.setBackground(g);e.setSingleLine(true);e.setMinHeight(dp(48));return e;}
     private Button button(String s){Button b=new Button(this);b.setText(s);b.setTextColor(DriverThemeTokens.onAccent(this));b.setTextSize(14);b.setAllCaps(false);b.setTypeface(Typeface.DEFAULT_BOLD);GradientDrawable g=new GradientDrawable();g.setColor(DriverThemeTokens.color(this, "#0B7CFF"));g.setCornerRadius(dp(14));b.setBackground(g);return b;}
