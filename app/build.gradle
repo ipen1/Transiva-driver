@@ -5,6 +5,12 @@ plugins {
 }
 
 
+// Optional emulator-only native packaging. Release variants keep their existing ABI set.
+def transivaCiRuntimeAbi = providers.gradleProperty('transivaCiRuntimeAbi').orNull
+if (transivaCiRuntimeAbi != null && transivaCiRuntimeAbi != 'x86_64') {
+    throw new GradleException('transivaCiRuntimeAbi only supports the x86_64 CI emulator')
+}
+
 android {
     namespace 'com.transiva.app'
     compileSdk 36
@@ -38,6 +44,9 @@ android {
     buildTypes {
         debug {
             debuggable true
+            if (transivaCiRuntimeAbi != null) {
+                ndk { abiFilters transivaCiRuntimeAbi }
+            }
         }
 
         release {
