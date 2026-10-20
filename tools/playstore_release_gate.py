@@ -112,6 +112,7 @@ def validate_foreground_services(manifest_text, label):
         fgs.append((service.get(android_ns + 'name', ''), set(tokens), service))
     expected = {
         'com.transiva.app.LocationService': {'location'},
+        'com.transiva.app.NavigationGuidanceService': {'location'},
         'com.transiva.app.WebRtcCallForegroundService': {'microphone', 'camera'},
         'com.transiva.app.IncomingCallRingingService': {'shortService'},
     }
@@ -119,10 +120,13 @@ def validate_foreground_services(manifest_text, label):
         return 'com.transiva.app' + name if name.startswith('.') else name
     actual = [(qualified(name), kinds, service) for name, kinds, service in fgs]
     if len(actual) != len(expected) or {name for name, _, _ in actual} != set(expected):
-        issues += fail(f'{label}: expected exactly the location, active-call and incoming-ringing FGS owners')
+        issues += fail(f'{label}: expected exactly the tracking, navigation, active-call and incoming-ringing FGS owners')
     for name, kinds, service in actual:
         if name not in expected or kinds != expected[name]:
             issues += fail(f'{label}: unexpected foreground service/type: {name}: {sorted(kinds)}')
+        if name == 'com.transiva.app.NavigationGuidanceService':
+            if service.get(android_ns + 'exported') != 'false' or service.get(android_ns + 'stopWithTask') != 'true':
+                issues += fail(f'{label}: navigation service must be private and stop with its task')
         if name in {'com.transiva.app.WebRtcCallForegroundService', 'com.transiva.app.IncomingCallRingingService'}:
             if service.get(android_ns + 'exported') != 'false' or service.get(android_ns + 'stopWithTask') != 'false':
                 issues += fail(f'{label}: {name} must be private and survive task dismissal')

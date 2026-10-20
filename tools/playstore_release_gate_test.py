@@ -66,6 +66,13 @@ class ReleaseGateTest(unittest.TestCase):
                 self.assertIn(old, self.manifest)
                 self.assertGreater(self.manifest_issues(self.manifest.replace(old, new)), 0)
 
+    def test_navigation_service_cannot_be_exported_or_survive_task_dismissal(self):
+        for attribute, value in [('exported', 'true'), ('stopWithTask', 'false')]:
+            root = ET.fromstring(self.manifest)
+            service = next(s for s in root.findall('./application/service') if s.get(gate.android_ns + 'name') == '.NavigationGuidanceService')
+            service.set(gate.android_ns + attribute, value)
+            self.assertGreater(self.manifest_issues(ET.tostring(root, encoding='unicode')), 0)
+
     def test_private_call_services_cannot_be_exported_or_stop_with_task(self):
         for name in ['.WebRtcCallForegroundService', '.IncomingCallRingingService']:
             for attr, value in [('exported', 'true'), ('stopWithTask', 'true')]:
