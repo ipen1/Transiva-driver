@@ -25,7 +25,7 @@ public final class DriverDashboardRepositoryImpl implements DriverDashboardRepos
                         "driver_dashboard_native.php"
                 );
                 JSONObject driver = result.body.optJSONObject("driver");
-                if (driver != null) session.updateDriverRuntime(driver);
+                if (driver != null) api.applyIfCurrent(()->session.updateDriverRuntime(driver));
                 DriverDashboardState state = DriverDashboardMapper.map(result.body);
                 callback.onSuccess(state);
             } catch (DriverApiClient.ApiException error) {
@@ -77,8 +77,10 @@ public final class DriverDashboardRepositoryImpl implements DriverDashboardRepos
                     return;
                 }
 
-                session.updateDriverRuntime(result.body);
-                session.put("driver_server_online", serverOnline ? "1" : "0");
+                if(!api.applyIfCurrent(()->{
+                    session.updateDriverRuntime(result.body);
+                    session.put("driver_server_online",serverOnline?"1":"0");
+                })) {callback.onError(0,"SESSION_CHANGED","Sesi berubah.");return;}
 
                 callback.onSuccess(
                         result.body.optString("message",

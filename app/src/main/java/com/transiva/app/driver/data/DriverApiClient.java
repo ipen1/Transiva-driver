@@ -47,10 +47,12 @@ public final class DriverApiClient {
     private static final String BASE_URL = com.transiva.app.DriverApiConfig.BASE_URL;
     private static final int MAX_ATTEMPTS = 4;
     private final SessionManager session;
+    private final com.transiva.app.DriverSessionOwner owner;
     private final Context appContext;
 
     public DriverApiClient(SessionManager session) {
         this.session = session;
+        this.owner = com.transiva.app.DriverSessionOwner.capture(session.getContext());
         this.appContext = session.getContext().getApplicationContext();
     }
 
@@ -68,6 +70,7 @@ public final class DriverApiClient {
     }
 
     private Result requestWithRetry(String method, String endpoint, JSONObject payload, boolean retrySafe) throws ApiException {
+        requireOwner();
         if (!DriverCircuitBreaker.allowRequest()) {
             throw new ApiException(503, "CIRCUIT_OPEN",
                     "Server sedang dalam masa pemulihan. Coba lagi beberapa detik.", null);
@@ -76,17 +79,20 @@ public final class DriverApiClient {
         ApiException last = null;
         for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
             try {
+                requireOwner();
                 Result result = requestOnce(method, endpoint, payload);
+                requireOwner();
                 DriverCircuitBreaker.onSuccess();
                 return result;
             } catch (ApiException error) {
                 last = error;
+                if(!owner.current()||"SESSION_CHANGED".equals(error.code))throw error;
                 DriverCircuitBreaker.onFailure(error.status);
 
                 int retryAfter = error.status == 429 ? parseRetryAfter(error.getMessage()) : 0;
                 long delay = DriverRetryPolicy.delayFor(error.status, retryAfter, attempt);
-                boolean retryable = error.status == 429
-                        || (retrySafe && (error.status >= 500 || error.status == 0));
+                boolean retryable = retrySafe && (error.status == 429
+                        || (retrySafe && (error.status >= 500 || error.status == 0)));
 
                 // POST transaksi biasa tidak pernah diulang otomatis. Hanya endpoint
                 // yang secara eksplisit ditandai retrySafe (mis. set status final)
@@ -116,15 +122,13 @@ public final class DriverApiClient {
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
             connection.setRequestProperty("X-Transiva-Client", "Android-Native");
-            String token = clean(session.getToken());
-            if (!token.isEmpty()) connection.setRequestProperty("Authorization", "Bearer " + token);
-            connection.setRequestProperty("X-Device-UUID", DeviceIdentityManager.getInstallationUuid(appContext));
-            connection.setRequestProperty("X-App-Scope", "driver");
+            owner.pin(connection);
 
             if ("POST".equals(method)) {
                 connection.setDoOutput(true);
                 try (BufferedWriter writer = new BufferedWriter(
                         new OutputStreamWriter(connection.getOutputStream(), StandardCharsets.UTF_8))) {
+                    owner.check();
                     writer.write(payload == null ? "{}" : payload.toString());
                 }
             }
@@ -137,6 +141,7 @@ public final class DriverApiClient {
             InputStream stream = status >= 200 && status < 300
                     ? connection.getInputStream() : connection.getErrorStream();
             String raw = read(stream);
+            owner.check();
             JSONObject body;
             try {
                 body = new JSONObject(raw == null || raw.trim().isEmpty() ? "{}" : raw);
@@ -154,7 +159,7 @@ public final class DriverApiClient {
                 // replaced/expired this device session, stop all driver services and
                 // clear secure auth state immediately. Never retry an invalid session.
                 if (status == 401 && isTerminalSessionCode(code)) {
-                    session.forceLogout(code);
+                    owner.runIfCurrent(()->session.forceLogout(code));
                 }
                 throw new ApiException(status, code, message, null);
             }
@@ -179,6 +184,7 @@ public final class DriverApiClient {
             }
             throw new ApiException(0, code, message, e);
         } finally {
+            owner.release(connection);
             if (connection != null) connection.disconnect();
         }
     }
@@ -192,7 +198,11 @@ public final class DriverApiClient {
                 || "AUTH_REVOKED".equals(c);
     }
 
-    public void shutdown() { /* shared executor is app-wide; do not shut it down here */ }
+    public void shutdown() { owner.close(); }
+    public boolean applyIfCurrent(Runnable task){return owner.runIfCurrent(task);}
+    private void requireOwner() throws ApiException {
+        if(!owner.current()||Thread.currentThread().isInterrupted())throw new ApiException(0,"SESSION_CHANGED","Sesi permintaan berubah.",null);
+    }
 
     private static int parseRetryAfter(String message) {
         if (message == null) return 0;
@@ -208,7 +218,7 @@ public final class DriverApiClient {
                 new InputStreamReader(stream, StandardCharsets.UTF_8))) {
             StringBuilder result = new StringBuilder();
             String line;
-            while ((line = reader.readLine()) != null) result.append(line);
+            while ((line = reader.readLine()) != null) {if(result.length()+line.length()>2097152)throw new java.io.IOException("Respons server terlalu besar");result.append(line);}
             return result.toString();
         }
     }
