@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class DriverDashboardPresenter {
 
     private final DriverDashboardRepository repository;
+    private final com.transiva.app.DriverSessionOwner owner;
     private DriverDashboardContract.View view;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final AtomicBoolean loading = new AtomicBoolean(false);
@@ -27,17 +28,19 @@ public final class DriverDashboardPresenter {
             DriverDashboardContract.View view
     ) {
         this.repository = repository;
+        owner=view instanceof android.content.Context?com.transiva.app.DriverSessionOwner.capture((android.content.Context)view):null;
         this.view = view;
     }
 
     public void load(boolean showLoading) {
+        if(owner!=null&&!owner.current())return;
         if (!loading.compareAndSet(false, true)) return;
         final long requestEpoch = stateEpoch.get();
         if (showLoading && view != null) view.showLoading(true);
 
         repository.loadDashboard(new DriverDashboardRepository.DashboardCallback() {
             @Override public void onSuccess(DriverDashboardState state) {
-                main.post(() -> {
+                postIfCurrent(() -> {
                     // Refresh yang dimulai sebelum set ONLINE/OFFLINE tidak boleh
                     // mengembalikan switch ke state lama ataupun mengubah loading request baru.
                     if (requestEpoch != stateEpoch.get()) return;
@@ -49,7 +52,7 @@ public final class DriverDashboardPresenter {
             }
 
             @Override public void onError(int httpCode, String code, String message) {
-                main.post(() -> {
+                postIfCurrent(() -> {
                     if (requestEpoch != stateEpoch.get()) return;
                     loading.set(false);
                     if (view == null) return;
@@ -65,6 +68,7 @@ public final class DriverDashboardPresenter {
     }
 
     public void setOnline(boolean online, String driverType) {
+        if(owner!=null&&!owner.current())return;
         if (!actionRunning.compareAndSet(false, true)) return;
         // Invalidasi dashboard request yang mungkin sedang berjalan agar response lama
         // tidak menimpa hasil toggle yang baru. Reset gate load karena callback lama
@@ -130,6 +134,7 @@ public final class DriverDashboardPresenter {
                 new DriverDashboardRepository.ActionCallback() {
                     @Override public void onSuccess(String message, DriverOrder order) {
                         DriverRequestGate.leave(gateKey);
+                        postIfCurrent(()->{if(view!=null)view.onOrderCancelled(orderId);});
                         finishAction(action, message, false, null);
                     }
 
@@ -147,7 +152,7 @@ public final class DriverDashboardPresenter {
             boolean openTrip,
             DriverOrder order
     ) {
-        main.post(() -> {
+        postIfCurrent(() -> {
             actionRunning.set(false);
             if (view == null) return;
             view.showActionLoading(action, false);
@@ -163,7 +168,7 @@ public final class DriverDashboardPresenter {
             String code,
             String message
     ) {
-        main.post(() -> {
+        postIfCurrent(() -> {
             actionRunning.set(false);
             if (view == null) return;
             view.showActionLoading(action, false);
@@ -189,7 +194,9 @@ public final class DriverDashboardPresenter {
                 || "DEVICE_BANNED".equalsIgnoreCase(cleanCode);
     }
 
+    private void postIfCurrent(Runnable task){main.post(()->{if(owner==null)task.run();else owner.runIfCurrent(task);});}
     public void destroy() {
+        if(owner!=null)owner.close();
         view = null;
         main.removeCallbacksAndMessages(null);
         repository.destroy();

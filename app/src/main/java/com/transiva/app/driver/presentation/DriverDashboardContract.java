@@ -12,5 +12,6 @@ public interface DriverDashboardContract {
         void showMessage(String message);
         void showSessionExpired();
         void openTrip(DriverOrder order);
+        default void onOrderCancelled(String id){}
     }
 }
