@@ -6,6 +6,7 @@ server=Path(sys.argv[1]).resolve();php=os.environ.get('PHP_BIN','php')
 # The bundle's new helper depends on the unchanged baseline order-route validator.
 with tempfile.TemporaryDirectory(prefix='transiva-nav-server-') as temp:
  root=Path(temp)
+ (root/'tmp').mkdir()
  for name in ['driver_navigation_route_helper.php','transiva_server_route.php','schema_runtime_guard.php']:shutil.copy2(server/name,root/name)
  (root/'probe.php').write_text('''<?php
 require 'driver_navigation_route_helper.php';$checks=0;
@@ -21,7 +22,7 @@ $failed=false;try{dnr_profile('motor',['motor'=>['http://unsafe.test/route/']]);
 $failed=false;try{dnr_profile('car',['car'=>['https://user:secret@provider.test/route/']]);}catch(TransivaRouteException $e){$failed=true;}check($failed,'credential-bearing provider URL rejected');
 $url='';$transport=function($u)use(&$url,$reply){$url=$u;return $reply;};
 $r=dnr_route($points,'motor',$config,true,180,$transport);check(count($r['routes'])===2&&$r['routes'][1]['distance']===1200,'alternative longer route is preserved for explicit driver choice');
-check(str_contains($url,'alternatives=true')&&str_contains($url,'bearings=180.0,45;'),'provider request includes alternatives and current origin heading');
+check(str_contains($url,'alternatives=true')&&str_contains($url,'bearings=180,45;'),'provider request includes alternatives and current origin heading');
 check($r['transiva_navigation']['used_profile']==='motor'&&!$r['transiva_navigation']['profile_fallback'],'response truthfully identifies configured graph');
 check($r['transiva_navigation']['traffic_aware']===false,'OSRM ETA is not misrepresented as live traffic');
 $config['motor']=[];$r=dnr_route($points,'motor',$config,true,null,$transport);check($r['transiva_navigation']['used_profile']==='car'&&$r['transiva_navigation']['profile_fallback'],'motor-to-car fallback survives server response contract');
@@ -33,8 +34,14 @@ $r=dnr_route($points,'car',$config,true,null,$transport);check($calls===2&&count
 $bad=$reply;$bad['routes'][1]['legs'][0]['distance']=2000;$r=dnr_route($points,'car',$config,true,null,fn($u)=>$bad);check(count($r['routes'])===1,'invalid alternative metrics are filtered without fabricating a route');
 $failed=false;try{dnr_route($points,'car',$config,true,null,fn($u)=>['code'=>'NoRoute']);}catch(TransivaRouteException $e){$failed=$e->getCode()===503;}check($failed,'provider outage remains a real route failure');
 $failed=false;try{dnr_route([['latitude'=>999,'longitude'=>120],$points[1]],'car',$config,true,null,fn($u)=>$reply);}catch(TransivaRouteException $e){$failed=true;}check($failed,'invalid coordinates fail before upstream routing');
+
+$before=count(glob(sys_get_temp_dir().'/transiva_navigation_v1/[a-f0-9][a-f0-9].json'));
+for($i=0;$i<350;$i++){$cfg=['car'=>['https://bounded-'.$i.'.example.test/route/'],'motor'=>[]];dnr_route($points,'car',$cfg,true,null,fn($u)=>$reply);}
+check(count(glob(sys_get_temp_dir().'/transiva_navigation_v1/[a-f0-9][a-f0-9].json'))<=256,'coordinate and heading cache has at most 256 data files');
+$cfg=['car'=>['https://heading.example.test/route/'],'motor'=>[]];$lastUrl='';dnr_route($points,'car',$cfg,true,359.9,function($u)use(&$lastUrl,$reply){$lastUrl=$u;return $reply;});check(str_contains($lastUrl,'bearings=0,45;'),'rounded origin heading is an integer normalized below 360');
+$stale=sys_get_temp_dir().'/transiva_navigation_v1/'.str_repeat('a',64).'.json';file_put_contents($stale,'{}');touch($stale,time()-300);@unlink(sys_get_temp_dir().'/transiva_navigation_v1/.cleanup');dnr_cleanup();check(!is_file($stale),'legacy expired coordinate cache files are removed');
 echo "NAVIGATION SERVER: $checks checks PASS\\n";
 ''')
- r=subprocess.run([php,'-n',str(root/'probe.php')],cwd=root,capture_output=True,text=True)
+ r=subprocess.run([php,'-n','-d','sys_temp_dir='+str(root/'tmp'),str(root/'probe.php')],cwd=root,capture_output=True,text=True)
  print(r.stdout,end='')
  if r.returncode:raise RuntimeError(r.stderr+r.stdout)
