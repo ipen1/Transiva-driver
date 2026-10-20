@@ -1,6 +1,7 @@
 package com.transiva.app;
 
 import android.content.Intent;
+import android.os.Build;
 import android.view.View;
 import android.widget.FrameLayout;
 import androidx.core.graphics.Insets;
@@ -23,14 +24,22 @@ public class DriverWindowInsetsTest {
 
     private void assertNoRemainingInsets(WindowInsetsCompat remaining) {
         assertNotNull(remaining);
-        assertEquals(Insets.NONE, remaining.getInsets(BARS | IME | WindowInsetsCompat.Type.displayCutout()));
+        assertTrue("The padded parent must fully consume platform insets", remaining.isConsumed());
+        if (Build.VERSION.SDK_INT >= 30) {
+            assertEquals(Insets.NONE, remaining.getInsets(BARS | IME | WindowInsetsCompat.Type.displayCutout()));
+        } else {
+            // A native round trip loses synthetic typed IME on API <=29. AndroidX
+            // can infer it again from the real root visible frame even on a consumed
+            // wrapper. Verify the actual legacy dispatch contract instead.
+            assertEquals(Insets.NONE, remaining.getSystemWindowInsets());
+            assertEquals(Insets.NONE, remaining.getStableInsets());
+        }
     }
 
     private void assertDispatchCompleted(WindowInsetsCompat remaining, int childCalls) {
         assertNoRemainingInsets(remaining);
-        // A consumed parent may stop ViewGroup dispatch before reaching children (API 26).
-        // Otherwise the child must be visited and must receive zero insets.
-        assertTrue("Dispatch must be consumed or reach the child", remaining.isConsumed() || childCalls > 0);
+        // No descendant should receive another inset application after root padding.
+        assertEquals("Consumed root must stop descendant dispatch", 0, childCalls);
     }
 
     private ActivityScenario<TestHarnessActivity> launch() {
@@ -65,6 +74,7 @@ public class DriverWindowInsetsTest {
                 WindowInsetsCompat remaining = listener.onApplyWindowInsets(content, keyboard);
                 assertEquals(24, content.getPaddingTop());
                 assertEquals(300, content.getPaddingBottom());
+                assertTrue(remaining.isConsumed());
                 assertEquals(0, remaining.getInsets(BARS | IME).bottom);
                 assertEquals(0, remaining.getInsets(BARS).top);
                 assertEquals(12, child.getPaddingBottom());
@@ -86,6 +96,16 @@ public class DriverWindowInsetsTest {
             scenario.onActivity(activity -> {
                 FrameLayout child = host(activity);
                 View content = activity.findViewById(android.R.id.content);
+                // Legacy native dispatch can infer the real root IME after losing
+                // our synthetic typed override. Capture the actual listener input
+                // rather than asserting that an unsupported override survived.
+                final int[] nativeBottom = {0};
+                OnApplyWindowInsetsListener production = DriverResponsiveUi.createInsetsListener(activity, new int[]{0,0,0,0});
+                ViewCompat.setOnApplyWindowInsetsListener(content, (v, applied) -> {
+                    nativeBottom[0] = Math.max(applied.getInsets(BARS | WindowInsetsCompat.Type.displayCutout()).bottom,
+                            applied.getInsets(IME).bottom);
+                    return production.onApplyWindowInsets(v, applied);
+                });
                 final int[] childCalls = {0};
                 ViewCompat.setOnApplyWindowInsetsListener(child, (v, applied) -> {
                     childCalls[0]++;
@@ -96,13 +116,15 @@ public class DriverWindowInsetsTest {
                 WindowInsetsCompat dispatched = ViewCompat.dispatchApplyWindowInsets(content, insets(0));
                 assertDispatchCompleted(dispatched, childCalls[0]);
                 assertEquals(24, content.getPaddingTop());
-                assertEquals(48, content.getPaddingBottom());
+                assertEquals(nativeBottom[0], content.getPaddingBottom());
+                if (Build.VERSION.SDK_INT >= 30) assertEquals(48, nativeBottom[0]);
                 assertEquals(12, child.getPaddingBottom());
                 DriverResponsiveUi.apply(activity);
                 childCalls[0] = 0;
                 dispatched = ViewCompat.dispatchApplyWindowInsets(content, insets(0));
                 assertDispatchCompleted(dispatched, childCalls[0]);
-                assertEquals(48, content.getPaddingBottom());
+                assertEquals(nativeBottom[0], content.getPaddingBottom());
+                if (Build.VERSION.SDK_INT >= 30) assertEquals(48, nativeBottom[0]);
             });
         }
     }
