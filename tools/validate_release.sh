@@ -3,6 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 # Same cleanup as CI: the harness belongs only to the debug target APK.
 rm -f app/src/androidTest/java/com/transiva/app/TestHarnessActivity.java
+python3 tools/reliability/driver_session_regression.py
 python3 tools/call_upgrade_regression.py
 python3 tools/playstore_release_gate.py
 python3 tools/play_compat_gate.py
