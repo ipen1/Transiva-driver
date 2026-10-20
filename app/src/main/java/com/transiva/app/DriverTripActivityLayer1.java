@@ -119,6 +119,9 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected double pendingDeliveryRouteSeconds = 0d;
     protected double tripStartLat = 0d, tripStartLng = 0d;
     protected boolean overviewRoutesLoaded = false;
+    protected DriverUiScope tripRouteScope;
+    protected long tripRouteGeneration;
+    protected String appliedAgreedRouteHash="";
     protected boolean overviewMapApplied = false;
     protected String lastOverviewRouteStatus = "";
     protected double currentSpeedKmh = 0d;

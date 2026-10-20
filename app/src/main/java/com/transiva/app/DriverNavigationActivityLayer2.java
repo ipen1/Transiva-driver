@@ -145,90 +145,7 @@ abstract class DriverNavigationActivityLayer2 extends DriverNavigationActivityLa
     }
 
     protected void requestRoute(boolean force) {
-        if (!valid(driverLat, driverLng) || routeInFlight) return;
-
-        final double toLat = targetLat();
-        final double toLng = targetLng();
-        if (!valid(toLat, toLng)) return;
-
-        long now = System.currentTimeMillis();
-        if (!force && lastRouteLocation != null &&
-                meters(lastRouteLocation.getLatitude(), lastRouteLocation.getLongitude(),
-                        driverLat, driverLng) < NavigationRoutePolicy.ROUTE_REFRESH_DISTANCE_M &&
-                now - lastRouteRequestAt < NavigationRoutePolicy.ROUTE_REFRESH_MS) {
-            return;
-        }
-
-        routeInFlight = true;
-        lastRouteRequestAt = now;
-        if (routeScheduler != null) routeScheduler.beginLoading(4);
-
-        final double fromLat = driverLat, fromLng = driverLng;
-
-        routeExecutor.execute(() -> {
-            try {
-                // Forced reroutes always bypass StableRouteEngine cache. This is
-                // essential when the driver deliberately chooses an alternate road.
-                StableRouteEngine.Result r = StableRouteEngine.fetch(fromLat, fromLng, toLat, toLng, force);
-                main.post(() -> { if (routeScheduler != null) routeScheduler.updateProgress(72); });
-
-                pendingRouteGeoJson = routeGeoJson(r.pointsJson());
-                setRoutePoints(r.latLngPoints);
-                lastRenderedRouteIndex = -1;
-                lastRenderedRouteProgressMeters = Double.NaN;
-                routeManeuvers = r.maneuvers == null ? new JSONArray() : r.maneuvers;
-                pendingRouteKm = r.distanceMeters / 1000d;
-                pendingRouteSeconds = r.durationSeconds;
-                lastRouteSuccessAt = System.currentTimeMillis();
-                routeFailureCount = 0;
-                NavigationDiagnostics.event(this, "NAV_ROUTE_READY", null);
-                NavigationHealthTelemetry.mark(this, "route");
-
-                Location rl = new Location("route");
-                rl.setLatitude(fromLat);
-                rl.setLongitude(fromLng);
-                lastRouteLocation = rl;
-
-                main.post(() -> {
-                    if (routeScheduler != null) routeScheduler.updateProgress(90);
-
-                    // Match first, then cut the route line from the matched progress.
-                    // This avoids drawing the old segment behind/under the vehicle.
-                    if (valid(driverLat, driverLng)) {
-                        SnapPoint match = snapToRoute(driverLat, driverLng);
-                        displayLat = match.lat;
-                        displayLng = match.lng;
-                        displayInitialized = true;
-                        if (match.onRoute) snappedBearing = match.bearing;
-                        updateNativePosition(true);
-                    }
-                    updateRemainingRouteLine(true);
-
-                    if (routeScheduler != null) routeScheduler.updateProgress(100);
-                    final int mins = Math.max(1, (int) Math.ceil(pendingRouteSeconds / 60d));
-                    main.postDelayed(() -> {
-                        if (!isFinishing() && routePoints.size() >= 2) {
-                            routeBadge.setText(String.format(Locale.US, "Menuju %s • %.1f km • %d menit",
-                                    NavigationInstructionController.destinationLabel(targetMode),
-                                    pendingRouteKm, mins));
-                        }
-                    }, 260L);
-                });
-            } catch (Exception routeError) {
-                routeFailureCount++;
-                NavigationDiagnostics.error(this, "NAV_ROUTE_FAILED", routeError);
-                main.post(() -> {
-                    if (routePoints.size() < 2) {
-                        routeBadge.setText(routeFailureCount <= 1
-                                ? "OSRM belum merespons • mencoba kembali…"
-                                : "Rute belum tersedia • mencoba kembali…");
-                    }
-                });
-            } finally {
-                routeInFlight = false;
-                main.post(() -> { if (routeScheduler != null) routeScheduler.endLoading(); });
-            }
-        });
+        if(liveRoutes!=null)liveRoutes.request(force);
     }
 
     protected void showRouteLoading(int percent) {
@@ -239,60 +156,7 @@ abstract class DriverNavigationActivityLayer2 extends DriverNavigationActivityLa
     }
 
     protected void maybeRefreshRoute(Location fix) {
-        if (routePoints.size() < 2) {
-            resetOffRouteConfirmation();
-            requestRoute(false);
-            return;
-        }
-
-        final long now = SystemClock.elapsedRealtime();
-        final float accuracy = fix != null && fix.hasAccuracy()
-                ? Math.max(1f, fix.getAccuracy()) : lastGpsAccuracyM;
-        final double deviation = nearestRouteDistanceMeters(driverLat, driverLng);
-        final double trigger = Math.max(NavigationRoutePolicy.OFF_ROUTE_BASE_DISTANCE_M, accuracy * 1.35d);
-
-        // A highly inaccurate fix is not enough evidence by itself. Only an
-        // unmistakably large deviation may start confirmation while GPS is weak.
-        if (!Double.isFinite(deviation) ||
-                (accuracy > 85f && deviation < NavigationRoutePolicy.OFF_ROUTE_HARD_DISTANCE_M + 30d) ||
-                deviation < trigger) {
-            // Healthy route: keep the current geometry. Previously this called
-            // requestRoute(false), which rebuilt the route every ~35 m / 15 s and
-            // could make navigation flip between equally valid roads.
-            resetOffRouteConfirmation();
-            return;
-        }
-
-        if (offRouteStartedAt == 0L) {
-            offRouteStartedAt = now;
-            offRouteStartLat = driverLat;
-            offRouteStartLng = driverLng;
-            offRouteFixCount = 1;
-            return;
-        }
-
-        offRouteFixCount++;
-        double traveled = valid(offRouteStartLat, offRouteStartLng)
-                ? meters(offRouteStartLat, offRouteStartLng, driverLat, driverLng) : 0d;
-        long duration = now - offRouteStartedAt;
-
-        int requiredFixes = accuracy >= 55f ? 5 : (accuracy >= 30f ? 3 : 2);
-        long requiredMs = accuracy >= 55f ? 6500L : NavigationRoutePolicy.OFF_ROUTE_CONFIRM_MS;
-        double requiredTravel = accuracy >= 55f ? 28d : NavigationRoutePolicy.OFF_ROUTE_MIN_TRAVEL_M;
-        boolean hardDeviation = deviation >= NavigationRoutePolicy.OFF_ROUTE_HARD_DISTANCE_M && offRouteFixCount >= 2;
-        boolean confirmed = offRouteFixCount >= requiredFixes &&
-                duration >= requiredMs && traveled >= requiredTravel;
-
-        if ((hardDeviation || confirmed) && now - lastAutoRerouteAt >= NavigationRoutePolicy.REROUTE_COOLDOWN_MS) {
-            lastAutoRerouteAt = now;
-            resetOffRouteConfirmation();
-            if (routeBadge != null) routeBadge.setText("Mendeteksi pindah jalur • membuat rute baru…");
-            requestRoute(true);
-            return;
-        }
-
-        // Keep the stable current route while confirmation is in progress. Do not
-        // launch a normal cached refresh here; only the confirmed branch reroutes.
+        if(liveRoutes!=null)liveRoutes.fix(fix);
     }
 
     protected void resetOffRouteConfirmation() {
@@ -533,7 +397,7 @@ abstract class DriverNavigationActivityLayer2 extends DriverNavigationActivityLa
             int endIndex;
             if (Double.isNaN(previousProgress)) {
                 startIndex = 0;
-                endIndex = Math.min(routePoints.size() - 2, 220);
+                endIndex = routePoints.size() - 2;
             } else {
                 startIndex = Math.max(0, segmentForProgressLocked(
                         Math.max(0d, previousProgress - NavigationRoutePolicy.ROUTE_MATCH_BACKWARD_ALLOWANCE_M - 18d)) - 2);

@@ -122,6 +122,7 @@ abstract class DriverNavigationActivityLayer1 extends Activity {
     protected NavigationLocationController locationController;
     protected NavigationPipController pipController;
     protected NavigationInstructionController instructionController;
+    protected NavigationLiveRouteController liveRoutes;
     protected NavigationCameraController cameraController;
     protected NavigationVehicleController vehicleController;
     protected NavigationMarkerController markerController;
@@ -291,7 +292,8 @@ abstract class DriverNavigationActivityLayer1 extends Activity {
     }
 
     protected void updateInstructionBanner(double progressMeters) {
-        if (instructionController != null) instructionController.update(routeManeuvers, progressMeters);
+        if(liveRoutes!=null)liveRoutes.progress(progressMeters);
+        else if (instructionController != null) instructionController.update(routeManeuvers, progressMeters);
     }
 
     protected String routeGeoJson(String pointsJson) throws Exception {
@@ -417,7 +419,7 @@ abstract class DriverNavigationActivityLayer1 extends Activity {
     }
 
     @Override protected void onResume() {
-        super.onResume(); activityResumed = true; if (mapController != null) mapController.onResume(); startLocationWatch();
+        super.onResume(); activityResumed = true; if(liveRoutes!=null)liveRoutes.resumed(true); if(frameController!=null)frameController.start(); if(routeScheduler!=null)routeScheduler.start(); if (mapController != null) mapController.onResume(); startLocationWatch();
     }
 
     /**
@@ -456,7 +458,7 @@ abstract class DriverNavigationActivityLayer1 extends Activity {
         if (communicationController != null) communicationController.onPictureInPictureModeChanged(isInPictureInPictureMode);
         if (instructionBadge != null) {
             instructionBadge.setVisibility(isInPictureInPictureMode ? View.GONE : View.VISIBLE);
-            instructionBadge.setTextSize(15);
+            instructionBadge.setTextSize(13);
         }
 
         if (isInPictureInPictureMode) {
@@ -472,8 +474,9 @@ abstract class DriverNavigationActivityLayer1 extends Activity {
 
     @Override protected void onPause() {
         activityResumed = false;
+        if(liveRoutes!=null)liveRoutes.resumed(false);
         boolean pip = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && (inPictureInPicture || isInPictureInPictureMode());
-        if (!pip) { stopLocationWatch(); if (mapController != null) mapController.onPause(); }
+        if (!pip) { if(frameController!=null)frameController.stop(); if(routeScheduler!=null)routeScheduler.stop(); stopLocationWatch(); if (mapController != null) mapController.onPause(); }
         super.onPause();
     }
 
@@ -515,6 +518,7 @@ abstract class DriverNavigationActivityLayer1 extends Activity {
     }
 
     @Override protected void onDestroy() {
+        if(liveRoutes!=null)liveRoutes.close();
         stopLocationWatch();
         if (frameController != null) frameController.stop();
         if (routeScheduler != null) routeScheduler.stop();

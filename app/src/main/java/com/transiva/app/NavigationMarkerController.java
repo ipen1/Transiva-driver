@@ -50,6 +50,13 @@ public final class NavigationMarkerController {
         } catch(Throwable t){ TransivaDiagnostics.error(activity,"navigation","NAV_WAYPOINT_MARKERS_FAILED",t); }
     }
 
+    public void clear(MapLibreMap map) {
+        if(map==null)return;
+        if(pickupMarker!=null)map.removeMarker(pickupMarker);if(deliveryMarker!=null)map.removeMarker(deliveryMarker);
+        for(Marker marker:waypointMarkers)map.removeMarker(marker);
+        pickupMarker=null;deliveryMarker=null;waypointMarkers.clear();
+    }
+
     private Icon icon(IconFactory factory, String name, int fallback, int wDp, int hDp) {
         int id = activity.getResources().getIdentifier(name, "drawable", activity.getPackageName());
         if (id <= 0) id = fallback;

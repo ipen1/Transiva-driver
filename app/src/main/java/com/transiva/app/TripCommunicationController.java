@@ -134,14 +134,10 @@ public final class TripCommunicationController {
         } catch (Throwable t) { NavigationDiagnostics.error(host, "NAV_ACTIVITY_OPEN_FAILED", t); }
 
         try {
-            Intent fallback = new Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=" + lat + "," + lng + "&mode=d"));
-            fallback.setPackage("com.google.android.apps.maps");
-            host.startActivity(fallback);
-            NavigationDiagnostics.event(host, "NAV_OPEN_FALLBACK", null);
-        } catch (Throwable t) {
-            NavigationDiagnostics.error(host, "NAV_OPEN_FALLBACK_FAILED", t);
-            host.tripInfo("Navigasi", pickup ? "Rute diarahkan ke titik penjemputan." : "Rute diarahkan ke titik pengantaran.");
-        }
+            if(NavigationExternalController.open(host,lat,lng,host.resolveDriverTypeFromOrder()))NavigationDiagnostics.event(host,"NAV_OPEN_FALLBACK",null);
+            else host.tripInfo("Navigasi","Aplikasi navigasi belum dapat dibuka.");
+        } catch(Throwable t){NavigationDiagnostics.error(host,"NAV_OPEN_FALLBACK_FAILED",t);host.tripInfo("Navigasi","Aplikasi navigasi belum dapat dibuka.");}
+
     }
 
     public void refreshUnread() {

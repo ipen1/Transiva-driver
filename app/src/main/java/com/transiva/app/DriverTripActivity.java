@@ -78,6 +78,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             
         }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_WINDOW_SETUP_FAILED",e); }
         session = new SessionManager(this);
+        tripRouteScope = new DriverUiScope(this);
         api = new DriverNetworkRepository(session);
         tripLocationController = new TripLocationController(this, new TripLocationController.Callback() {
             @Override public void onLocation(Location location) { onDriverLocationChanged(location); }
@@ -104,7 +105,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     }
     @Override protected void onResume(){ super.onResume(); realtimeTripRunning=true; mainHandler.removeCallbacks(realtimeTripPoll); mainHandler.post(realtimeTripPoll); try{ if(mapView!=null) mapView.onResume(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_RESUME_FAILED",e); } if(order != null) startLocationWatch(); if(communicationController!=null) communicationController.onStart(); }
     @Override protected void onPause(){ destinationExtension.close(); realtimeTripRunning=false; mainHandler.removeCallbacks(realtimeTripPoll); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView!=null) mapView.onPause(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_PAUSE_FAILED",e); } super.onPause(); }
-    @Override protected void onDestroy(){ if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView != null) mapView.onDestroy(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_DESTROY_FAILED",e); } super.onDestroy(); }
+    @Override protected void onDestroy(){ tripRouteGeneration++; if(tripRouteScope!=null)tripRouteScope.close(); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView != null) mapView.onDestroy(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_DESTROY_FAILED",e); } super.onDestroy(); }
     @Override public void onLowMemory(){ super.onLowMemory(); try{ if(mapView!=null) mapView.onLowMemory(); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } }
 
     private SmartWaitingTextView waitingView;

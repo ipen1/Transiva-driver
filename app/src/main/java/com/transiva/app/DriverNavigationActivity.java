@@ -116,6 +116,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         // deferred until the Activity is already visible, avoiding OEM/GPU startup stalls.
         buildUiShell();
         instructionController = new NavigationInstructionController(instructionBadge,targetMode);
+        liveRoutes = new NavigationLiveRouteController(this);
         if (pipController != null) pipController.configure();
 
         main.postDelayed(() -> initNativeMap(savedInstanceState), 120L);
@@ -132,6 +133,16 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         startLocationWatch();
         frameController.start();
         routeScheduler.start();
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);if(isFinishing()||isDestroyed())return;setIntent(intent);readOrder();readIdentity();
+        if(communicationController!=null)communicationController.onStop();
+        communicationController=new NavigationCommunicationController(this,order,messageButton,callButton);
+        if(activityStarted)communicationController.onStart();
+        if(markerController!=null)markerController.clear(map);
+        markerController=new NavigationMarkerController(this,order);installMarkers();
+        if(liveRoutes!=null)liveRoutes.targetChanged();
     }
 
     protected void readOrder() {
@@ -203,7 +214,8 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         routeBadge = new TextView(this);
         routeBadge.setText("Menyiapkan rute ke " + NavigationInstructionController.destinationLabel(targetMode) + "…");
         routeBadge.setTextColor(DriverThemeTokens.color(this, "#082F63"));
-        routeBadge.setTextSize(17);
+        routeBadge.setTextSize(14);
+        routeBadge.setMaxLines(2);
         routeBadge.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         routeBadge.setGravity(Gravity.CENTER_VERTICAL);
         routeBadge.setPadding(dp(20), 0, dp(20), 0);
@@ -218,7 +230,8 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         instructionBadge = new TextView(this);
         instructionBadge.setText("↑ Ikuti rute");
         instructionBadge.setTextColor(DriverThemeTokens.color(this, "#0A356C"));
-        instructionBadge.setTextSize(15);
+        instructionBadge.setTextSize(13);
+        instructionBadge.setMaxLines(2);
         instructionBadge.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         instructionBadge.setGravity(Gravity.CENTER_VERTICAL);
         instructionBadge.setPadding(dp(18), dp(8), dp(18), dp(8));
@@ -292,7 +305,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
                     @Override public void onStyleReady(MapLibreMap m, Style st, boolean secondary) {
                         if (isFinishing()) return;
                         map = m; style = st; styleReady = true; nativeMapFailed = false;
-                        hideMapFallback();
+                        if(liveRoutes!=null)liveRoutes.mapReady();else hideMapFallback();
                         NavigationDiagnostics.event(DriverNavigationActivity.this,
                                 secondary ? "NAV_STYLE_READY_SECONDARY" : "NAV_STYLE_READY_PRIMARY", null);
                         NavigationHealthTelemetry.mark(DriverNavigationActivity.this, "style");
@@ -350,7 +363,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
             else { lat = coord("pickup_lat", "user_lat"); lng = coord("pickup_lng", "user_lng"); }
         }
         if (!valid(lat, lng)) { TransivaDiagnostics.event(this,"navigation","EXTERNAL_TARGET_INVALID"); return; }
-        NavigationExternalController.open(this, lat, lng);
+        NavigationExternalController.open(this, lat, lng,liveRoutes==null?vehicleType:liveRoutes.profile());
     }
 
     protected android.graphics.drawable.GradientDrawable roundRect(int color, int radiusDp) {
@@ -442,7 +455,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         if (l.hasBearing() && l.getSpeed() > 1.2f) currentBearing = l.getBearing();
         else if (displayInitialized) currentBearing = bearing(displayLat, displayLng, driverLat, driverLng);
         if (fix.render) updateNativePosition(false);
-        maybeRefreshRoute(l);
+        maybeRefreshRoute(raw);
     }
 
     /**

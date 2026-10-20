@@ -72,7 +72,7 @@ public final class NavigationRouteScheduler {
     private final Runnable retryTick = new Runnable() {
         @Override public void run() {
             if (!started || callback == null || callback.isFinishing()) return;
-            if (!callback.hasRoute()) callback.requestRoute(true);
+            if (!callback.hasRoute() && !callback.isRouteInFlight()) callback.requestRoute(true);
             main.postDelayed(this, callback.hasRoute() ? 15000L : 2200L);
         }
     };

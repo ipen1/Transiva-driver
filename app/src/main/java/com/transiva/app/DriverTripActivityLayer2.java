@@ -286,62 +286,52 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         JSONObject payload=snapshot==null?null:snapshot.optJSONObject("route");JSONArray routes=payload==null?null:payload.optJSONArray("routes");
         JSONObject route=routes==null?null:routes.optJSONObject(0);JSONObject geometry=route==null?null:route.optJSONObject("geometry");JSONArray coords=geometry==null?null:geometry.optJSONArray("coordinates");
         if(googleMap==null||coords==null||coords.length()<2)return false;
+        String routeKey=System.identityHashCode(googleMap)+"|"+snapshot.optString("route_hash",String.valueOf(System.identityHashCode(route)))+"|"+snapshot.optLong("version",0);
+        if(routeKey.equals(appliedAgreedRouteHash)&&deliveryPolyline!=null)return true;
         java.util.ArrayList<LatLng> points=new java.util.ArrayList<>();for(int i=0;i<coords.length();i++){JSONArray xy=coords.optJSONArray(i);if(xy!=null&&xy.length()>1)points.add(new LatLng(xy.optDouble(1),xy.optDouble(0)));}
         if(points.size()<2)return false;
         if(deliveryPolyline!=null)deliveryPolyline.remove();deliveryPolyline=googleMap.addPolyline(new PolylineOptions().addAll(points).width(dp(5)).color(DriverThemeTokens.color(this,"#16A34A")));
-        return true;
+        appliedAgreedRouteHash=routeKey;return true;
+    }
+    private String tripRouteKey(){
+        return order==null?"":order.optString("order_id",order.optString("id"))+"|"+status()+"|"+coord("pickup_lat","user_lat")+"|"+coord("pickup_lng","user_lng")+"|"+coord("delivery_lat","destination_lat")+"|"+coord("delivery_lng","destination_lng")+"|"+DriverEcosystemFeatures.from(order).waypoints.toString();
     }
     protected void requestStableRoute(boolean force){
         if("delivery".equals(routeTargetMode()) && applyAgreedServerRoute())return;
-        if(googleMap == null || !valid(lastDriverLat,lastDriverLng)) return;
-        final double pLat=coord("pickup_lat","user_lat"), pLng=coord("pickup_lng","user_lng");
-        final double dLat=coord("delivery_lat","destination_lat"), dLng=coord("delivery_lng","destination_lng");
-        if(!valid(pLat,pLng) || !valid(dLat,dLng) || routeRequestInFlight) return;
-        if(!valid(tripStartLat, tripStartLng)){
-            tripStartLat=lastDriverLat;
-            tripStartLng=lastDriverLng;
-        }
-        final boolean extensionRoute=extensionNeedsArrival();
-        final JSONArray stops=DriverEcosystemFeatures.from(order).waypoints;
-        final String currentStatus=status()+"|"+dLat+"|"+dLng+"|"+stops.toString();
-        long now=System.currentTimeMillis();
-        boolean statusChanged=!currentStatus.equals(lastOverviewRouteStatus);
-        if(!force && overviewRoutesLoaded && !statusChanged && now-lastRouteRequestAt<45000L) return;
-        routeRequestInFlight=true;
-        lastRouteRequestAt=now;
-        final double startLat=tripStartLat, startLng=tripStartLng;
-        DriverNetworkExecutor.execute(() -> {
+        if(tripRouteScope==null||!tripRouteScope.alive()||googleMap==null||!valid(lastDriverLat,lastDriverLng))return;
+        final double pLat=coord("pickup_lat","user_lat"),pLng=coord("pickup_lng","user_lng"),dLat=coord("delivery_lat","destination_lat"),dLng=coord("delivery_lng","destination_lng");
+        if(!valid(pLat,pLng)||!valid(dLat,dLng)||routeRequestInFlight)return;
+        if(!valid(tripStartLat,tripStartLng)){tripStartLat=lastDriverLat;tripStartLng=lastDriverLng;}
+        final boolean extensionRoute=extensionNeedsArrival();final JSONArray stops;
+        try{stops=new JSONArray(DriverEcosystemFeatures.from(order).waypoints.toString());}catch(Exception e){return;}
+        final String key=tripRouteKey();long now=System.currentTimeMillis();
+        if(!force&&overviewRoutesLoaded&&key.equals(lastOverviewRouteStatus)&&now-lastRouteRequestAt<45000)return;
+        final double startLat=tripStartLat,startLng=tripStartLng,extensionLat=lastDriverLat,extensionLng=lastDriverLng;
+        final long generation=++tripRouteGeneration;routeRequestInFlight=true;lastRouteRequestAt=now;
+        boolean queued=tripRouteScope.execute(()->{
             try{
-                StableRouteEngine.Result firstLeg=StableRouteEngine.fetch(startLat,startLng,pLat,pLng);
-                double a=extensionRoute?lastDriverLat:pLat,b=extensionRoute?lastDriverLng:pLng;
-                JSONArray deliveryPoints=new JSONArray();double routeMeters=0,routeSeconds=0;
-                if(extensionRoute){
-                    for(int i=0;i<stops.length();i++){
-                        JSONObject stop=stops.optJSONObject(i);if(stop==null||"arrived".equals(stop.optString("status")))continue;
-                        double x=stop.optDouble("latitude"),y=stop.optDouble("longitude");if(!valid(x,y))continue;
-                        StableRouteEngine.Result leg=StableRouteEngine.fetch(a,b,x,y);
-                        for(int n=0;n<leg.latLngPoints.length();n++)deliveryPoints.put(leg.latLngPoints.opt(n));
-                        routeMeters+=leg.distanceMeters;routeSeconds+=leg.durationSeconds;a=x;b=y;
-                    }
+                StableRouteEngine.Result first=StableRouteEngine.fetchOverview(tripRouteScope.owner,startLat,startLng,pLat,pLng);
+                double a=extensionRoute?extensionLat:pLat,b=extensionRoute?extensionLng:pLng,meters=0,seconds=0;
+                JSONArray delivery=new JSONArray();
+                if(extensionRoute)for(int i=0;i<stops.length();i++){
+                    JSONObject stop=stops.optJSONObject(i);if(stop==null||"arrived".equals(stop.optString("status")))continue;
+                    double x=stop.optDouble("latitude"),y=stop.optDouble("longitude");if(!valid(x,y))continue;
+                    StableRouteEngine.Result leg=StableRouteEngine.fetchOverview(tripRouteScope.owner,a,b,x,y);
+                    for(int n=0;n<leg.latLngPoints.length();n++)delivery.put(leg.latLngPoints.opt(n));meters+=leg.distanceMeters;seconds+=leg.durationSeconds;a=x;b=y;
                 }
-                StableRouteEngine.Result secondLeg=StableRouteEngine.fetch(a,b,dLat,dLng);
-                for(int n=0;n<secondLeg.latLngPoints.length();n++)deliveryPoints.put(secondLeg.latLngPoints.opt(n));
-                routeMeters+=secondLeg.distanceMeters;routeSeconds+=secondLeg.durationSeconds;
-                pendingPickupRoutePoints=firstLeg.pointsJson();
-                pendingPickupRouteKm=firstLeg.distanceMeters/1000d;
-                pendingPickupRouteSeconds=firstLeg.durationSeconds;
-                pendingDeliveryRoutePoints=deliveryPoints.toString();
-                pendingDeliveryRouteKm=routeMeters/1000d;
-                pendingDeliveryRouteSeconds=routeSeconds;
-                overviewRoutesLoaded=true;
-                lastOverviewRouteStatus=currentStatus;
-                mainHandler.post(this::applyPendingRoute);
-            }catch(Exception ignored){
-                // Jika OSRM gagal, marker tetap bergerak dan rute lama tidak dihapus.
-            }finally{
-                routeRequestInFlight=false;
-            }
+                StableRouteEngine.Result last=StableRouteEngine.fetchOverview(tripRouteScope.owner,a,b,dLat,dLng);
+                for(int n=0;n<last.latLngPoints.length();n++)delivery.put(last.latLngPoints.opt(n));meters+=last.distanceMeters;seconds+=last.durationSeconds;
+                final String points=delivery.toString();final double totalMeters=meters,totalSeconds=seconds;
+                tripRouteScope.post(()->{
+                    if(generation!=tripRouteGeneration)return;routeRequestInFlight=false;
+                    if(!key.equals(tripRouteKey())){requestStableRoute(true);return;}
+                    pendingPickupRoutePoints=first.pointsJson();pendingPickupRouteKm=first.distanceMeters/1000;pendingPickupRouteSeconds=first.durationSeconds;
+                    pendingDeliveryRoutePoints=points;pendingDeliveryRouteKm=totalMeters/1000;pendingDeliveryRouteSeconds=totalSeconds;
+                    overviewRoutesLoaded=true;lastOverviewRouteStatus=key;applyPendingRoute();
+                });
+            }catch(Exception e){tripRouteScope.post(()->{if(generation==tripRouteGeneration){routeRequestInFlight=false;if(!key.equals(tripRouteKey()))requestStableRoute(true);}});}
         });
+        if(!queued)routeRequestInFlight=false;
     }
 
     protected void applyPendingRoute(){

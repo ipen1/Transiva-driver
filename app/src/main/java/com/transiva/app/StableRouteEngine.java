@@ -2,220 +2,112 @@ package com.transiva.app;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
-
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
-import java.net.URL;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.util.Locale;
+import java.util.*;
 
-/**
- * Fetches OSRM routes from native Android instead of WebView JavaScript.
- * This avoids WebView CORS/fetch failures and keeps the last good route on screen.
- */
+/** Legacy order overview and authenticated navigation use separate contracts and caches. */
 public final class StableRouteEngine {
-    
-    private static final int CONNECT_TIMEOUT_MS = 3000;
-    private static final int READ_TIMEOUT_MS = 18000;
-    private static final long CACHE_TTL_MS = 180000L;
-    private static volatile Result cacheResult;
-    private static volatile double cacheFromLat, cacheFromLng, cacheToLat, cacheToLng;
-    private static volatile long cacheAt;
-
-    private StableRouteEngine() {}
-
+    private StableRouteEngine(){}
+    private static final class Cache {
+        final Result result;final double a,b,x,y;final long at;
+        Cache(Result r,double a,double b,double x,double y){result=r;this.a=a;this.b=b;this.x=x;this.y=y;at=System.currentTimeMillis();}
+    }
+    private static volatile Cache cache;
     public static final class Result {
-        public final JSONArray latLngPoints;
-        public final double distanceMeters;
-        public final double durationSeconds;
-        public final JSONArray maneuvers;
-
-        Result(JSONArray latLngPoints, double distanceMeters, double durationSeconds,
-               JSONArray maneuvers) {
-            this.latLngPoints = latLngPoints;
-            this.distanceMeters = distanceMeters;
-            this.durationSeconds = durationSeconds;
-            this.maneuvers = maneuvers == null ? new JSONArray() : maneuvers;
-        }
-
-        public String pointsJson() {
-            return latLngPoints == null ? "[]" : latLngPoints.toString();
-        }
+        public final JSONArray latLngPoints,maneuvers;
+        public final double distanceMeters,durationSeconds;
+        public final String summary;
+        Result(JSONArray points,double meters,double seconds,JSONArray turns){this(points,meters,seconds,turns,"");}
+        Result(JSONArray points,double meters,double seconds,JSONArray turns,String summary){latLngPoints=points;distanceMeters=meters;durationSeconds=seconds;maneuvers=turns==null?new JSONArray():turns;this.summary=summary;}
+        public String pointsJson(){return latLngPoints==null?"[]":latLngPoints.toString();}
     }
-
-    public static Result fetch(double fromLat, double fromLng, double toLat, double toLng) throws Exception {
-        return fetch(fromLat, fromLng, toLat, toLng, false);
+    public static final class RouteSet {
+        public final List<Result> routes;
+        public final String requestedProfile,usedProfile;
+        public final boolean profileFallback;
+        RouteSet(List<Result> r,String requested,String used,boolean fallback){routes=Collections.unmodifiableList(new ArrayList<>(r));requestedProfile=requested;usedProfile=used;profileFallback=fallback;}
     }
-
-    /**
-     * Fetch a route, optionally bypassing the short-lived origin cache.
-     * A forced/off-route reroute MUST bypass cache; otherwise a driver that takes
-     * a different road within the old cache radius can be handed the stale route
-     * again and appear to be snapped back to the previous road.
-     */
-    public static Result fetch(double fromLat, double fromLng, double toLat, double toLng,
-                               boolean bypassCache) throws Exception {
-        if (!valid(fromLat, fromLng) || !valid(toLat, toLng)) {
-            throw new IllegalArgumentException("Invalid route coordinates");
+    public static Result fetch(double a,double b,double x,double y)throws Exception{return fetch(a,b,x,y,false);}
+    public static Result fetch(double a,double b,double x,double y,boolean bypass)throws Exception{
+        coordinates(a,b,x,y);Cache snapshot=cache;
+        if(!bypass&&snapshot!=null&&System.currentTimeMillis()-snapshot.at<180000&&NavigationGeometry.meters(a,b,snapshot.a,snapshot.b)<=15&&NavigationGeometry.meters(x,y,snapshot.x,snapshot.y)<=30)return snapshot.result;
+        Exception last=null;
+        for(int i=0;i<2;i++){
+            if(Thread.currentThread().isInterrupted())throw new InterruptedIOException("Route cancelled");
+            try{JSONObject root=request(DriverApiConfig.endpoint("customer_route_proxy.php")+query(a,b,x,y),null);Result r=parseRoutes(root).get(0);cache=new Cache(r,a,b,x,y);return r;}
+            catch(Exception e){last=e;if(Thread.currentThread().isInterrupted())throw e;}
         }
-
-        if (!bypassCache) {
-            Result cached = getCached(fromLat, fromLng, toLat, toLng);
-            if (cached != null) return cached;
-        }
-
-        Exception last = null;
-        for (int attempt = 0; attempt < 2; attempt++) {
-            HttpURLConnection connection = null;
-            try {
-                String endpoint=DriverApiConfig.endpoint("customer_route_proxy.php")
-                        +String.format(Locale.US,"?from_lat=%.7f&from_lng=%.7f&to_lat=%.7f&to_lng=%.7f",fromLat,fromLng,toLat,toLng);
-                connection = com.transiva.app.driver.data.DriverConnectionRepository.open(endpoint);
-                connection.setRequestMethod("GET");
-                connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
-                connection.setReadTimeout(READ_TIMEOUT_MS);
-                connection.setUseCaches(false);
-                connection.setRequestProperty("Accept", "application/json");
-                connection.setRequestProperty("User-Agent", "Transiva-Android/1.0");
-
-                int code = connection.getResponseCode();
-                InputStream stream = code >= 200 && code < 300
-                        ? connection.getInputStream() : connection.getErrorStream();
-                String raw = readAll(stream);
-                if (code < 200 || code >= 300) {
-                    throw new IllegalStateException("Route HTTP " + code);
-                }
-
-                JSONObject root = new JSONObject(raw);
-                JSONArray routes = root.optJSONArray("routes");
-                if (routes == null || routes.length() == 0) {
-                    throw new IllegalStateException("No route returned");
-                }
-                JSONObject route = routes.getJSONObject(0);
-                JSONObject geometry = route.optJSONObject("geometry");
-                JSONArray coordinates = geometry == null ? null : geometry.optJSONArray("coordinates");
-                if (coordinates == null || coordinates.length() < 2) {
-                    throw new IllegalStateException("Route geometry empty");
-                }
-
-                JSONArray points = new JSONArray();
-                for (int i = 0; i < coordinates.length(); i++) {
-                    JSONArray lngLat = coordinates.optJSONArray(i);
-                    if (lngLat == null || lngLat.length() < 2) continue;
-                    double lng = lngLat.optDouble(0, Double.NaN);
-                    double lat = lngLat.optDouble(1, Double.NaN);
-                    if (Double.isNaN(lat) || Double.isNaN(lng)) continue;
-                    JSONArray latLng = new JSONArray();
-                    latLng.put(lat);
-                    latLng.put(lng);
-                    points.put(latLng);
-                }
-                if (points.length() < 2) throw new IllegalStateException("Route points empty");
-
-                JSONArray maneuvers = parseManeuvers(route);
-                Result result = new Result(points,
-                        route.optDouble("distance", 0d),
-                        route.optDouble("duration", 0d),
-                        maneuvers);
-                cacheResult = result;
-                cacheFromLat = fromLat; cacheFromLng = fromLng;
-                cacheToLat = toLat; cacheToLng = toLng;
-                cacheAt = System.currentTimeMillis();
-                return result;
-            } catch (Exception e) {
-                last = e;
-                if (attempt < 1) {
-                    try { Thread.sleep(180L); } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        throw ie;
-                    }
-                }
-            } finally {
-                if (connection != null) connection.disconnect();
+        throw last;
+    }
+    public static Result fetchOverview(DriverSessionOwner owner,double a,double b,double x,double y)throws Exception {
+        coordinates(a,b,x,y);owner.check();return parseRoutes(request(DriverApiConfig.endpoint("customer_route_proxy.php")+query(a,b,x,y),owner)).get(0);
+    }
+    public static RouteSet fetchNavigation(DriverSessionOwner owner,double a,double b,double x,double y,String profile,double heading,boolean force)throws Exception{
+        coordinates(a,b,x,y);owner.check();
+        String p="motor".equals(profile)?"motor":"car";
+        String url=DriverApiConfig.endpoint("driver_navigation_route.php")+query(a,b,x,y)+"&profile="+p+"&alternatives=1&refresh="+(force?1:0);
+        if(Double.isFinite(heading))url+="&heading="+String.format(Locale.US,"%.1f",(heading%360+360)%360);
+        JSONObject response=request(url,owner);JSONObject meta=response.optJSONObject("transiva_navigation");
+        if(meta==null)throw new IOException("Metadata profil rute tidak tersedia. Perbarui endpoint navigasi server.");
+        if(!p.equals(meta.optString("requested_profile")))throw new IOException("Target profil respons berubah");
+        String used=meta.optString("used_profile");if(!used.equals("motor")&&!used.equals("car"))throw new IOException("Profil rute tidak valid");
+        return new RouteSet(parseRoutes(response),p,used,!p.equals(used));
+    }
+    private static String query(double a,double b,double x,double y){return String.format(Locale.US,"?from_lat=%.7f&from_lng=%.7f&to_lat=%.7f&to_lng=%.7f",a,b,x,y);}
+    private static JSONObject request(String url,DriverSessionOwner owner)throws Exception{
+        HttpURLConnection c=com.transiva.app.driver.data.DriverConnectionRepository.open(url);
+        try{
+            c.setRequestMethod("GET");c.setConnectTimeout(3000);c.setReadTimeout(18000);c.setUseCaches(false);c.setInstanceFollowRedirects(false);c.setRequestProperty("Accept","application/json");
+            if(owner!=null)owner.pin(c);
+            int code=c.getResponseCode();InputStream stream=code>=200&&code<300?c.getInputStream():c.getErrorStream();
+            if(stream==null)throw new IOException("Route HTTP "+code);
+            String raw;
+            try(InputStream in=stream;ByteArrayOutputStream out=new ByteArrayOutputStream()){
+                byte[] buf=new byte[8192];int n;long deadline=System.nanoTime()+25_000_000_000L;
+                while((n=in.read(buf))!=-1){if(owner!=null)owner.check();if(Thread.currentThread().isInterrupted()||System.nanoTime()>deadline)throw new InterruptedIOException("Route expired");if(out.size()+n>8388608)throw new IOException("Route response too large");out.write(buf,0,n);}
+                raw=new String(out.toByteArray(),StandardCharsets.UTF_8);
             }
-        }
-        throw last != null ? last : new IllegalStateException("Route failed");
+            if(owner!=null)owner.check();if(code<200||code>=300)throw new IOException("Route HTTP "+code);
+            return new JSONObject(raw);
+        }finally{if(owner!=null)owner.release(c);c.disconnect();}
     }
-
-
-    /**
-     * Compact OSRM turn instructions. distance_from_start is based on step
-     * distance, which is good enough for a lightweight navigation banner.
-     */
-    private static JSONArray parseManeuvers(JSONObject route) throws Exception {
-        JSONArray out = new JSONArray();
-        JSONArray legs = route.optJSONArray("legs");
-        if (legs == null) return out;
-
-        double cumulative = 0d;
-        for (int li = 0; li < legs.length(); li++) {
-            JSONObject leg = legs.optJSONObject(li);
-            if (leg == null) continue;
-            JSONArray steps = leg.optJSONArray("steps");
-            if (steps == null) continue;
-
-            for (int si = 0; si < steps.length(); si++) {
-                JSONObject step = steps.optJSONObject(si);
-                if (step == null) continue;
-                JSONObject man = step.optJSONObject("maneuver");
-                if (man == null) {
-                    cumulative += Math.max(0d, step.optDouble("distance", 0d));
-                    continue;
-                }
-
-                JSONObject item = new JSONObject();
-                item.put("distance_from_start", cumulative);
-                item.put("step_distance", Math.max(0d, step.optDouble("distance", 0d)));
-                item.put("name", step.optString("name", ""));
-                item.put("type", man.optString("type", ""));
-                item.put("modifier", man.optString("modifier", ""));
-
-                JSONArray loc = man.optJSONArray("location"); // [lng,lat]
-                if (loc != null && loc.length() >= 2) {
-                    item.put("lng", loc.optDouble(0, 0d));
-                    item.put("lat", loc.optDouble(1, 0d));
-                }
-                out.put(item);
-                cumulative += Math.max(0d, step.optDouble("distance", 0d));
+    static List<Result> parseRoutes(JSONObject root)throws Exception{
+        if(!"Ok".equals(root.optString("code")))throw new IOException("Route unavailable");
+        JSONArray routes=root.optJSONArray("routes");List<Result> results=new ArrayList<>();
+        if(routes!=null)for(int k=0;k<Math.min(3,routes.length());k++){
+            JSONObject r=routes.optJSONObject(k);if(r==null)continue;
+            JSONObject geometry=r.optJSONObject("geometry");JSONArray coords=geometry==null?null:geometry.optJSONArray("coordinates");
+            if(coords==null||coords.length()<2)continue;JSONArray points=new JSONArray();
+            for(int i=0;i<coords.length();i++){JSONArray xy=coords.optJSONArray(i);if(xy==null||xy.length()<2)throw new IOException("Invalid route geometry");double x=xy.optDouble(0,Double.NaN),y=xy.optDouble(1,Double.NaN);if(!valid(y,x))throw new IOException("Invalid route point");points.put(new JSONArray().put(y).put(x));}
+            double distance=r.optDouble("distance",Double.NaN),duration=r.optDouble("duration",Double.NaN);
+            if(!Double.isFinite(distance)||!Double.isFinite(duration)||distance<0||duration<0)throw new IOException("Invalid route metrics");
+            JSONArray legs=r.optJSONArray("legs");String summary="";if(legs!=null&&legs.optJSONObject(0)!=null)summary=legs.optJSONObject(0).optString("summary","");
+            results.add(new Result(points,distance,duration,parseManeuvers(r),summary));
+        }
+        if(results.isEmpty())throw new IOException("No route returned");return results;
+    }
+    private static JSONArray parseManeuvers(JSONObject route)throws Exception{
+        JSONArray out=new JSONArray(),legs=route.optJSONArray("legs");double cumulative=0;
+        if(legs==null)return out;
+        for(int l=0;l<legs.length();l++){
+            JSONObject leg=legs.optJSONObject(l);JSONArray steps=leg==null?null:leg.optJSONArray("steps");if(steps==null)continue;
+            for(int i=0;i<steps.length();i++){
+                JSONObject step=steps.optJSONObject(i);if(step==null)continue;JSONObject man=step.optJSONObject("maneuver");
+                double distance=Math.max(0,step.optDouble("distance",0));
+                if(man!=null){JSONObject item=new JSONObject().put("distance_from_start",cumulative).put("step_distance",distance).put("step_duration",Math.max(0,step.optDouble("duration",0))).put("name",step.optString("name")).put("type",man.optString("type")).put("modifier",man.optString("modifier")).put("exit",man.optInt("exit",0)).put("destinations",step.optString("destinations"));
+                    JSONArray loc=man.optJSONArray("location");if(loc!=null&&loc.length()>1)item.put("lng",loc.optDouble(0)).put("lat",loc.optDouble(1));
+                    JSONArray intersections=step.optJSONArray("intersections");JSONObject junction=intersections==null?null:intersections.optJSONObject(0);
+                    JSONArray lanes=junction==null?null:junction.optJSONArray("lanes"),junctionLocation=junction==null?null:junction.optJSONArray("location");
+                    if(lanes!=null&&lanes.length()>0&&loc!=null&&loc.length()>1&&junctionLocation!=null&&junctionLocation.length()>1
+                            &&NavigationGeometry.meters(loc.optDouble(1),loc.optDouble(0),junctionLocation.optDouble(1),junctionLocation.optDouble(0))<=20)
+                        item.put("lanes",new JSONArray(lanes.toString()));
+                    out.put(item);
+                }cumulative+=distance;
             }
-        }
-        return out;
+        }return out;
     }
-
-    private static Result getCached(double fromLat, double fromLng, double toLat, double toLng) {
-        Result r = cacheResult;
-        if (r == null || System.currentTimeMillis() - cacheAt > CACHE_TTL_MS) return null;
-        // Reuse only when the origin is essentially the same GPS position.
-        // A wide radius here breaks real rerouting on nearby parallel/alternate roads.
-        if (meters(fromLat, fromLng, cacheFromLat, cacheFromLng) > 15d) return null;
-        if (meters(toLat, toLng, cacheToLat, cacheToLng) > 30d) return null;
-        return r;
-    }
-
-    private static double meters(double lat1, double lng1, double lat2, double lng2) {
-        double r = 6371000d;
-        double p1 = Math.toRadians(lat1), p2 = Math.toRadians(lat2);
-        double dp = Math.toRadians(lat2 - lat1), dl = Math.toRadians(lng2 - lng1);
-        double a = Math.sin(dp/2d)*Math.sin(dp/2d) +
-                Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2d)*Math.sin(dl/2d);
-        return r * 2d * Math.atan2(Math.sqrt(a), Math.sqrt(1d-a));
-    }
-
-    private static String readAll(InputStream stream) throws Exception {
-        if (stream == null) return "";
-        BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8));
-        StringBuilder out = new StringBuilder();
-        String line;
-        while ((line = reader.readLine()) != null) out.append(line);
-        reader.close();
-        return out.toString();
-    }
-
-    private static boolean valid(double lat, double lng) {
-        return Double.isFinite(lat) && Double.isFinite(lng)
-                && lat >= -90d && lat <= 90d && lng >= -180d && lng <= 180d
-                && !(lat == 0d && lng == 0d);
-    }
+    private static void coordinates(double a,double b,double x,double y){if(!valid(a,b)||!valid(x,y))throw new IllegalArgumentException("Invalid route coordinates");}
+    private static boolean valid(double lat,double lng){return Double.isFinite(lat)&&Double.isFinite(lng)&&Math.abs(lat)<=90&&Math.abs(lng)<=180&&!(lat==0&&lng==0);}
 }
