@@ -82,6 +82,7 @@ def prepare(sdk,manager,reports,attempts=3,backoff=3):
                 else:can_retry=retryable(text)
                 if not can_retry or attempt==attempts:
                     result['reason']='SDK installation or verification failed; instrumentation was not started.'
+                    if code==0 and version:result['reason']+=' '+version
                     print('EMULATOR_SDK_SETUP_FAILED: '+result['reason']);return 1
             if backoff:time.sleep(backoff*attempt)
     except (OSError,RuntimeError) as error:

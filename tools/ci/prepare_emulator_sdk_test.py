@@ -23,6 +23,7 @@ package=root/'emulator';package.mkdir()
 if mode=='metadata_once' and count==1:(package/'package.xml').write_text('<broken')
 binary=package/'emulator';binary.write_text('#!/bin/sh\necho "Android emulator version 37.2.12.0"\n');binary.chmod(0o755)
 if mode=='binary_once' and count==1:binary.write_text('#!/bin/sh\nexit 1\n')
+if mode=='missing_pulse':binary.write_text('#!/bin/sh\necho "qemu-system-x86_64: error while loading shared libraries: libpulse.so.0: cannot open shared object file: No such file or directory" >&2\nexit 127\n')
 if mode=='missing_binary_once' and count==1:binary.unlink()
 print('Installed emulator package')
 '''
@@ -49,6 +50,20 @@ class EmulatorPreparationTest(unittest.TestCase):
  def test_unknown_error_is_not_retried_or_masked(self):self.assertEqual(1,self.run_mode('unknown'));self.assertEqual(1,self.count())
  def test_missing_binary_is_not_a_success(self):self.assertEqual(0,self.run_mode('missing_binary_once'));self.assertEqual(2,self.count())
  def test_broken_binary_is_replaced_before_admission(self):self.assertEqual(0,self.run_mode('binary_once'));self.assertEqual(2,self.count())
+ def test_observed_missing_libpulse_stays_failure_and_preserves_existing_emulator(self):
+  (self.sdk/'emulator').mkdir();(self.sdk/'emulator/keep').write_text('working')
+  self.assertEqual(1,self.run_mode('missing_pulse'));self.assertEqual(1,self.count())
+  self.assertEqual('failed',self.result()['status']);self.assertFalse(self.result()['tests_started'])
+  self.assertIn('libpulse.so.0',self.result()['reason']);self.assertEqual('working',(self.sdk/'emulator/keep').read_text())
+ def test_workflow_installs_and_loads_libpulse_before_executing_emulator(self):
+  text=(Path(__file__).resolve().parents[2]/'.github/workflows/build-app.yml').read_text()
+  start=text.index('      - name: Install emulator host dependency before SDK verification')
+  end=text.index('      - name: Prepare verified emulator SDK with bounded recovery',start)
+  block=text[start:end]
+  self.assertIn('shell: bash',block);self.assertIn('set -euo pipefail',block)
+  self.assertLess(block.index('sudo apt-get update'),block.index('sudo apt-get install --no-install-recommends -y libpulse0'))
+  self.assertLess(block.index('sudo apt-get install --no-install-recommends -y libpulse0'),block.index('ctypes.CDLL("libpulse.so.0")'))
+  self.assertLess(end,text.index('uses: reactivecircus/android-emulator-runner@'))
  def test_invalid_package_metadata_cannot_be_promoted(self):self.assertEqual(0,self.run_mode('metadata_once'));self.assertEqual(2,self.count())
  def test_failure_preserves_existing_runner_emulator(self):
   (self.sdk/'emulator').mkdir();(self.sdk/'emulator/keep').write_text('working');self.assertEqual(1,self.run_mode('always_corrupt'));self.assertEqual('working',(self.sdk/'emulator/keep').read_text())
