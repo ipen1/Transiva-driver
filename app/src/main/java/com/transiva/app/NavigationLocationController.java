@@ -92,6 +92,8 @@ public final class NavigationLocationController {
             catch (Throwable t) { TransivaDiagnostics.error(activity, "navigation", "NAV_LAST_GPS_FAILED", t); }
             try { net = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER); }
             catch (Throwable t) { TransivaDiagnostics.error(activity, "navigation", "NAV_LAST_NETWORK_FAILED", t); }
+            if (!fresh(gps)) gps=null;
+            if (!fresh(net)) net=null;
             if (gps == null) return net;
             if (net == null) return gps;
             return net.getTime() > gps.getTime() ? net : gps;
@@ -99,6 +101,11 @@ public final class NavigationLocationController {
             TransivaDiagnostics.error(activity, "navigation", "NAV_LAST_LOCATION_FAILED", t);
             return null;
         }
+    }
+
+    static boolean fresh(Location l){
+        if(l==null||!NavigationTargetPolicy.valid(l.getLatitude(),l.getLongitude())||!l.hasAccuracy()||!Float.isFinite(l.getAccuracy())||l.getAccuracy()>50)return false;
+        long nanos=l.getElapsedRealtimeNanos();if(nanos<=0)return false;long age=SystemClock.elapsedRealtimeNanos()-nanos;return age>=0&&age<=15000_000_000L;
     }
 
     private boolean shouldAccept(Location raw) {

@@ -10,6 +10,9 @@ import java.util.*;
 final class NavigationLiveRouteController implements AutoCloseable {
     private final DriverNavigationActivityLayer2 host;
     private final NavigationRouteCoordinator coordinator;
+    private final NavigationRefreshPolicy refresh=new NavigationRefreshPolicy();
+    private final NavigationOrderSync orderSync;
+    private boolean evaluation;
     private final NavigationRecoveryPolicy recovery=new NavigationRecoveryPolicy();
     private boolean running,restoring,serviceReady,everResumed,restoredOnly;
     private final NavigationEtaEstimator etaEstimator=new NavigationEtaEstimator();
@@ -37,8 +40,15 @@ final class NavigationLiveRouteController implements AutoCloseable {
             public String currentTargetKey(){return key();}
             public void ready(long generation,StableRouteEngine.RouteSet result){
                 host.routeInFlight=false;if(host.routeScheduler!=null)host.routeScheduler.endLoading();
-                if(NavigationGeometry.meters(originLat,originLng,host.driverLat,host.driverLng)>40&&!containsCurrentPosition(result.routes.get(0))){request(true);return;}
-                routeGeneration=generation;restoredOnly=false;available=result;availableLat=originLat;availableLng=originLng;failed=false;apply(0);
+                if(NavigationGeometry.meters(originLat,originLng,host.driverLat,host.driverLng)>40&&!containsCurrentPosition(result.routes.get(0))){evaluation=false;recovery.require(SystemClock.elapsedRealtime());request(true);return;}
+                long now=SystemClock.elapsedRealtime();refresh.evaluated(now,originLat,originLng);
+                if(evaluation&&current!=null){
+                    evaluation=false;double length; synchronized(host.routePoints){length=host.routeCumulativeMeters.isEmpty()?0:host.routeCumulativeMeters.get(host.routeCumulativeMeters.size()-1);}
+                    NavigationProgress remaining=NavigationProgress.remaining(current,host.lastMatchedProgressMeters,length);
+                    recovery.reset();failed=false;
+                    if(!refresh.better(now,remaining.seconds,result.routes.get(0).durationSeconds)){mapReady();return;}
+                }
+                evaluation=false;routeGeneration=generation;restoredOnly=false;available=result;availableLat=originLat;availableLng=originLng;failed=false;apply(0);
                 mapReady();
                 if(showChoices){showChoices=false;alternatives();}
             }
@@ -48,6 +58,10 @@ final class NavigationLiveRouteController implements AutoCloseable {
                 mapReady();
                 if(host.routeBadge!=null)host.routeBadge.setText(current==null?"Rute belum tersedia • mencoba kembali…":"Koneksi rute terputus • panduan tersimpan");
             }
+        });
+        orderSync=new NavigationOrderSync(h,new NavigationOrderSync.Callback(){
+            public org.json.JSONObject currentOrder(){return host.order;}
+            public void updated(org.json.JSONObject fresh){applyOrderState(fresh,true);}
         });
         options=new NavigationOptionsController(h,h.navigationRoot,new NavigationOptionsController.Listener(){
             public void profile(String value){if(!closed&&coordinator.valid()&&!value.equals(profile)){profile=value;targetChanged();}}
@@ -77,10 +91,10 @@ final class NavigationLiveRouteController implements AutoCloseable {
         }else if(host.styleReady)host.hideMapFallback();
     }
     String profile(){return profile;}
-    private String base(){return host.order.optString("order_id",host.order.optString("id"))+"|"+host.order.optString("source")+"|"+host.targetMode+"|"+host.targetLat()+"|"+host.targetLng();}
+    private String base(){return NavigationTargetPolicy.id(host.order)+"|"+NavigationTargetPolicy.source(host.order)+"|"+host.targetMode+"|"+host.targetLat()+"|"+host.targetLng();}
     private String key(){return base()+"|"+profile;}
     void request(boolean force){
-        if(closed||!running||!coordinator.valid()||!host.valid(host.driverLat,host.driverLng)||!host.valid(host.targetLat(),host.targetLng()))return;
+        if(closed||!running||!coordinator.valid()||!host.valid(host.driverLat,host.driverLng)||!host.valid(host.targetLat(),host.targetLng())||host.lastFixRealtimeMs<=0||SystemClock.elapsedRealtime()-host.lastFixRealtimeMs>12000)return;
         String key=key();if(coordinator.busy()&&key.equals(targetKey))return;
         if(key.equals(targetKey)&&recovery.needed()&&!recovery.due(SystemClock.elapsedRealtime()))return;
         if(!force&&current!=null&&key.equals(targetKey))return;
@@ -94,14 +108,15 @@ final class NavigationLiveRouteController implements AutoCloseable {
     }
     void targetChanged(){
         if(closed||!coordinator.valid())return;
-        coordinator.invalidate();recovery.reset();voice.route("target-"+SystemClock.elapsedRealtime());deviation.reset();available=null;current=null;selected=0;suspect=false;failed=false;
+        coordinator.invalidate();recovery.reset();refresh.reset();evaluation=false;voice.route("target-"+SystemClock.elapsedRealtime());deviation.reset();available=null;current=null;selected=0;suspect=false;failed=false;
         host.setRoutePoints(new JSONArray());host.routeManeuvers=new JSONArray();host.pendingRouteGeoJson=host.emptyFeatureCollection();host.updateRemainingRouteLine(true);
-        host.instructionController.setDestination(host.targetMode);options.profile(profile,profile);targetKey=key();checkpoint();request(true);
+        host.instructionController.setDestination(host.targetMode);options.profile(profile,profile);targetKey=key();checkpoint();if(running)serviceReady=NavigationGuidanceService.start(host,key());request(true);
     }
     void fix(Location raw){
         if(closed||!running||!coordinator.valid()||raw==null)return;
         if(!key().equals(targetKey)){targetChanged();return;}
         if(current==null){if(!coordinator.busy()&&(!recovery.needed()||recovery.due(SystemClock.elapsedRealtime())))request(false);return;}
+        if(!refresh.initialized())refresh.evaluated(SystemClock.elapsedRealtime(),raw.getLatitude(),raw.getLongitude());
         NavigationGeometry.Projection projection;
         synchronized(host.routePoints){projection=NavigationGeometry.project(host.routePoints,host.routeCumulativeMeters,raw.getLatitude(),raw.getLongitude(),host.lastMatchedProgressMeters);}
         etaEstimator.offer(SystemClock.elapsedRealtime(),raw.hasSpeed()?raw.getSpeed():host.currentSpeedKmh/3.6,raw.hasAccuracy()?raw.getAccuracy():50,projection.distance<=20);
@@ -111,7 +126,8 @@ final class NavigationLiveRouteController implements AutoCloseable {
         double angle=Double.isFinite(bearing)&&Double.isFinite(projection.bearing)?Math.abs(((bearing-projection.bearing+540)%360)-180):0;
         suspect=projection.distance>Math.max(12,accuracy*1.8)||(angle>125&&speed>=2.5&&accuracy<=25);
         NavigationDeviationDetector.Reason reason=deviation.offer(SystemClock.elapsedRealtime(),raw.getLatitude(),raw.getLongitude(),accuracy,speed,bearing,projection.bearing,projection.distance);
-        if(reason!=NavigationDeviationDetector.Reason.NONE){NavigationDiagnostics.event(host,"NAV_REROUTE_"+reason.name(),null);request(true);}
+        if(reason!=NavigationDeviationDetector.Reason.NONE){NavigationDiagnostics.event(host,"NAV_REROUTE_"+reason.name(),null);evaluation=false;recovery.require(SystemClock.elapsedRealtime());request(true);}
+        else if(!suspect&&!recovery.needed()&&!coordinator.busy()&&refresh.due(SystemClock.elapsedRealtime(),raw.getLatitude(),raw.getLongitude(),speed,accuracy,current.distanceMeters-Math.max(0,projection.progress))){evaluation=true;request(true);}
     }
     private void apply(int index){
         if(closed||available==null||index<0||index>=available.routes.size())return;
@@ -135,7 +151,7 @@ final class NavigationLiveRouteController implements AutoCloseable {
         NavigationProgress left=NavigationProgress.remaining(current,geometryProgress,length);
         double along=current.distanceMeters-left.meters;
         boolean arrived=left.meters<=25&&host.lastGpsAccuracyM<=30&&NavigationGeometry.meters(host.driverLat,host.driverLng,host.targetLat(),host.targetLng())<=25;
-        host.instructionController.update(host.routeManeuvers,along,arrived);
+        if(!suspect)host.instructionController.update(host.routeManeuvers,along,arrived);
         long now=SystemClock.elapsedRealtime();if(now-lastBadgeAt<1000||coordinator.busy())return;lastBadgeAt=now;
         if(host.lastFixRealtimeMs<=0||now-host.lastFixRealtimeMs>12000){host.routeBadge.setText("Menunggu GPS • perkiraan tersimpan");return;}
         if(suspect){host.routeBadge.setText("Memeriksa arah/jalur • panduan sedang diperbarui");return;}
@@ -151,20 +167,20 @@ final class NavigationLiveRouteController implements AutoCloseable {
         if(coordinator.busy()){showChoices=true;return;}
         if(restoredOnly||available==null||NavigationGeometry.meters(availableLat,availableLng,host.driverLat,host.driverLng)>40){showChoices=true;request(true);return;}
         StableRouteEngine.RouteSet snapshot=available;
-        options.choices(snapshot.routes,selected,index->{if(!coordinator.valid()||snapshot!=available)return;if(NavigationGeometry.meters(availableLat,availableLng,host.driverLat,host.driverLng)>40){showChoices=true;request(true);}else apply(index);});
+        options.choices(snapshot.routes,selected,index->{if(!coordinator.valid()||snapshot!=available)return;if(NavigationGeometry.meters(availableLat,availableLng,host.driverLat,host.driverLng)>40){showChoices=true;request(true);}else {refresh.manual(SystemClock.elapsedRealtime());apply(index);}});
     }
     void resumed(boolean value){
         if(value&&NavigationSessionStore.stopped&&everResumed){host.finish();return;}
         if(value){NavigationSessionStore.foregroundOwner=pageId;NavigationSessionStore.foreground=true;}
         else if(pageId.equals(NavigationSessionStore.foregroundOwner))NavigationSessionStore.foreground=false;
-        if(value){NavigationSessionStore.stopped=false;everResumed=true;restore();checkpoint();serviceReady=NavigationGuidanceService.start(host,key());watchNetwork();}
+        if(value){NavigationSessionStore.stopped=false;everResumed=true;adoptCheckpointOrder();if(host.isFinishing()||NavigationSessionStore.stopped)return;restore();checkpoint();serviceReady=NavigationGuidanceService.start(host,key());watchNetwork();}
         else {checkpoint();unwatchNetwork();}
-        running=value;voice.resumed(value);retryMain.removeCallbacks(retry);
-        if(value){retryMain.post(retry);}else{coordinator.invalidate();host.routeInFlight=false;if(host.routeScheduler!=null)host.routeScheduler.endLoading();}
+        running=value;orderSync.active(value);voice.resumed(value);retryMain.removeCallbacks(retry);
+        if(value){retryMain.post(retry);}else{coordinator.invalidate();if(evaluation)recovery.reset();evaluation=false;host.routeInFlight=false;if(host.routeScheduler!=null)host.routeScheduler.endLoading();}
     }
     private void checkpoint(){
         if(closed||restoring||!coordinator.valid()||!pageId.equals(NavigationSessionStore.foregroundOwner))return;
-        try{org.json.JSONObject x=new org.json.JSONObject().put("owner",NavigationSessionStore.identity(host)).put("saved",System.currentTimeMillis()).put("base",base()).put("key",key()).put("profile",profile).put("used",available==null?profile:available.usedProfile).put("order",NavigationSessionStore.compactOrder(host.order).toString()).put("mode",host.targetMode).put("lat",host.targetLat()).put("lng",host.targetLng()).put("needs_route",recovery.needed()).put("route_id",restoredId.isEmpty()?routeGeneration+"-"+selected:restoredId);
+        try{org.json.JSONObject x=new org.json.JSONObject().put("owner",NavigationSessionStore.identity(host)).put("saved",System.currentTimeMillis()).put("base",base()).put("key",key()).put("profile",profile).put("used",available==null?profile:available.usedProfile).put("order",NavigationSessionStore.compactOrder(host.order).toString()).put("mode",host.targetMode).put("lat",host.targetLat()).put("lng",host.targetLng()).put("manual_until",System.currentTimeMillis()+refresh.manualRemaining(SystemClock.elapsedRealtime())).put("needs_route",recovery.needed()).put("route_id",restoredId.isEmpty()?routeGeneration+"-"+selected:restoredId);
             if(current!=null){org.json.JSONObject savedRoute=NavigationSessionStore.route(current);if(savedRoute.toString().length()<1200000)x.put("route",savedRoute);else x.put("needs_route",true);}
             NavigationSessionStore.save(host,x);lastCheckpoint=SystemClock.elapsedRealtime();
         }catch(Exception e){NavigationDiagnostics.error(host,"NAV_CHECKPOINT_FAILED",e);}
@@ -177,7 +193,27 @@ final class NavigationLiveRouteController implements AutoCloseable {
         coordinator.invalidate();profile=storedProfile;targetKey=key();restoredId=id;restoring=true;restoredOnly=true;
         try{String used=x.optString("used","car");available=new StableRouteEngine.RouteSet(java.util.Collections.singletonList(result),profile,used,!profile.equals(used));availableLat=host.driverLat;availableLng=host.driverLng;apply(0);}
         finally{restoring=false;}
+        refresh.hold(SystemClock.elapsedRealtime(),x.optLong("manual_until")-System.currentTimeMillis());
         if(x.optBoolean("needs_route")||System.currentTimeMillis()-x.optLong("saved")>120000)recovery.require(SystemClock.elapsedRealtime());
+    }
+    private void adoptCheckpointOrder(){
+        org.json.JSONObject x=NavigationSessionStore.read(host);if(x==null)return;
+        try{org.json.JSONObject fresh=new org.json.JSONObject(x.optString("order"));if(NavigationTargetPolicy.same(host.order,fresh))applyOrderState(fresh,false);}
+        catch(org.json.JSONException e){NavigationDiagnostics.error(host,"NAV_RESTORE_ORDER_FAILED",e);}
+    }
+    private void applyOrderState(org.json.JSONObject fresh,boolean notify){
+        if(closed||!coordinator.valid()||!NavigationTargetPolicy.same(host.order,fresh))return;
+        if(NavigationTargetPolicy.terminal(fresh)){coordinator.invalidate();NavigationSessionStore.clear(host);NavigationGuidanceService.stop(host);host.finish();return;}
+        String before=key();
+        try{org.json.JSONObject merged=new org.json.JSONObject(host.order.toString());java.util.Iterator<String> fields=fresh.keys();while(fields.hasNext()){String field=fields.next();merged.put(field,fresh.opt(field));}host.order=merged;}
+        catch(org.json.JSONException e){NavigationDiagnostics.error(host,"NAV_ORDER_APPLY_FAILED",e);return;}
+        NavigationTargetPolicy.Target target=NavigationTargetPolicy.resolve(host.order,host.targetMode,host.explicitTargetLat,host.explicitTargetLng);
+        host.targetMode=target.mode;host.explicitTargetLat=target.lat;host.explicitTargetLng=target.lng;
+        if(!before.equals(key())){
+            if(host.markerController!=null)host.markerController.clear(host.map);host.markerController=new NavigationMarkerController(host,host.order);host.installMarkers();
+            if(notify)targetChanged();
+            else{coordinator.invalidate();current=null;available=null;targetKey=key();host.setRoutePoints(new JSONArray());host.routeManeuvers=new JSONArray();host.pendingRouteGeoJson=host.emptyFeatureCollection();host.updateRemainingRouteLine(true);host.instructionController.setDestination(host.targetMode);refresh.reset();recovery.require(SystemClock.elapsedRealtime());}
+        }
     }
     private void watchNetwork(){
         if(network!=null)return;
@@ -188,5 +224,5 @@ final class NavigationLiveRouteController implements AutoCloseable {
     private void unwatchNetwork(){if(network==null)return;try{((android.net.ConnectivityManager)host.getSystemService(android.content.Context.CONNECTIVITY_SERVICE)).unregisterNetworkCallback(network);}catch(RuntimeException ignored){}network=null;}
     @Override public void close(){closed=true;unwatchNetwork();
         if(host.isFinishing()&&pageId.equals(NavigationSessionStore.foregroundOwner)){NavigationSessionStore.clear(host);NavigationGuidanceService.stop(host);}
-        retryMain.removeCallbacksAndMessages(null);coordinator.close();voice.close();host.routeInFlight=false;}
+        orderSync.close();retryMain.removeCallbacksAndMessages(null);coordinator.close();voice.close();host.routeInFlight=false;}
 }

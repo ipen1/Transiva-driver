@@ -77,7 +77,8 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected final Handler mainHandler = new Handler(Looper.getMainLooper());
     protected LinearLayout root;
     protected ProgressBar progressBar;
-    protected TextView statusBadge, distanceInfo, distanceHint;
+    protected TextView statusBadge, distanceInfo, distanceHint, tripLiveSummary;
+    protected TripLiveRouteController tripLiveRoutes;
     protected MapView mapView;
     protected GoogleMap googleMap;
     protected Marker driverMarker, pickupMarker, deliveryMarker;

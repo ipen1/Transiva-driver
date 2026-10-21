@@ -102,10 +102,8 @@ public final class TripCommunicationController {
     }
 
     public void openNavigation(boolean pickup, double driverLat, double driverLng) {
-        double lat = pickup ? host.tripCoord("pickup_lat", "user_lat") : host.tripCoord("delivery_lat", "destination_lat");
-        double lng = pickup ? host.tripCoord("pickup_lng", "user_lng") : host.tripCoord("delivery_lng", "destination_lng");
-        String mode = pickup ? "pickup" : "delivery";
-        if(!pickup){ DriverEcosystemFeatures eco=DriverEcosystemFeatures.from(order); org.json.JSONObject wp=eco.nextPendingWaypoint(); if(wp!=null){double wl=wp.optDouble("latitude",0),wn=wp.optDouble("longitude",0);if(host.tripValid(wl,wn)){lat=wl;lng=wn;mode="waypoint_"+wp.optInt("sequence",1);}} }
+        NavigationTargetPolicy.Target target=NavigationTargetPolicy.resolve(order,pickup?"pickup":"delivery",Double.NaN,Double.NaN);
+        double lat=target.lat,lng=target.lng;String mode=target.mode;
         if (!host.tripValid(lat, lng)) { host.tripInfo("Lokasi", "Koordinat belum tersedia."); return; }
         try { host.tripFitNativeOverview(); }
         catch (Throwable t) { TransivaDiagnostics.error(host, "navigation", "TRIP_OVERVIEW_FIT_FAILED", t); }
@@ -120,6 +118,7 @@ public final class TripCommunicationController {
                     .putString("driver_navigation_driver_lng", String.valueOf(driverLng)).apply();
         } catch (Throwable t) { TransivaDiagnostics.error(host, "navigation", "TRIP_NAV_PREFS_FAILED", t); }
 
+        try{order.put("source",host.tripSource());}catch(org.json.JSONException e){NavigationDiagnostics.error(host,"NAV_SOURCE_FAILED",e);}
         Intent nativeNav = new Intent(host, DriverNavigationActivity.class);
         nativeNav.putExtra("order_json", order.toString());
         nativeNav.putExtra("target", mode);

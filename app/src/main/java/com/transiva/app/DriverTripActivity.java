@@ -81,6 +81,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_WINDOW_SETUP_FAILED",e); }
         session = new SessionManager(this);
         tripRouteScope = new DriverUiScope(this);
+        tripLiveRoutes = new TripLiveRouteController(this);
         api = new DriverNetworkRepository(session);
         tripLocationController = new TripLocationController(this, new TripLocationController.Callback() {
             @Override public void onLocation(Location location) { onDriverLocationChanged(location); }
@@ -91,6 +92,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         loadSession();
         tripSnapshotStore = new TripOrderSnapshotStore(this);
         loadOrder();
+        if(order!=null)try{order.put("source",isPickupOrder()?"pickup_orders":"orders");}catch(org.json.JSONException e){NavigationDiagnostics.error(this,"TRIP_SOURCE_FAILED",e);}
         buildBase();
         if(order == null){ renderEmpty();
             renderEcosystemFeatures(); return; }
@@ -105,9 +107,9 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             if(valid(lastDriverLat,lastDriverLng)) requestStableRoute(true);
         }, 250L);
     }
-    @Override protected void onResume(){ super.onResume(); realtimeTripRunning=true; mainHandler.removeCallbacks(realtimeTripPoll); mainHandler.post(realtimeTripPoll); try{ if(mapView!=null) mapView.onResume(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_RESUME_FAILED",e); } if(order != null) startLocationWatch(); if(communicationController!=null) communicationController.onStart(); }
-    @Override protected void onPause(){ realtimeGeneration++;realtimeBusy=false;if(realtimeClient!=null)realtimeClient.shutdown(); destinationExtension.close(); realtimeTripRunning=false; mainHandler.removeCallbacks(realtimeTripPoll); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView!=null) mapView.onPause(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_PAUSE_FAILED",e); } super.onPause(); }
-    @Override protected void onDestroy(){ realtimeGeneration++;if(realtimeClient!=null)realtimeClient.shutdown(); tripRouteGeneration++; if(tripRequestOwner!=null)tripRequestOwner.close();if(tripRouteScope!=null)tripRouteScope.close(); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView != null) mapView.onDestroy(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_DESTROY_FAILED",e); } super.onDestroy(); }
+    @Override protected void onResume(){ super.onResume(); if(tripLiveRoutes!=null)tripLiveRoutes.active(true); realtimeTripRunning=true; mainHandler.removeCallbacks(realtimeTripPoll); mainHandler.post(realtimeTripPoll); try{ if(mapView!=null) mapView.onResume(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_RESUME_FAILED",e); } if(order != null) startLocationWatch(); if(communicationController!=null) communicationController.onStart(); }
+    @Override protected void onPause(){ if(tripLiveRoutes!=null)tripLiveRoutes.active(false); realtimeGeneration++;realtimeBusy=false;if(realtimeClient!=null)realtimeClient.shutdown(); destinationExtension.close(); realtimeTripRunning=false; mainHandler.removeCallbacks(realtimeTripPoll); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView!=null) mapView.onPause(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_PAUSE_FAILED",e); } super.onPause(); }
+    @Override protected void onDestroy(){ if(tripLiveRoutes!=null)tripLiveRoutes.close(); realtimeGeneration++;if(realtimeClient!=null)realtimeClient.shutdown(); tripRouteGeneration++; if(tripRequestOwner!=null)tripRequestOwner.close();if(tripRouteScope!=null)tripRouteScope.close(); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView != null) mapView.onDestroy(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_DESTROY_FAILED",e); } super.onDestroy(); }
     @Override public void onLowMemory(){ super.onLowMemory(); try{ if(mapView!=null) mapView.onLowMemory(); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } }
 
     private SmartWaitingTextView waitingView;
@@ -123,7 +125,14 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
                 tripRouteScope.post(()->{
                     if(generation!=realtimeGeneration||!realtimeTripRunning||!key.equals(orderId())||pickup!=isPickupOrder()||!before.equals(status()))return;
                     try{
-                        if(pickup){order.put("smart_waiting",state);if(waitingView!=null)waitingView.bind(state);}
+                        if(pickup){
+                            order.put("smart_waiting",state);if(waitingView!=null)waitingView.bind(state);
+                            if(fresh!=null&&NavigationTargetPolicy.same(order,fresh)){
+                                String signature=fresh.optString("status")+"|"+fresh.optString("pickup_lat")+"|"+fresh.optString("pickup_lng")+"|"+fresh.optString("delivery_lat")+"|"+fresh.optString("delivery_lng")+"|"+fresh.optString("destination_lat")+"|"+fresh.optString("destination_lng");
+                                if(!signature.equals(realtimeSignature)){realtimeSignature=signature;java.util.Iterator<String> fields=fresh.keys();while(fields.hasNext()){String field=fields.next();order.put(field,fresh.opt(field));}saveActiveOrder();renderOrder();refreshButtons();requestStableRoute(false);}
+                                if(NavigationTargetPolicy.terminal(order)){NavigationSessionStore.clear(this);NavigationGuidanceService.stop(this);}
+                            }
+                        }
                         else if(fresh!=null){
                             String incoming=first(fresh.optString("order_id"),fresh.optString("id"));if(!key.equals(incoming))return;
                             JSONObject routeSnapshot=fresh.optJSONObject("server_route");
@@ -270,9 +279,11 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         id.setOnClickListener(v->{android.content.ClipboardManager clipboard=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Order",orderId()));android.widget.Toast.makeText(this,"Nomor order disalin",android.widget.Toast.LENGTH_SHORT).show();}); left.addView(id);
         statusBadge = text(statusLabel(status()), 12, "#FFFFFF", true); statusBadge.setGravity(Gravity.CENTER); statusBadge.setPadding(dp(12), dp(7), dp(12), dp(7)); statusBadge.setBackground(gradient("#086BFF", "#2EA2FF", dp(18))); top.addView(statusBadge);
         LinearLayout stats = new LinearLayout(this); stats.setOrientation(LinearLayout.HORIZONTAL); stats.setGravity(Gravity.CENTER); LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1,-2); sp.setMargins(0, dp(14),0,0); h.addView(stats, sp);
-        mini(stats, "", "Total Bayar", rupiah(optDouble("price", "fare", "total"))); mini(stats, "", "Jarak", one(optDouble("distance_km")) + " KM"); mini(stats, "", "Estimasi", zero(optDouble("duration_minutes")) + " menit");
+        mini(stats, "", "Total Bayar", rupiah(optDouble("price", "fare", "total"))); mini(stats, "", "Jarak Pesanan", one(optDouble("distance_km")) + " KM"); mini(stats, "", "Estimasi Awal", zero(optDouble("duration_minutes")) + " menit");
         double orderVoucher = optDouble("voucher_discount"); if(orderVoucher > 0){ TextView subsidy=text("🏷 Customer memakai voucher " + rupiah(orderVoucher) + " • biaya ditanggung Transiva • pendapatan Anda tetap dihitung dari ongkir normal.",12,"#047857",true); subsidy.setPadding(dp(12),dp(10),dp(12),dp(10)); h.addView(subsidy); }
         distanceInfo = text("📡 Mengukur jarak driver...", 13, "#64748B", false); distanceInfo.setPadding(0, dp(10),0,0); h.addView(distanceInfo);
+        tripLiveSummary=text("Menyiapkan rute jalan…",13,"#0878F9",true);tripLiveSummary.setPadding(0,dp(6),0,dp(4));h.addView(tripLiveSummary);
+        h.addView(text("Garis berwarna: panduan aktif • abu-abu: rute pesanan",11,"#64748B",false));
         distanceHint = text("", 13, "#059669", true); distanceHint.setPadding(dp(12), dp(9), dp(12), dp(9)); distanceHint.setBackground(stroke("#ECFDF5", "#86EFAC", dp(14), 1)); LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-1,-2); hp.setMargins(0, dp(8),0,0); h.addView(distanceHint, hp);
         TextView pay = text(isNonCash() ? "💳 NON-TUNAI • TransPay" : "💵 TUNAI • Tagih customer", 13, isNonCash() ? "#1D4ED8" : "#B45309", true); pay.setGravity(Gravity.CENTER); pay.setPadding(dp(12),dp(9),dp(12),dp(9)); pay.setBackground(stroke(isNonCash()?"#EFF6FF":"#FFFBEB", isNonCash()?"#93C5FD":"#FCD34D", dp(14),1)); LinearLayout.LayoutParams payLp=new LinearLayout.LayoutParams(-1,-2); payLp.setMargins(0,dp(8),0,0); h.addView(pay,payLp);
         add(h,0,dp(8),0,dp(12));

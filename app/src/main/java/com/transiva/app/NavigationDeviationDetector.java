@@ -11,7 +11,7 @@ public final class NavigationDeviationDetector {
     public void routeChanged(){reset();}
     public Reason offer(long now,double lat,double lng,double accuracy,double speedMps,
                         double heading,double routeBearing,double deviation) {
-        if(!Double.isFinite(deviation)||accuracy>85||accuracy<=0||speedMps<1.2){reset();return Reason.NONE;}
+        if(!Double.isFinite(deviation)||!Double.isFinite(accuracy)||!Double.isFinite(speedMps)||accuracy>85||accuracy<=0||speedMps<1.2){reset();return Reason.NONE;}
         double delta=Math.abs(((heading-routeBearing+540)%360)-180);
         Reason next=Reason.NONE;
         if(Double.isFinite(heading)&&accuracy<=25&&speedMps>=2.5&&delta>=125&&deviation<=60)next=Reason.WRONG_DIRECTION;

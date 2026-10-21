@@ -182,10 +182,10 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
     }
 
     protected void seedLastKnownLocation() {
-        if (valid(driverLat, driverLng) || locationController == null) return;
+        if (locationController == null) return;
         Location best = locationController.bestLastKnown();
         if (best != null && valid(best.getLatitude(), best.getLongitude())) {
-            driverLat = best.getLatitude(); driverLng = best.getLongitude(); lastLocation = new Location(best);
+            driverLat = best.getLatitude(); driverLng = best.getLongitude(); lastLocation = new Location(best); lastFixRealtimeMs=SystemClock.elapsedRealtime(); lastGpsAccuracyM=best.getAccuracy();
         }
     }
 

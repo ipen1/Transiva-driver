@@ -121,7 +121,9 @@ public final class SmoothLocationEngine {
         double lat = l.getLatitude(), lng = l.getLongitude();
         if (!Double.isFinite(lat) || !Double.isFinite(lng) || lat == 0d || lng == 0d) return false;
         if (Math.abs(lat) > 90d || Math.abs(lng) > 180d) return false;
-        if (accuracy(l) > 250f) return false;
+        if (!Float.isFinite(accuracy(l)) || accuracy(l) > 250f) return false;
+        if(l.hasSpeed()&&(!Float.isFinite(l.getSpeed())||l.getSpeed()<0))return false;
+        if(l.hasBearing()&&!Float.isFinite(l.getBearing()))return false;
         if (Build.VERSION.SDK_INT >= 17 && l.getElapsedRealtimeNanos() > 0) {
             long ageMs = (SystemClock.elapsedRealtimeNanos() - l.getElapsedRealtimeNanos()) / 1_000_000L;
             if (ageMs > 30_000L) return false;

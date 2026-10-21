@@ -226,6 +226,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
 
         // Route calculation starts as soon as we have a valid location.
         // It no longer waits for the WebView/Leaflet page to finish loading.
+        if(tripLiveRoutes!=null)tripLiveRoutes.fix(l);
         requestStableRoute(false);
 
         if(fix.render){
@@ -297,63 +298,11 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         return order==null?"":order.optString("order_id",order.optString("id"))+"|"+order.optString("source",orderKind)+"|"+status()+"|"+coord("pickup_lat","user_lat")+"|"+coord("pickup_lng","user_lng")+"|"+coord("delivery_lat","destination_lat")+"|"+coord("delivery_lng","destination_lng")+"|"+DriverEcosystemFeatures.from(order).waypoints.toString();
     }
     protected void requestStableRoute(boolean force){
-        if("delivery".equals(routeTargetMode()) && applyAgreedServerRoute())return;
-        if(tripRouteScope==null||!tripRouteScope.alive()||googleMap==null||!valid(lastDriverLat,lastDriverLng))return;
-        final double pLat=coord("pickup_lat","user_lat"),pLng=coord("pickup_lng","user_lng"),dLat=coord("delivery_lat","destination_lat"),dLng=coord("delivery_lng","destination_lng");
-        if(!valid(pLat,pLng)||!valid(dLat,dLng))return;
-        String latestKey=tripRouteKey();
-        if(routeRequestInFlight){if(latestKey.equals(tripRequestKey))return;if(tripRequestOwner!=null)tripRequestOwner.close();routeRequestInFlight=false;tripRouteGeneration++;tripRecovery.reset();}
-        if(latestKey.equals(tripRequestKey)&&tripRecovery.needed()&&!tripRecovery.due(android.os.SystemClock.elapsedRealtime()))return;
-        if(!valid(tripStartLat,tripStartLng)){tripStartLat=lastDriverLat;tripStartLng=lastDriverLng;}
-        final boolean extensionRoute=extensionNeedsArrival();final JSONArray stops;
-        try{stops=new JSONArray(DriverEcosystemFeatures.from(order).waypoints.toString());}catch(Exception e){return;}
-        final String key=tripRouteKey();long now=System.currentTimeMillis();
-        if(!force&&!tripRecovery.needed()&&overviewRoutesLoaded&&key.equals(lastOverviewRouteStatus)&&now-lastRouteRequestAt<45000)return;
-        final double startLat=lastDriverLat,startLng=lastDriverLng,extensionLat=lastDriverLat,extensionLng=lastDriverLng;
-        final long generation=++tripRouteGeneration;tripRequestKey=key;
-        final DriverSessionOwner[] captured=new DriverSessionOwner[1];
-        if(!tripRouteScope.owner.runIfCurrent(()->captured[0]=DriverSessionOwner.capture(this)))return;
-        final DriverSessionOwner requestOwner=captured[0];tripRequestOwner=requestOwner;routeRequestInFlight=true;lastRouteRequestAt=now;
-        boolean queued=tripRouteScope.execute(()->{
-            try{
-                StableRouteEngine.Result first=StableRouteEngine.fetchOverview(requestOwner,startLat,startLng,pLat,pLng);
-                double a=extensionRoute?extensionLat:pLat,b=extensionRoute?extensionLng:pLng,meters=0,seconds=0;
-                JSONArray delivery=new JSONArray();
-                if(extensionRoute)for(int i=0;i<stops.length();i++){
-                    JSONObject stop=stops.optJSONObject(i);if(stop==null||"arrived".equals(stop.optString("status")))continue;
-                    double x=stop.optDouble("latitude"),y=stop.optDouble("longitude");if(!valid(x,y))continue;
-                    StableRouteEngine.Result leg=StableRouteEngine.fetchOverview(requestOwner,a,b,x,y);
-                    for(int n=0;n<leg.latLngPoints.length();n++)delivery.put(leg.latLngPoints.opt(n));meters+=leg.distanceMeters;seconds+=leg.durationSeconds;a=x;b=y;
-                }
-                StableRouteEngine.Result last=StableRouteEngine.fetchOverview(requestOwner,a,b,dLat,dLng);
-                for(int n=0;n<last.latLngPoints.length();n++)delivery.put(last.latLngPoints.opt(n));meters+=last.distanceMeters;seconds+=last.durationSeconds;
-                final String points=delivery.toString();final double totalMeters=meters,totalSeconds=seconds;
-                tripRouteScope.post(()->{
-                    if(generation!=tripRouteGeneration)return;routeRequestInFlight=false;
-                    if(!key.equals(tripRouteKey())){requestStableRoute(true);return;}
-                    pendingPickupRoutePoints=first.pointsJson();pendingPickupRouteKm=first.distanceMeters/1000;pendingPickupRouteSeconds=first.durationSeconds;
-                    pendingDeliveryRoutePoints=points;pendingDeliveryRouteKm=totalMeters/1000;pendingDeliveryRouteSeconds=totalSeconds;
-                    tripRecovery.reset();overviewRoutesLoaded=true;lastOverviewRouteStatus=key;applyPendingRoute();
-                });
-            }catch(Exception e){tripRouteScope.post(()->{if(generation==tripRouteGeneration){routeRequestInFlight=false;tripRecovery.failed(android.os.SystemClock.elapsedRealtime());if(!key.equals(tripRouteKey())){tripRecovery.reset();requestStableRoute(true);}}});}finally{requestOwner.close();}
-        });
-        if(!queued){routeRequestInFlight=false;requestOwner.close();tripRecovery.failed(android.os.SystemClock.elapsedRealtime());}
+        if(tripLiveRoutes!=null)tripLiveRoutes.request(force);
     }
 
     protected void applyPendingRoute(){
-        if("delivery".equals(routeTargetMode()) && applyAgreedServerRoute())return;
-        if(googleMap==null || !mapReady) return;
-        java.util.List<LatLng> p=parseRoutePoints(pendingPickupRoutePoints);
-        java.util.List<LatLng> d=parseRoutePoints(pendingDeliveryRoutePoints);
-        if(p.size()<2 || d.size()<2) return;
-        try{
-            if(pickupPolyline!=null) pickupPolyline.remove();
-            if(deliveryPolyline!=null) deliveryPolyline.remove();
-            boolean pickupDone="delivery".equals(routeTargetMode());
-            pickupPolyline=googleMap.addPolyline(new PolylineOptions().addAll(p).width(dp(5)).color(DriverThemeTokens.color(this, pickupDone?"#94A3B8":"#1683FF")).geodesic(true).zIndex(2f));
-            deliveryPolyline=googleMap.addPolyline(new PolylineOptions().addAll(d).width(dp(5)).color(DriverThemeTokens.color(this, "#16A34A")).geodesic(true).zIndex(2f));
-            if(!overviewMapApplied){ fitNativeOverview(); overviewMapApplied=true; }
-        }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
+        if(tripLiveRoutes!=null)tripLiveRoutes.render();
     }
 
     protected void refreshButtons(){
@@ -376,7 +325,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
             if(pd >= 0){
                 boolean near = pd <= ARRIVE_RADIUS_METER;
                 showAction(arrivedPickupBtn, near);
-                distanceInfo.setText("📍 Jarak ke penjemputan: " + meter(pd));
+                distanceInfo.setText("📍 Jarak langsung ke penjemputan: " + meter(pd));
                 distanceHint.setText(near ? "✓ Anda sudah berada di area penjemputan. Geser kontrol Tiba di Penjemputan ke kanan." : "Menuju penjemputan • kontrol geser akan aktif dalam radius " + (int)ARRIVE_RADIUS_METER + " meter.");
             }else{
                 // Jangan menghilangkan aksi ketika GPS belum mendapatkan fix. Driver tetap melihat tahap berikutnya.
@@ -400,7 +349,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
             if(dd >= 0){
                 boolean near = dd <= ARRIVE_RADIUS_METER;
                 showAction(arrivedDeliveryBtn, near);
-                distanceInfo.setText("🏁 Jarak ke pengantaran: " + meter(dd));
+                distanceInfo.setText("🏁 Jarak langsung ke pengantaran: " + meter(dd));
                 distanceHint.setText(near ? "✓ Anda sudah berada di area pengantaran. Geser kontrol Tiba di Pengantaran ke kanan." : "Menuju pengantaran • kontrol geser akan aktif dalam radius " + (int)ARRIVE_RADIUS_METER + " meter.");
             }else{
                 showAction(arrivedDeliveryBtn, true);
@@ -412,7 +361,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         if(st.equals("arrived_delivery") && extensionNeedsArrival()){
             float dd=distanceTo(coord("delivery_lat","destination_lat"),coord("delivery_lng","destination_lng"));
             showAction(arrivedDeliveryBtn,dd>=0 && dd<=200);
-            distanceInfo.setText(dd>=0 ? "🏁 Jarak ke tujuan tambahan: "+meter(dd) : "Menunggu GPS tujuan tambahan");
+            distanceInfo.setText(dd>=0 ? "🏁 Jarak langsung ke tujuan tambahan: "+meter(dd) : "Menunggu GPS tujuan tambahan");
             distanceHint.setText("Perjalanan tambahan disetujui. Tiba di semua stop, lalu geser Tiba di Pengantaran dalam radius 200 m.");
             return;
         }
