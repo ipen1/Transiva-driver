@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+"""Production pose/frame/marker/camera/checkpoint and regression tests with platform collaborators."""
+from pathlib import Path
+import os,subprocess,tempfile,ast
+root=Path(__file__).resolve().parents[2];app=root/'app/src/main/java/com/transiva/app';base=Path(__file__).with_name('navigation_consistency_regression.py')
+ns={'__file__':str(base)};exec(base.read_text().split('probe_path=Path(__file__)')[0],ns);files=ns['files']
+files['android/view/Choreographer.java']='''package android.view;import java.util.*;public class Choreographer{public interface FrameCallback{void doFrame(long n);}static Choreographer one=new Choreographer();static List<FrameCallback> q=new ArrayList<>();public static Choreographer getInstance(){return one;}public void postFrameCallback(FrameCallback c){if(!q.contains(c))q.add(c);}public void removeFrameCallback(FrameCallback c){q.remove(c);}public static void pulse(long ns){List<FrameCallback> old=new ArrayList<>(q);q.clear();for(FrameCallback c:old)c.doFrame(ns);}public static void clear(){q.clear();}}'''
+files['org/maplibre/android/maps/MapView.java']='package org.maplibre.android.maps;public class MapView{}'
+files['com/transiva/app/NavigationCompatibilityProfile.java']='package com.transiva.app;public class NavigationCompatibilityProfile{public long visualFrameMs=33;public double cameraTilt=42;public static NavigationCompatibilityProfile resolve(android.content.Context c,String s){return new NavigationCompatibilityProfile();}}'
+files['com/google/android/gms/maps/model/Marker.java']='package com.google.android.gms.maps.model;public class Marker{public LatLng position;public float heading;public int updates;public void setPosition(LatLng p){position=p;updates++;}public void setRotation(float f){heading=f;}}'
+files['com/google/android/gms/maps/model/MarkerOptions.java']='package com.google.android.gms.maps.model;public class MarkerOptions{public LatLng p;public MarkerOptions position(LatLng v){p=v;return this;}public MarkerOptions title(String s){return this;}public MarkerOptions flat(boolean b){return this;}public MarkerOptions rotation(float f){return this;}public MarkerOptions anchor(float a,float b){return this;}public MarkerOptions icon(Object o){return this;}}'
+files['com/google/android/gms/maps/GoogleMap.java']=files['com/google/android/gms/maps/GoogleMap.java'].replace('public int lines;', 'public com.google.android.gms.maps.model.Marker addMarker(com.google.android.gms.maps.model.MarkerOptions o){com.google.android.gms.maps.model.Marker m=new com.google.android.gms.maps.model.Marker();m.position=o.p;return m;}public int lines;')
+files['com/transiva/app/DriverTripActivityLayer2.java']=files['com/transiva/app/DriverTripActivityLayer2.java'].replace(' JSONObject order=', ' TripLiveRouteController tripLiveRoutes;com.google.android.gms.maps.model.Marker driverMarker;Object driverVehicleIcon(){return new Object();}\n JSONObject order=')
+files['org/maplibre/android/geometry/LatLng.java']='package org.maplibre.android.geometry;public class LatLng{public double latitude,longitude;public LatLng(double a,double b){latitude=a;longitude=b;}}'
+files['org/maplibre/android/camera/CameraPosition.java']='package org.maplibre.android.camera;public class CameraPosition{public double zoom,bearing,tilt;public org.maplibre.android.geometry.LatLng target;public static class Builder{CameraPosition p=new CameraPosition();public Builder target(org.maplibre.android.geometry.LatLng t){p.target=t;return this;}public Builder zoom(double v){p.zoom=v;return this;}public Builder bearing(double v){p.bearing=v;return this;}public Builder tilt(double v){p.tilt=v;return this;}public CameraPosition build(){return p;}}}'
+files['org/maplibre/android/camera/CameraUpdateFactory.java']='package org.maplibre.android.camera;public class CameraUpdateFactory{public static CameraPosition newCameraPosition(CameraPosition p){return p;}}'
+files['org/maplibre/android/maps/MapLibreMap.java']='package org.maplibre.android.maps;public class MapLibreMap{public org.maplibre.android.camera.CameraPosition position;public void moveCamera(org.maplibre.android.camera.CameraPosition p){position=p;}}'
+files['android/graphics/Bitmap.java']='package android.graphics;public class Bitmap{public static Bitmap createScaledBitmap(Bitmap b,int x,int y,boolean a){return b;}}'
+files['android/graphics/BitmapFactory.java']='package android.graphics;public class BitmapFactory{public static Bitmap decodeResource(android.content.res.Resources r,int n){return new Bitmap();}}'
+files['android/util/DisplayMetrics.java']='package android.util;public class DisplayMetrics{public float density=1;}'
+files['android/content/res/Resources.java']=files['android/content/res/Resources.java'].replace('public int getIdentifier', 'public android.util.DisplayMetrics getDisplayMetrics(){return new android.util.DisplayMetrics();}public int getIdentifier')
+files['com/transiva/app/ResourceUpdateManager.java']='package com.transiva.app;public class ResourceUpdateManager{public static android.graphics.Bitmap loadBitmapOverride(android.app.Activity c,String s){return new android.graphics.Bitmap();}}'
+files['org/maplibre/android/style/layers/Property.java']='package org.maplibre.android.style.layers;public class Property{public static String ICON_ROTATION_ALIGNMENT_VIEWPORT="viewport",ICON_PITCH_ALIGNMENT_VIEWPORT="viewport";}'
+files['org/maplibre/android/style/layers/PropertyFactory.java']='package org.maplibre.android.style.layers;public class PropertyFactory{'+''.join('public static Object '+n+'('+typ+' v){return v;}' for n,typ in [('iconAllowOverlap','boolean'),('iconIgnorePlacement','boolean'),('iconImage','String'),('iconPitchAlignment','String'),('iconRotationAlignment','String'),('iconSize','float'),('iconRotate','float')])+'}'
+files['org/maplibre/android/style/layers/SymbolLayer.java']='package org.maplibre.android.style.layers;public class SymbolLayer{public float angle;public SymbolLayer(String n,String s){}public SymbolLayer withProperties(Object... o){return this;}public void setProperties(Object... o){angle=(Float)o[0];}}'
+files['org/maplibre/android/style/sources/GeoJsonSource.java']='package org.maplibre.android.style.sources;public class GeoJsonSource{public String json;public GeoJsonSource(String n,String s){json=s;}public void setGeoJson(String s){json=s;}}'
+files['org/maplibre/android/maps/Style.java']='package org.maplibre.android.maps;public class Style{public org.maplibre.android.style.sources.GeoJsonSource source;public org.maplibre.android.style.layers.SymbolLayer layer;public Object getSource(String s){return source;}public void addSource(org.maplibre.android.style.sources.GeoJsonSource s){source=s;}public org.maplibre.android.style.sources.GeoJsonSource getSourceAs(String s){return source;}public Object getLayer(String s){return layer;}public org.maplibre.android.style.layers.SymbolLayer getLayerAs(String s){return layer;}public void addLayer(org.maplibre.android.style.layers.SymbolLayer l){layer=l;}public void addImage(String s,android.graphics.Bitmap b){}}'
+def method(source,signature):
+ start=source.index(signature);opening=source.index('{',start);depth=1;i=opening+1
+ while depth:
+  if source[i]=='{':depth+=1
+  elif source[i]=='}':depth-=1
+  i+=1
+ return source[start:i]
+activity=(app/'DriverNavigationActivity.java').read_text()
+files['com/transiva/app/HostMotionProbe.java']='''package com.transiva.app;import android.location.Location;import android.os.SystemClock;
+class HostMotionProbe extends DriverNavigationActivityLayer2{
+ NavigationMotionInterpolator vehicleMotion=new NavigationMotionInterpolator();long motionFixAt=-1,motionRevision=-1,routeVisualRevision=1,lastMapRenderAt,poseChangedAt,lastMatchRealtimeMs;double lastPoseLat=Double.NaN,lastPoseLng,lastPoseHeading,lastPoseSpeed,lastMatchedRawLat,lastMatchedRawLng,visualRouteProgressMeters;int visualRouteSegmentIndex,renders,routeFixes;Location lastLocation;double instructionProgress;
+ void updateSpeed(Location l){currentSpeedKmh=l.getSpeed()*3.6;}void maybeRefreshRoute(Location l){routeFixes++;}void maybeUpdateRemainingRouteLine(){}void updateInstructionBanner(double p){instructionProgress=p;}void updateNativePosition(boolean b){renders++;}float meters(double a,double b,double x,double y){return (float)NavigationGeometry.meters(a,b,x,y);}double bearing(double a,double b,double x,double y){return NavigationMotionInterpolator.normalize(Math.toDegrees(Math.atan2((y-b)*Math.cos(Math.toRadians(a)),x-a)));}
+'''+method(activity,'protected void handleNavigationLocationFix(')+method(activity,'protected void animateTowardLatestFix(')+'}'
+files['com/transiva/app/MotionProbe.java']=Path(__file__).with_name('navigation_motion_probe.java.fixture').read_text()
+parsed=ast.parse(base.read_text());production=ast.literal_eval(next(n.value for n in parsed.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='production' for t in n.targets)))
+production+=['NavigationFrameController','NavigationCameraController','NavigationVehicleController','TripVehicleMotionController']
+with tempfile.TemporaryDirectory(prefix='nav-motion-') as temp:
+ d=Path(temp)
+ for n,v in files.items():p=d/n;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(v)
+ subprocess.run([os.environ.get('JAVAC_BIN','javac'),'-cp',os.environ['JSON_JAR'],'-d',str(d/'classes'),*map(str,list(d.rglob('*.java'))+[app/(n+'.java') for n in production])],check=True)
+ subprocess.run([os.environ.get('JAVA_BIN','java'),'-cp',str(d/'classes')+os.pathsep+os.environ['JSON_JAR'],'com.transiva.app.MotionProbe'],check=True,timeout=30)
