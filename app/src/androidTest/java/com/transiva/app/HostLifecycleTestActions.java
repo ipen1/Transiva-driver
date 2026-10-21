@@ -7,6 +7,7 @@ import static org.junit.Assert.assertSame;
 import android.app.Instrumentation;
 import android.app.ActivityManager;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Build;
 import android.os.ParcelFileDescriptor;
 import android.os.SystemClock;
@@ -39,6 +40,7 @@ final class HostLifecycleTestActions {
             throw new AssertionError("Could not send the host task to background", error);
         }
         awaitState(scenario, Lifecycle.State.CREATED);
+        instrumentation.waitForIdleSync();
         ActivityManager manager = (ActivityManager) instrumentation.getTargetContext()
                 .getSystemService(Context.ACTIVITY_SERVICE);
         if (manager == null) throw new AssertionError("ActivityManager is unavailable");
@@ -59,7 +61,13 @@ final class HostLifecycleTestActions {
                         throw new AssertionError("Task-focus command failed on API " + Build.VERSION.SDK_INT + ": " + result);
                     }
                 } else {
-                    task.moveToFront();
+                    // Older emulators can leave moveToFront() in STARTED without
+                    // resuming the host. Deliver an explicit foreground request
+                    // inside this exact task, reusing its existing top instance.
+                    Intent resume = new Intent(instrumentation.getTargetContext(), TestHarnessActivity.class)
+                            .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                    instrumentation.runOnMainSync(() -> task.startActivity(
+                            instrumentation.getTargetContext(), resume, null));
                 }
                 restored = true;
                 break;
@@ -115,21 +123,18 @@ final class HostLifecycleTestActions {
             }
             SystemClock.sleep(50L);
         }
-        String diagnosis = "";
-        if (Build.VERSION.SDK_INT >= 29) {
-            Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
-            String activityDump = runShell(instrumentation, "dumpsys activity activities");
-            android.util.Log.e("HostLifecycleTest", "Transition " + last + " -> " + expected + " failed\n"
-                    + activityDump + "\n" + runShell(instrumentation, "dumpsys window windows"));
-            StringBuilder summary = new StringBuilder();
-            for (String line : activityDump.split("\n")) {
-                if (line.contains("mResumedActivity") || line.contains("mFocusedStack")
-                        || line.contains("mTopResumedActivity") || line.contains("Hist #")) {
-                    if (summary.length() < 3000) summary.append("\n").append(line.trim());
-                }
+        Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
+        String activityDump = runShell(instrumentation, "dumpsys activity activities");
+        android.util.Log.e("HostLifecycleTest", "Transition " + last + " -> " + expected + " failed\n"
+                + activityDump + "\n" + runShell(instrumentation, "dumpsys window windows"));
+        StringBuilder summary = new StringBuilder();
+        for (String line : activityDump.split("\n")) {
+            if (line.contains("mResumedActivity") || line.contains("mFocusedStack")
+                    || line.contains("mTopResumedActivity") || line.contains("Hist #")) {
+                if (summary.length() < 3000) summary.append("\n").append(line.trim());
             }
-            diagnosis = summary.toString();
         }
+        String diagnosis = summary.toString();
         assertEquals("Host lifecycle transition timed out" + diagnosis, expected, last);
     }
 }
