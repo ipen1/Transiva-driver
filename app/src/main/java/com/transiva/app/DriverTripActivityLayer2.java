@@ -227,6 +227,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         // Route calculation starts as soon as we have a valid location.
         // It no longer waits for the WebView/Leaflet page to finish loading.
         if(tripLiveRoutes!=null)tripLiveRoutes.fix(l);
+        if(tripVehicleMotion!=null)tripVehicleMotion.offer(accepted);
         requestStableRoute(false);
 
         if(fix.render){
@@ -246,22 +247,8 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
     }
 
     protected void updateMap(){
-        try{
-            if(googleMap == null || !mapReady || !valid(lastDriverLat, lastDriverLng)) return;
-            double deg = valid(prevDriverLat, prevDriverLng) ? bearing(prevDriverLat, prevDriverLng, lastDriverLat, lastDriverLng) : 0d;
-            LatLng pos=new LatLng(lastDriverLat,lastDriverLng);
-            if(driverMarker==null){
-                driverMarker=googleMap.addMarker(new MarkerOptions()
-                        .position(pos)
-                        .title("Posisi Driver")
-                        .flat(true)
-                        .rotation((float)deg)
-                        .anchor(.5f,.5f)
-                        .icon(driverVehicleIcon()));
-            }else{ driverMarker.setPosition(pos); driverMarker.setRotation((float)deg); }
-            requestStableRoute(false);
-            prevDriverLat = lastDriverLat; prevDriverLng = lastDriverLng;
-        }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
+        if(tripVehicleMotion!=null)tripVehicleMotion.mapReady();
+        requestStableRoute(false);
     }
 
     protected com.google.android.gms.maps.model.BitmapDescriptor driverVehicleIcon(){

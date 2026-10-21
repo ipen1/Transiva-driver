@@ -17,6 +17,7 @@ import static org.maplibre.android.style.layers.PropertyFactory.iconImage;
 import static org.maplibre.android.style.layers.PropertyFactory.iconPitchAlignment;
 import static org.maplibre.android.style.layers.PropertyFactory.iconRotationAlignment;
 import static org.maplibre.android.style.layers.PropertyFactory.iconSize;
+import static org.maplibre.android.style.layers.PropertyFactory.iconRotate;
 
 /** Owns the MapLibre vehicle source/layer and resource-overridable vehicle icons. */
 public final class NavigationVehicleController {
@@ -51,16 +52,13 @@ public final class NavigationVehicleController {
         } catch (Throwable t) { TransivaDiagnostics.error(activity, "navigation", "NAV_VEHICLE_INSTALL_FAILED", t); }
     }
 
-    public void update(double lat, double lng) {
+    public void update(double lat,double lng){update(lat,lng,0);}
+    public void update(double lat, double lng,double relativeBearing) {
         if (style == null || !valid(lat, lng)) return;
         try {
-            JSONObject geometry = new JSONObject(); geometry.put("type", "Point");
-            JSONArray coordinate = new JSONArray(); coordinate.put(lng); coordinate.put(lat); geometry.put("coordinates", coordinate);
-            JSONObject feature = new JSONObject(); feature.put("type", "Feature"); feature.put("properties", new JSONObject()); feature.put("geometry", geometry);
-            JSONObject collection = new JSONObject(); collection.put("type", "FeatureCollection");
-            JSONArray features = new JSONArray(); features.put(feature); collection.put("features", features);
-            GeoJsonSource source = style.getSourceAs(SOURCE);
-            if (source != null) source.setGeoJson(collection.toString());
+            GeoJsonSource source=style.getSourceAs(SOURCE);
+            if(source!=null)source.setGeoJson("{\"type\":\"Feature\",\"properties\":{},\"geometry\":{\"type\":\"Point\",\"coordinates\":["+lng+","+lat+"]}}");
+            SymbolLayer layer=style.getLayerAs(LAYER);if(layer!=null&&Double.isFinite(relativeBearing))layer.setProperties(iconRotate((float)NavigationMotionInterpolator.normalize(relativeBearing)));
         } catch (Throwable t) { TransivaDiagnostics.error(activity, "navigation", "NAV_VEHICLE_UPDATE_FAILED", t); }
     }
 

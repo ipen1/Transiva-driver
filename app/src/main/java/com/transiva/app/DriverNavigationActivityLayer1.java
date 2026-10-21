@@ -202,6 +202,10 @@ abstract class DriverNavigationActivityLayer1 extends Activity {
     protected NavigationRouteScheduler routeScheduler;
 
     protected NavigationFrameController frameController;
+    protected final NavigationMotionInterpolator vehicleMotion=new NavigationMotionInterpolator();
+    protected double lastPoseLat=Double.NaN,lastPoseLng,lastPoseHeading,lastPoseSpeed;
+    protected long poseChangedAt;
+    protected long motionFixAt=-1,motionRevision=-1,routeVisualRevision;
 
     protected double explicitTargetLat;
     protected double explicitTargetLng;

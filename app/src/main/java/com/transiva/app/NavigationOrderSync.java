@@ -18,11 +18,12 @@ final class NavigationOrderSync implements AutoCloseable {
         if(client!=null)client.shutdown();if(future!=null)future.cancel(true);io.purge();busy=false;
         if(value){failures=0;main.post(tick);}
     }
+    void refresh(){if(closed||!active)return;active(false);active(true);}
     private final Runnable tick=()->poll();
     private void poll(){
         if(closed||!active||busy||!owner.current())return;
         JSONObject order=callback.currentOrder();if(NavigationTargetPolicy.id(order).isEmpty())return;
-        final String identity=NavigationTargetPolicy.identity(order);final long gen=++generation;
+        final String identity=NavigationTargetPolicy.identity(order),revision=NavigationTargetPolicy.revision(order);final long gen=++generation;
         final DriverApiClient call=new DriverApiClient(new SessionManager(context));client=call;busy=true;
         try{future=io.submit(()->{
             JSONObject result=null;Exception error=null;
@@ -31,9 +32,10 @@ final class NavigationOrderSync implements AutoCloseable {
             final JSONObject fresh=result;final Exception failed=error;
             main.post(()->{
                 if(closed||!active||gen!=generation||!owner.current())return;busy=false;
+                if(!revision.equals(NavigationTargetPolicy.revision(callback.currentOrder()))){main.postDelayed(tick,250);return;}
                 if(failed==null&&identity.equals(NavigationTargetPolicy.identity(callback.currentOrder()))&&identity.equals(NavigationTargetPolicy.identity(fresh))){failures=0;try{owner.runIfCurrent(()->callback.updated(fresh));}catch(RuntimeException e){failures=1;TransivaDiagnostics.error(context,"navigation","ORDER_SYNC_APPLY_FAILED",e);}}
                 else failures=Math.min(4,failures+1);
-                if(active&&!closed)main.postDelayed(tick,Math.min(30000L,5000L*(1L<<failures)));
+                if(active&&!closed&&gen==generation)main.postDelayed(tick,Math.min(30000L,5000L*(1L<<failures)));
             });call.shutdown();
         });}catch(RejectedExecutionException e){busy=false;call.shutdown();main.postDelayed(tick,5000);}
     }

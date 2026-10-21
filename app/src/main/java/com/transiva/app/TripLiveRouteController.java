@@ -19,7 +19,7 @@ final class TripLiveRouteController implements AutoCloseable {
     TripLiveRouteController(DriverTripActivityLayer2 h){host=h;requests=new NavigationRouteCoordinator(h,main,new NavigationRouteCoordinator.Callback(){
         public String currentTargetKey(){return currentKey();}
         public void ready(long generation,StableRouteEngine.RouteSet set){
-            if(last!=null&&NavigationGeometry.meters(originLat,originLng,last.getLatitude(),last.getLongitude())>40&&NavigationGeometry.distanceTo(set.routes.get(0).latLngPoints,last.getLatitude(),last.getLongitude())>Math.max(30,Math.min(60,last.hasAccuracy()?last.getAccuracy()*1.5:50))){recovery.require(SystemClock.elapsedRealtime());evaluation=false;request(true);return;}
+            if(last!=null&&NavigationGeometry.meters(originLat,originLng,last.getLatitude(),last.getLongitude())>40&&NavigationGeometry.distanceTo(set.routes.get(0).latLngPoints,last.getLatitude(),last.getLongitude())>Math.max(30,Math.min(60,last.hasAccuracy()?last.getAccuracy()*1.5:50))){recovery.failed(SystemClock.elapsedRealtime());evaluation=false;return;}
             long now=SystemClock.elapsedRealtime();refresh.evaluated(now,host.lastDriverLat,host.lastDriverLng);recovery.reset();
             if(evaluation&&route!=null){NavigationProgress p=NavigationProgress.remaining(route,prior,total);evaluation=false;if(!refresh.better(now,p.seconds,set.routes.get(0).durationSeconds)){render();return;}}
             evaluation=false;route=set.routes.get(0);used=set.usedProfile;eta.reset();deviation.routeChanged();suspect=false;prior=Double.NaN;install();render();if(!host.overviewMapApplied){host.fitNativeOverview();host.overviewMapApplied=true;}
@@ -48,7 +48,7 @@ final class TripLiveRouteController implements AutoCloseable {
         if(closed||!active||!requests.valid())return;
         if(NavigationTargetPolicy.terminal(host.order)){requests.invalidate();route=null;clearLines();summary("Navigasi berakhir • pesanan selesai/dibatalkan");return;}
         NavigationTargetPolicy.Target next=currentTarget();String nextKey=next.key(host.order)+"|"+profile();
-        if(!nextKey.equals(key)){requests.invalidate();key=nextKey;target=next;route=null;shape.clear();lengths.clear();deviation.reset();recovery.reset();refresh.reset();eta.reset();prior=Double.NaN;evaluation=false;clearLines();}
+        if(!nextKey.equals(key)){requests.invalidate();key=nextKey;target=next;route=null;visualRevision++;shape.clear();lengths.clear();deviation.reset();recovery.reset();refresh.reset();eta.reset();prior=Double.NaN;evaluation=false;clearLines();}
         target=next;if(!target.valid()||last==null||SystemClock.elapsedRealtime()-fixAt>12000||!NavigationTargetPolicy.valid(host.lastDriverLat,host.lastDriverLng)){summary("Menunggu GPS/tujuan yang valid");return;}
         if(requests.busy()||(recovery.needed()&&!recovery.due(SystemClock.elapsedRealtime())))return;
         render();if(!force&&route!=null)return;
@@ -56,7 +56,16 @@ final class TripLiveRouteController implements AutoCloseable {
         double heading=last.hasBearing()&&last.hasSpeed()&&last.getSpeed()>=2.5&&last.hasAccuracy()&&last.getAccuracy()<=25?last.getBearing():Double.NaN;
         requests.request(key,originLat,originLng,target.lat,target.lng,profile(),heading,true);
     }
-    private void install(){shape.clear();lengths.clear();total=0;for(int i=0;i<route.latLngPoints.length();i++){JSONArray p=route.latLngPoints.optJSONArray(i);if(p==null)continue;double[] xy={p.optDouble(0),p.optDouble(1)};if(!shape.isEmpty()){double[] q=shape.get(shape.size()-1);total+=NavigationGeometry.meters(q[0],q[1],xy[0],xy[1]);}shape.add(xy);lengths.add(total);}drawnMap=null;}
+    private long visualRevision;
+    long visualRevision(){return visualRevision;}
+    NavigationGeometry.Point visualPoint(double progress){return NavigationGeometry.at(shape,lengths,progress);}
+    NavigationMotionInterpolator.Pose visualPose(Location fix){
+        if(route==null||suspect||shape.size()<2)return null;
+        NavigationGeometry.Projection p=NavigationGeometry.project(shape,lengths,fix.getLatitude(),fix.getLongitude(),prior);double accuracy=fix.hasAccuracy()?fix.getAccuracy():50;
+        if(p.distance>Math.max(12,Math.min(35,accuracy*1.5)))return null;NavigationGeometry.Point point=visualPoint(p.progress);if(point==null)return null;
+        return new NavigationMotionInterpolator.Pose(point.lat,point.lng,point.bearing,p.progress,fix.hasSpeed()?fix.getSpeed():0,true);
+    }
+    private void install(){visualRevision++;shape.clear();lengths.clear();total=0;for(int i=0;i<route.latLngPoints.length();i++){JSONArray p=route.latLngPoints.optJSONArray(i);if(p==null)continue;double[] xy={p.optDouble(0),p.optDouble(1)};if(!shape.isEmpty()){double[] q=shape.get(shape.size()-1);total+=NavigationGeometry.meters(q[0],q[1],xy[0],xy[1]);}shape.add(xy);lengths.add(total);}drawnMap=null;}
     void render(){
         try{renderMap();}catch(RuntimeException e){NavigationDiagnostics.error(host,"TRIP_LIVE_MAP_FAILED",e);summary("Peta belum siap • panduan rute tetap tersimpan");}
     }

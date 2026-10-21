@@ -40,7 +40,7 @@ final class NavigationLiveRouteController implements AutoCloseable {
             public String currentTargetKey(){return key();}
             public void ready(long generation,StableRouteEngine.RouteSet result){
                 host.routeInFlight=false;if(host.routeScheduler!=null)host.routeScheduler.endLoading();
-                if(NavigationGeometry.meters(originLat,originLng,host.driverLat,host.driverLng)>40&&!containsCurrentPosition(result.routes.get(0))){evaluation=false;recovery.require(SystemClock.elapsedRealtime());request(true);return;}
+                if(NavigationGeometry.meters(originLat,originLng,host.driverLat,host.driverLng)>40&&!containsCurrentPosition(result.routes.get(0))){evaluation=false;recovery.failed(SystemClock.elapsedRealtime());return;}
                 long now=SystemClock.elapsedRealtime();refresh.evaluated(now,originLat,originLng);
                 if(evaluation&&current!=null){
                     evaluation=false;double length; synchronized(host.routePoints){length=host.routeCumulativeMeters.isEmpty()?0:host.routeCumulativeMeters.get(host.routeCumulativeMeters.size()-1);}
@@ -108,7 +108,7 @@ final class NavigationLiveRouteController implements AutoCloseable {
     }
     void targetChanged(){
         if(closed||!coordinator.valid())return;
-        coordinator.invalidate();recovery.reset();refresh.reset();evaluation=false;voice.route("target-"+SystemClock.elapsedRealtime());deviation.reset();available=null;current=null;selected=0;suspect=false;failed=false;
+        orderSync.refresh();coordinator.invalidate();recovery.reset();refresh.reset();evaluation=false;voice.route("target-"+SystemClock.elapsedRealtime());deviation.reset();available=null;current=null;selected=0;suspect=false;failed=false;
         host.setRoutePoints(new JSONArray());host.routeManeuvers=new JSONArray();host.pendingRouteGeoJson=host.emptyFeatureCollection();host.updateRemainingRouteLine(true);
         host.instructionController.setDestination(host.targetMode);options.profile(profile,profile);targetKey=key();checkpoint();if(running)serviceReady=NavigationGuidanceService.start(host,key());request(true);
     }
@@ -135,10 +135,11 @@ final class NavigationLiveRouteController implements AutoCloseable {
         try{host.pendingRouteGeoJson=host.routeGeoJson(current.pointsJson());}catch(Exception e){NavigationDiagnostics.error(host,"NAV_GEOMETRY_FAILED",e);return;}host.setRoutePoints(current.latLngPoints);host.routeManeuvers=current.maneuvers;
         host.pendingRouteKm=current.distanceMeters/1000;host.pendingRouteSeconds=current.durationSeconds;host.lastRouteSuccessAt=System.currentTimeMillis();host.routeFailureCount=0;
         host.lastRenderedRouteIndex=-1;host.lastRenderedRouteProgressMeters=Double.NaN;
-        voice.route(routeGeneration+"-"+index);options.profile(profile,available.usedProfile);
+        voice.route(restoredId+"-"+index);options.profile(profile,available.usedProfile);
+        boolean firstPose=!host.displayInitialized;
         DriverNavigationActivityLayer1.SnapPoint match=host.snapToRoute(host.driverLat,host.driverLng);
-        host.displayLat=match.lat;host.displayLng=match.lng;host.displayInitialized=true;if(match.onRoute)host.snappedBearing=match.bearing;
-        if(host.activityResumed||host.inPictureInPicture){host.updateNativePosition(true);host.updateRemainingRouteLine(true);}lastBadgeAt=0;lastProgressAt=-1000;progress(match.progressMeters);
+        if(!host.displayInitialized){host.displayLat=match.lat;host.displayLng=match.lng;host.displayInitialized=true;}if(firstPose&&match.onRoute)host.snappedBearing=match.bearing;
+        if(host.activityResumed||host.inPictureInPicture){host.updateNativePosition(firstPose);host.updateRemainingRouteLine(true);}lastBadgeAt=0;lastProgressAt=-1000;progress(match.progressMeters);
         if(!restoring)checkpoint();
         NavigationDiagnostics.event(host,"NAV_ROUTE_READY",null);NavigationHealthTelemetry.mark(host,"route");
     }
@@ -170,6 +171,7 @@ final class NavigationLiveRouteController implements AutoCloseable {
         options.choices(snapshot.routes,selected,index->{if(!coordinator.valid()||snapshot!=available)return;if(NavigationGeometry.meters(availableLat,availableLng,host.driverLat,host.driverLng)>40){showChoices=true;request(true);}else {refresh.manual(SystemClock.elapsedRealtime());apply(index);}});
     }
     void resumed(boolean value){
+        if(value&&NavigationTargetPolicy.terminal(host.order)){NavigationSessionStore.clear(host);NavigationGuidanceService.stop(host);host.finish();return;}
         if(value&&NavigationSessionStore.stopped&&everResumed){host.finish();return;}
         if(value){NavigationSessionStore.foregroundOwner=pageId;NavigationSessionStore.foreground=true;}
         else if(pageId.equals(NavigationSessionStore.foregroundOwner))NavigationSessionStore.foreground=false;
@@ -181,7 +183,7 @@ final class NavigationLiveRouteController implements AutoCloseable {
     private void checkpoint(){
         if(closed||restoring||!coordinator.valid()||!pageId.equals(NavigationSessionStore.foregroundOwner))return;
         try{org.json.JSONObject x=new org.json.JSONObject().put("owner",NavigationSessionStore.identity(host)).put("saved",System.currentTimeMillis()).put("base",base()).put("key",key()).put("profile",profile).put("used",available==null?profile:available.usedProfile).put("order",NavigationSessionStore.compactOrder(host.order).toString()).put("mode",host.targetMode).put("lat",host.targetLat()).put("lng",host.targetLng()).put("manual_until",System.currentTimeMillis()+refresh.manualRemaining(SystemClock.elapsedRealtime())).put("needs_route",recovery.needed()).put("route_id",restoredId.isEmpty()?routeGeneration+"-"+selected:restoredId);
-            if(current!=null){org.json.JSONObject savedRoute=NavigationSessionStore.route(current);if(savedRoute.toString().length()<1200000)x.put("route",savedRoute);else x.put("needs_route",true);}
+            if(current!=null){org.json.JSONObject savedRoute=NavigationSessionStore.route(current);x.put("route",savedRoute);}
             NavigationSessionStore.save(host,x);lastCheckpoint=SystemClock.elapsedRealtime();
         }catch(Exception e){NavigationDiagnostics.error(host,"NAV_CHECKPOINT_FAILED",e);}
     }

@@ -12,14 +12,15 @@ public final class NavigationCameraController {
     private double smoothZoom = Double.NaN;
     private double smoothTilt = Double.NaN;
     private int speedBand = -1;
+    private long lastFrame;
 
     public NavigationCameraController(NavigationCompatibilityProfile profile) { this.profile = profile; }
 
     public double update(MapLibreMap map, double lat, double lng, double desiredBearing,
                          double speedKmh, boolean pip, boolean immediate) {
         if (map == null) return desiredBearing;
-        smoothBearing = easeBearing(smoothBearing, desiredBearing,
-                immediate ? 1f : (profile != null ? profile.cameraBearingAlpha : 0.065f));
+        long now=android.os.SystemClock.elapsedRealtime();long dt=lastFrame==0?33:Math.max(1,now-lastFrame);lastFrame=now;
+        smoothBearing = easeBearing(smoothBearing, desiredBearing,immediate?1f:(float)NavigationMotionInterpolator.alpha(dt,280));
         double desiredZoom, desiredTilt;
         if (pip) {
             desiredZoom = 14.8d; desiredTilt = 0d; speedBand = 4;
@@ -34,8 +35,8 @@ public final class NavigationCameraController {
         if (profile != null) desiredTilt = Math.min(desiredTilt, profile.cameraTilt);
         // Slow target changes prevent visible zoom/tilt pumping when GPS speed
         // fluctuates by a few km/h around a threshold.
-        smoothZoom = Double.isNaN(smoothZoom) ? desiredZoom : smoothZoom + (desiredZoom - smoothZoom) * (immediate ? 1d : 0.022d);
-        smoothTilt = Double.isNaN(smoothTilt) ? desiredTilt : smoothTilt + (desiredTilt - smoothTilt) * (immediate ? 1d : 0.025d);
+        smoothZoom = Double.isNaN(smoothZoom) ? desiredZoom : smoothZoom + (desiredZoom - smoothZoom) * (immediate?1d:NavigationMotionInterpolator.alpha(dt,1100));
+        smoothTilt = Double.isNaN(smoothTilt) ? desiredTilt : smoothTilt + (desiredTilt - smoothTilt) * (immediate?1d:NavigationMotionInterpolator.alpha(dt,1000));
         CameraPosition cp = new CameraPosition.Builder().target(new LatLng(lat, lng))
                 .zoom(smoothZoom).bearing(smoothBearing).tilt(smoothTilt).build();
         map.moveCamera(CameraUpdateFactory.newCameraPosition(cp));

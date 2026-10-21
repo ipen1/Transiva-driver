@@ -79,6 +79,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected ProgressBar progressBar;
     protected TextView statusBadge, distanceInfo, distanceHint, tripLiveSummary;
     protected TripLiveRouteController tripLiveRoutes;
+    protected TripVehicleMotionController tripVehicleMotion;
     protected MapView mapView;
     protected GoogleMap googleMap;
     protected Marker driverMarker, pickupMarker, deliveryMarker;

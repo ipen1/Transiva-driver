@@ -41,7 +41,7 @@ public final class NavigationGuidanceService extends Service implements Location
         requests=new NavigationRouteCoordinator(this,main,()->!closed&&!NavigationSessionStore.foreground,new NavigationRouteCoordinator.Callback(){
             public String currentTargetKey(){return key;}
             public void ready(long generation,StableRouteEngine.RouteSet set){
-                if(last!=null&&NavigationGeometry.distanceTo(set.routes.get(0).latLngPoints,last.getLatitude(),last.getLongitude())>Math.max(30,Math.min(60,last.getAccuracy()*1.5))){recovery.require(SystemClock.elapsedRealtime());request();return;}
+                if(last!=null&&NavigationGeometry.distanceTo(set.routes.get(0).latLngPoints,last.getLatitude(),last.getLongitude())>Math.max(30,Math.min(60,last.getAccuracy()*1.5))){evaluation=false;recovery.failed(SystemClock.elapsedRealtime());return;}
                 long now=SystemClock.elapsedRealtime();refresh.evaluated(now,last==null?0:last.getLatitude(),last==null?0:last.getLongitude());
                 if(evaluation&&route!=null){evaluation=false;NavigationProgress remaining=NavigationProgress.remaining(route,prior,total);if(!refresh.better(now,remaining.seconds,set.routes.get(0).durationSeconds)){recovery.reset();return;}}
                 evaluation=false;recovery.reset();try{snapshot.put("route",NavigationSessionStore.route(set.routes.get(0))).put("needs_route",false).put("used",set.usedProfile).put("route_id",UUID.randomUUID().toString()).put("saved",System.currentTimeMillis());NavigationSessionStore.save(NavigationGuidanceService.this,snapshot);install();}

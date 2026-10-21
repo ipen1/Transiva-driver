@@ -85,32 +85,13 @@ abstract class DriverNavigationActivityLayer2 extends DriverNavigationActivityLa
     }
 
     protected void updateNativePosition(boolean immediate) {
-        if (map == null || !styleReady) return;
-        installMarkers();
-
-        double lat = displayInitialized ? displayLat : driverLat;
-        double lng = displayInitialized ? displayLng : driverLng;
-        if (!valid(lat, lng)) return;
-
-        // Vehicle source belongs to a top-most SymbolLayer. Updating only one
-        // GeoJSON point is cheap and guarantees the icon remains above the route.
-        updateVehicleSource();
-
-        double desiredBearing = routePoints.size() >= 2 && Double.isFinite(snappedBearing)
-                ? snappedBearing
-                : (Double.isFinite(currentBearing) ? currentBearing : 0d);
-        boolean pipCamera = pipController != null && pipController.isActive();
-        double cameraBearing = cameraController != null
-                ? cameraController.update(map, lat, lng, desiredBearing, currentSpeedKmh, pipCamera, immediate)
-                : desiredBearing;
-        smoothMarkerBearing = easeBearing(smoothMarkerBearing, desiredBearing,
-                immediate ? 1.0f : (navProfile != null ? navProfile.bearingEaseAlpha : (currentSpeedKmh < 5d ? 0.10f : 0.16f)));
-        long uiNow = SystemClock.elapsedRealtime();
-        if (speedBadge != null && uiNow - lastSpeedUiAt >= 400L) {
-            lastSpeedUiAt = uiNow;
-            speedBadge.setText(String.format(Locale.US, "%.0f km/j\nRata-rata %.0f km/j",
-                    currentSpeedKmh, averageSpeedKmh));
-        }
+        if(map==null||!styleReady)return;
+        double lat=displayInitialized?displayLat:driverLat,lng=displayInitialized?displayLng:driverLng;if(!valid(lat,lng))return;
+        double heading=Double.isFinite(snappedBearing)?snappedBearing:currentBearing;
+        double cameraBearing=cameraController==null?heading:cameraController.update(map,lat,lng,heading,currentSpeedKmh,pipController!=null&&pipController.isActive(),immediate);
+        smoothMarkerBearing=heading;
+        if(vehicleController!=null)vehicleController.update(lat,lng,heading-cameraBearing);
+        long now=SystemClock.elapsedRealtime();if(speedBadge!=null&&now-lastSpeedUiAt>=400){lastSpeedUiAt=now;speedBadge.setText(String.format(Locale.US,"%.0f km/j\nRata-rata %.0f km/j",currentSpeedKmh,averageSpeedKmh));}
     }
 
     protected void updateSpeed(Location l) {
@@ -327,6 +308,7 @@ abstract class DriverNavigationActivityLayer2 extends DriverNavigationActivityLa
 
 
     protected void setRoutePoints(JSONArray points) {
+        routeVisualRevision++;
         synchronized (routePoints) {
             routePoints.clear();
             routeCumulativeMeters.clear();

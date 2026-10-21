@@ -366,7 +366,8 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         if (vehicleController == null) return;
         double lat = displayInitialized ? displayLat : driverLat;
         double lng = displayInitialized ? displayLng : driverLng;
-        vehicleController.update(lat, lng);
+        double cameraHeading=cameraController==null||!Double.isFinite(cameraController.bearing())?0:cameraController.bearing();
+        vehicleController.update(lat,lng,(Double.isFinite(smoothMarkerBearing)?smoothMarkerBearing:0)-cameraHeading);
     }
 
     protected void installMarkers() {
@@ -393,14 +394,18 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         if(lastFixRealtimeMs>0&&SystemClock.elapsedRealtime()-lastFixRealtimeMs>12000){
             lastMatchedProgressMeters=Double.NaN;lastMatchedRawLat=Double.NaN;lastMatchedRawLng=Double.NaN;lastMatchRealtimeMs=0;
         }
+        Location previousAccepted=lastLocation;
         lastLocation = new Location(l);
         driverLat = l.getLatitude(); driverLng = l.getLongitude();
         lastFixRealtimeMs = SystemClock.elapsedRealtime();
         lastGpsAccuracyM = l.hasAccuracy() ? Math.max(1f, l.getAccuracy()) : 50f;
         updateSpeed(l);
-        if (l.hasBearing() && l.getSpeed() > 1.2f) currentBearing = l.getBearing();
-        else if (displayInitialized) currentBearing = bearing(displayLat, displayLng, driverLat, driverLng);
-        if (fix.render) updateNativePosition(false);
+        double motionSpeed=l.hasSpeed()?Math.max(0,l.getSpeed()):currentSpeedKmh/3.6;
+        if(motionSpeed>=1.5){
+            if(l.hasBearing())currentBearing=l.getBearing();
+            else if(previousAccepted!=null&&previousAccepted.distanceTo(l)>=3)currentBearing=bearing(previousAccepted.getLatitude(),previousAccepted.getLongitude(),driverLat,driverLng);
+        }
+        // Rendering is owned exclusively by the display callback.
         maybeRefreshRoute(raw);
     }
 
@@ -410,85 +415,24 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
      * between 1-second fixes.
      */
     protected void animateTowardLatestFix() {
-        if (!valid(driverLat, driverLng) || map == null || !styleReady) return;
-
-        SnapPoint base = snapToRoute(driverLat, driverLng);
-        SnapPoint target = base;
-
-        // Dead-reckoning between GPS fixes: the visual target keeps moving at the
-        // measured speed for a short bounded window, so the icon/map does not
-        // move-stop-move between 700-1300 ms location samples.
-        if (base.onRoute && currentSpeedKmh > 2d && lastFixRealtimeMs > 0L && lastGpsAccuracyM < 35f) {
-            // CLEAN navigation: only a short prediction on a trustworthy GPS fix.
-            // Long dead-reckoning was visually smooth in ideal conditions but could
-            // overshoot corners/tunnels and appear as a map/marker "glitch".
-            double maxPredictionSec = lastGpsAccuracyM < 15f ? 0.80d : 0.55d;
-            double ageSec = Math.max(0d, Math.min(maxPredictionSec,
-                    (SystemClock.elapsedRealtime() - lastFixRealtimeMs) / 1000d));
-            double predictedSpeedMps = Math.max(0d, currentSpeedKmh / 3.6d);
-            double lookAheadMeters = Math.min(12d, predictedSpeedMps * ageSec);
-            target = advanceAlongRoute(base, lookAheadMeters);
+        if(!valid(driverLat,driverLng)||map==null||!styleReady)return;
+        long now=SystemClock.elapsedRealtime();SnapPoint base=snapToRoute(driverLat,driverLng);
+        if(lastFixRealtimeMs>0&&(motionFixAt!=lastFixRealtimeMs||motionRevision!=routeVisualRevision)){
+            double heading=base.onRoute?base.bearing:currentBearing;
+            vehicleMotion.offer(now,base.lat,base.lng,heading,base.progressMeters,currentSpeedKmh/3.6,lastGpsAccuracyM,base.onRoute,routeVisualRevision);
+            motionFixAt=lastFixRealtimeMs;motionRevision=routeVisualRevision;
         }
-
-        if (target.onRoute) {
-            visualRouteProgressMeters = target.progressMeters;
-            visualRouteSegmentIndex = target.segmentIndex;
-        }
-
-        // A weak GPS sample must never make the visual position teleport far
-        // along the route. Hold the last clean position until a better sample arrives.
-        if (displayInitialized && lastGpsAccuracyM >= 35f
-                && meters(displayLat, displayLng, target.lat, target.lng) > 35f) {
-            updateInstructionBanner(visualRouteProgressMeters);
-            return;
-        }
-
-        if (!displayInitialized) {
-            displayLat = target.lat;
-            displayLng = target.lng;
-            snappedBearing = target.bearing;
-            displayInitialized = true;
-            updateNativePosition(true);
-            maybeUpdateRemainingRouteLine();
-            updateInstructionBanner(target.progressMeters);
-            return;
-        }
-
-        if (target.onRoute) snappedBearing = target.bearing;
-
-        float distance = meters(displayLat, displayLng, target.lat, target.lng);
-        if (distance > 0.05f) {
-            // Adaptive smoothing: slow driving advances gently; fast driving catches
-            // the visual target more quickly. Frame loop is ~60 FPS.
-            double speedFactor = Math.max(0d, Math.min(1d, currentSpeedKmh / 55d));
-            long frameNow = SystemClock.elapsedRealtime();
-            double frameMs = lastVisualFrameAt <= 0L ? 16.67d
-                    : Math.max(8d, Math.min(50d, frameNow - lastVisualFrameAt));
-            lastVisualFrameAt = frameNow;
-            // Time-based exponential easing produces the same motion on 60/90/120 Hz
-            // screens and survives an occasional slow frame without visible snapping.
-            double tauMs = 350d - 155d * speedFactor;
-            float alpha = (float) (1d - Math.exp(-frameMs / tauMs));
-            if (distance > 25f) alpha = Math.max(alpha, 0.18f);
-            displayLat = easePosition(displayLat, target.lat, alpha);
-            displayLng = easePosition(displayLng, target.lng, alpha);
-
-            // MapLibre camera updates are expensive. Rendering every 16 ms can
-            // overload mid-range phones and actually look less smooth. Keep the
-            // physics loop at 60 Hz, but render the map at a stable ~30 FPS
-            // (PiP ~15 FPS), always using the newest interpolated position.
-            long now = SystemClock.elapsedRealtime();
-            boolean pip = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-                    (inPictureInPicture || isInPictureInPictureMode());
-            long cleanFrame = navProfile != null ? Math.max(16L, navProfile.visualFrameMs) : 33L;
-            long renderInterval = pip ? Math.max(66L, cleanFrame) : cleanFrame;
-            if (now - lastMapRenderAt >= renderInterval) {
-                lastMapRenderAt = now;
-                updateNativePosition(false);
-            }
-        }
-
+        NavigationMotionInterpolator.Pose pose=vehicleMotion.sample(now);if(pose==null)return;
+        double lat=pose.lat,lng=pose.lng;
+        if(pose.onRoute){synchronized(routePoints){NavigationGeometry.Point point=NavigationGeometry.at(routePoints,routeCumulativeMeters,pose.progress);if(point!=null){lat=point.lat;lng=point.lng;visualRouteProgressMeters=pose.progress;visualRouteSegmentIndex=point.segment;}}}
+        displayLat=lat;displayLng=lng;displayInitialized=true;snappedBearing=pose.bearing;
+        // One pose publication per display-paced callback. GPS callbacks never race the render loop.
+        vehicleMotion.rendered(now,lat,lng);
+        boolean changed=!Double.isFinite(lastPoseLat)||meters(lastPoseLat,lastPoseLng,lat,lng)>.03||Math.abs(NavigationMotionInterpolator.delta(lastPoseHeading,pose.bearing))>.2||Math.abs(lastPoseSpeed-currentSpeedKmh)>.5;
+        if(changed){poseChangedAt=now;lastPoseLat=lat;lastPoseLng=lng;lastPoseHeading=pose.bearing;lastPoseSpeed=currentSpeedKmh;}
+        if(changed||now-poseChangedAt<1500||now-lastMapRenderAt>=250){updateNativePosition(false);lastMapRenderAt=now;}
         maybeUpdateRemainingRouteLine();
-        updateInstructionBanner(target.progressMeters);
+        // Instructions and arrival are based on accepted GPS progress, never delayed visual progress.
+        updateInstructionBanner(base.progressMeters);
     }
 }

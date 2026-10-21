@@ -14,6 +14,11 @@ final class NavigationTargetPolicy {
     static String source(JSONObject o){String s=o==null?"":first(o.optString("source"),o.optString("source_table"),o.optString("order_kind"));return s.toLowerCase(Locale.US).contains("pickup")?"pickup_orders":"orders";}
     static String identity(JSONObject o){return source(o)+"|"+id(o);}
     static boolean same(JSONObject a,JSONObject b){return !id(a).isEmpty()&&identity(a).equals(identity(b));}
+    static String revision(JSONObject o){
+        if(o==null)return "";StringBuilder s=new StringBuilder(identity(o));
+        for(String key:new String[]{"status","pickup_lat","pickup_lng","user_lat","user_lng","delivery_lat","delivery_lng","destination_lat","destination_lng"})s.append('|').append(o.optString(key));
+        JSONObject eco=o.optJSONObject("ecosystem");JSONArray stops=eco==null?o.optJSONArray("waypoints"):eco.optJSONArray("waypoints");return s.append('|').append(stops==null?"":stops.toString()).toString();
+    }
     static boolean terminal(JSONObject o){String s=o==null?"":o.optString("status").trim().toLowerCase(Locale.US);return s.equals("finished")||s.equals("completed")||s.contains("cancel")||s.equals("rejected");}
     static boolean delivery(JSONObject o){String s=o==null?"":o.optString("status").trim().toLowerCase(Locale.US);return s.equals("arrived_pickup")||s.equals("on_delivery")||s.equals("arrived_delivery");}
     static Target resolve(JSONObject o,String preferred,double fallbackLat,double fallbackLng){
