@@ -227,6 +227,13 @@ jobs:
         run: python3 tools/ci/android_runtime_result_test.py
       - name: Verify emulator SDK recovery
         run: python3 tools/ci/prepare_emulator_sdk_test.py
+      - name: Install emulator host dependency before SDK verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libpulse0
+          python3 -c 'import ctypes; ctypes.CDLL("libpulse.so.0")'
       - name: Prepare verified emulator SDK with bounded recovery
         run: python3 tools/ci/prepare_emulator_sdk.py
       - name: Run connected instrumentation tests
