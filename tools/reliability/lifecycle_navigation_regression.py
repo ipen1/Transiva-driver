@@ -17,8 +17,9 @@ files={
 'android/os/SystemClock.java':'package android.os;public class SystemClock{public static long now;public static long elapsedRealtime(){return now;}public static void sleep(long ms){now+=ms;}}',
 'android/os/ParcelFileDescriptor.java':'package android.os;public class ParcelFileDescriptor{public String text="";public static class AutoCloseInputStream extends java.io.ByteArrayInputStream{public AutoCloseInputStream(ParcelFileDescriptor p){super(p.text.getBytes(java.nio.charset.StandardCharsets.UTF_8));}}}',
 'android/content/Context.java':'package android.content;public class Context{public static final String ACTIVITY_SERVICE="activity";public Object getSystemService(String s){return new android.app.ActivityManager();}}',
-'android/app/ActivityManager.java':'package android.app;public class ActivityManager{public static class RecentTaskInfo{public int id=1,taskId=1;}public static class AppTask{public RecentTaskInfo getTaskInfo(){return new RecentTaskInfo();}public void moveToFront(){}}public java.util.List<AppTask> getAppTasks(){return java.util.Arrays.asList(new AppTask());}}',
-'android/app/Instrumentation.java':'package android.app;public class Instrumentation{public android.content.Context getTargetContext(){return new android.content.Context();}public Automation getUiAutomation(){return new Automation();}public static class Automation{public android.os.ParcelFileDescriptor executeShellCommand(String s){android.os.ParcelFileDescriptor p=new android.os.ParcelFileDescriptor();if(s.startsWith("am task focus"))p.text="Setting focus to task 1";return p;}}}',
+'android/content/Intent.java':'package android.content;public class Intent{public static final int FLAG_ACTIVITY_REORDER_TO_FRONT=0x20000,FLAG_ACTIVITY_SINGLE_TOP=0x20000000;public int flags;public Class<?> target;public Intent(Context c,Class<?> t){target=t;}public Intent addFlags(int f){flags|=f;return this;}}',
+'android/app/ActivityManager.java':'package android.app;public class ActivityManager{public static int starts;public static boolean missing;public static android.content.Intent intent;public static class RecentTaskInfo{public int id=1,taskId=1;}public static class AppTask{public RecentTaskInfo getTaskInfo(){return new RecentTaskInfo();}public void moveToFront(){throw new AssertionError("Legacy moveToFront cannot guarantee RESUMED");}public void startActivity(android.content.Context c,android.content.Intent i,Object options){if(!Instrumentation.onMain)throw new AssertionError("Not on main thread");starts++;intent=i;}}public java.util.List<AppTask> getAppTasks(){return missing?java.util.Collections.emptyList():java.util.Arrays.asList(new AppTask());}}',
+'android/app/Instrumentation.java':'package android.app;public class Instrumentation{public static boolean onMain;public static int idle,focus,dumps;public void waitForIdleSync(){idle++;}public void runOnMainSync(Runnable r){onMain=true;try{r.run();}finally{onMain=false;}}public android.content.Context getTargetContext(){return new android.content.Context();}public Automation getUiAutomation(){return new Automation();}public static class Automation{public android.os.ParcelFileDescriptor executeShellCommand(String s){android.os.ParcelFileDescriptor p=new android.os.ParcelFileDescriptor();if(s.startsWith("am task focus")){focus++;p.text="Setting focus to task 1";}if(s.startsWith("dumpsys"))dumps++;return p;}}}',
 'android/widget/TextView.java':'package android.widget;public class TextView{public String text;public void setText(String t){text=t;}}',
 'android/util/Log.java':'package android.util;public class Log{public static int i(String a,String b){return 0;}public static int e(String a,String b){return 0;}}',
 'androidx/lifecycle/Lifecycle.java':'package androidx.lifecycle;public class Lifecycle{public enum State{DESTROYED,INITIALIZED,CREATED,STARTED,RESUMED}}',
@@ -53,6 +54,23 @@ public class RegressionProbe{
   failed=false;try{await(scenario(State.DESTROYED),State.RESUMED);}catch(AssertionError e){failed=true;}check(failed,"destroyed Activity cannot pass foreground assertion");
   await(scenario(State.RESUMED),State.RESUMED);check(true,"normal stable lifecycle state still passes");
   HostLifecycleTestActions.backgroundAndReturn(scenario(State.RESUMED,gap(),State.CREATED,gap(),State.RESUMED));check(true,"full background/foreground helper preserves host identity and task checks");
+  check(android.app.ActivityManager.starts==0&&android.app.Instrumentation.focus==1,"modern API keeps shell focus and never relaunches host");
+  for(int api:new int[]{24,26}){
+   android.os.Build.VERSION.SDK_INT=api;int starts=android.app.ActivityManager.starts;
+   HostLifecycleTestActions.backgroundAndReturn(scenario(State.RESUMED,State.CREATED,gap(),State.RESUMED));
+   check(android.app.ActivityManager.starts==starts+1,"API"+api+" restores via exact AppTask on main thread");
+   android.content.Intent resume=android.app.ActivityManager.intent;
+   check(resume.target==TestHarnessActivity.class&&resume.flags==(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT|android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP),"API"+api+" reuses host without clearing or creating another task");
+  }
+  check(android.app.Instrumentation.idle==3,"each foreground request waits for stopped host main queue");
+  ActivityScenario<TestHarnessActivity> neverResumes=scenario(State.RESUMED,State.CREATED);neverResumes.repeat=gap();int dumps=android.app.Instrumentation.dumps;
+  failed=false;try{HostLifecycleTestActions.backgroundAndReturn(neverResumes);}catch(AssertionError e){failed=true;}
+  check(failed,"legacy foreground request without real RESUMED still fails");
+  check(android.app.Instrumentation.dumps>=dumps+2,"legacy timeout includes activity and window diagnostics");
+  android.app.ActivityManager.missing=true;int starts=android.app.ActivityManager.starts;failed=false;
+  try{HostLifecycleTestActions.backgroundAndReturn(scenario(State.RESUMED,State.CREATED));}catch(AssertionError e){failed=true;}
+  check(failed&&android.app.ActivityManager.starts==starts,"missing original task fails without starting a replacement");
+  android.app.ActivityManager.missing=false;android.os.Build.VERSION.SDK_INT=36;
   TargetProbe p=target("waypoint_2","on_delivery");check(p.targetMode.equals("waypoint_2")&&p.targetLat()==-1.1&&p.targetLng()==120.4,"Trip waypoint intent resolves to explicit stop, not final delivery");
   p=target(" WAYPOINT_3 ","driver_accepted");check(p.targetMode.equals("waypoint_3")&&p.targetLat()==-1.1,"waypoint remains explicit before pickup and ignores case/whitespace");
   p=target("pickup","on_delivery");check(p.targetMode.equals("pickup")&&p.targetLat()==-0.8&&p.targetLng()==120.1,"explicit pickup remains unchanged");
