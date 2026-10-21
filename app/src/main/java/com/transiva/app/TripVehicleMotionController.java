@@ -32,12 +32,12 @@ final class TripVehicleMotionController implements AutoCloseable {
         motion.rendered(SystemClock.elapsedRealtime(),lat,lng);
         try{
             if(host.driverMarker==null){host.driverMarker=host.googleMap.addMarker(new MarkerOptions().position(new LatLng(lat,lng)).title("Posisi Driver").flat(true).rotation((float)heading).anchor(.5f,.5f).icon(host.driverVehicleIcon()));drawnLat=Double.NaN;}
-            if(host.driverMarker!=null&&(!Double.isFinite(drawnLat)||NavigationGeometry.meters(drawnLat,drawnLng,lat,lng)>=.05||Math.abs(NavigationMotionInterpolator.delta(drawnHeading,heading))>=.25)){
+            if(host.driverMarker!=null&&(!Double.isFinite(drawnLat)||NavigationGeometry.meters(drawnLat,drawnLng,lat,lng)>=.005||Math.abs(NavigationMotionInterpolator.delta(drawnHeading,heading))>=.25)){
                 host.driverMarker.setPosition(new LatLng(lat,lng));host.driverMarker.setRotation((float)heading);drawnLat=lat;drawnLng=lng;drawnHeading=heading;
             }
             if(host.tripCameraFollowing){
                 com.google.android.gms.maps.model.CameraPosition previous=host.googleMap.getCameraPosition();
-                if(NavigationGeometry.meters(previous.target.latitude,previous.target.longitude,lat,lng)>.03)
+                if(NavigationGeometry.meters(previous.target.latitude,previous.target.longitude,lat,lng)>.005)
                     host.googleMap.moveCamera(com.google.android.gms.maps.CameraUpdateFactory.newCameraPosition(new com.google.android.gms.maps.model.CameraPosition.Builder(previous).target(new LatLng(lat,lng)).build()));
             }
         }catch(RuntimeException e){NavigationDiagnostics.error(host,"TRIP_MOTION_RENDER_FAILED",e);}

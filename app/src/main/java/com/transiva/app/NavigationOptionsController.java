@@ -12,7 +12,7 @@ final class NavigationOptionsController {
     interface Listener{void profile(String value);void voice(boolean enabled);void alternatives();}
     private final Activity activity;private final Listener listener;
     private final TextView profile,sound,choices;
-    private boolean enabled=true,ready;
+    private boolean enabled=true,ready,backgroundFailed,warned;
     NavigationOptionsController(Activity a,FrameLayout root,Listener l){
         activity=a;listener=l;LinearLayout row=new LinearLayout(a);row.setOrientation(LinearLayout.HORIZONTAL);row.setPadding(0,dp(a,8),0,0);
         profile=button(a,"Profil");sound=button(a,"Suara aktif");choices=button(a,"Pilihan rute");
@@ -26,7 +26,17 @@ final class NavigationOptionsController {
     void profile(String requested,String used){profile.setText("motor".equals(requested)?("motor".equals(used)?"Motor":"Motor\n(rute mobil)"):"Mobil");}
     void voice(boolean value){enabled=value;updateVoice();}
     void voiceReady(boolean value){ready=value;updateVoice();}
-    private void updateVoice(){sound.setText(enabled?(ready?"Suara aktif":"Suara belum siap"):"Suara mati");}
+    void guidanceFailure(boolean value){
+        if(backgroundFailed==value)return;backgroundFailed=value;updateVoice();
+        if(value&&!warned){warned=true;Toast.makeText(activity,"Panduan background belum aktif. Tetap buka navigasi sampai pulih.",Toast.LENGTH_LONG).show();}
+        if(!value)warned=false;
+    }
+    private void updateVoice(){
+        String label=enabled?(ready?"Suara aktif":"Suara belum siap"):"Suara mati";
+        sound.setMaxLines(backgroundFailed?3:2);
+        sound.setText(label+(backgroundFailed?"\nLatar nonaktif":""));
+        sound.setContentDescription(label+(backgroundFailed?". Panduan background belum aktif, pertahankan halaman navigasi terbuka.":""));
+    }
     void choices(List<StableRouteEngine.Result> routes,int selected,java.util.function.IntConsumer pick){
         if(routes.size()<2){Toast.makeText(activity,"Provider belum menyediakan alternatif untuk titik ini.",Toast.LENGTH_LONG).show();return;}
         String[] labels=new String[routes.size()];for(int i=0;i<labels.length;i++){StableRouteEngine.Result r=routes.get(i);labels[i]=String.format(Locale.US,"Rute %d%s • %.1f km • ±%d menit%s",i+1,i==selected?" (aktif)":"",r.distanceMeters/1000,Math.max(1,(int)Math.ceil(r.durationSeconds/60)),r.summary.isEmpty()?"":"\n"+r.summary);}

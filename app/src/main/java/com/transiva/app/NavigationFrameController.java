@@ -6,9 +6,12 @@ import org.maplibre.android.maps.MapView;
 /** Display-synchronized cadence. Deadlines retain phase instead of adding render cost to every frame. */
 public final class NavigationFrameController {
     public interface Callback {void onVisualFrame();}
-    private final long intervalNs;private final Callback callback;private boolean running;private long next;private Choreographer clock;
-    public NavigationFrameController(Handler ignored,long frameMs,Callback cb){intervalNs=frameMs<=17?1000000000L/60:frameMs>=32&&frameMs<=34?1000000000L/30:Math.max(16,frameMs)*1000000L;callback=cb;}
-    public void attachMapView(MapView ignored){}
+    private final long intervalNs;private final int maximumFps;private MapView attached;private final Callback callback;private boolean running;private long next;private Choreographer clock;
+    public NavigationFrameController(Handler ignored,long frameMs,Callback cb){maximumFps=frameMs<=8?120:frameMs<=17?60:frameMs>=32&&frameMs<=34?30:Math.max(1,(int)(1000/Math.max(16,frameMs)));intervalNs=frameMs<=8?1000000000L/120:frameMs<=17?1000000000L/60:frameMs>=32&&frameMs<=34?1000000000L/30:Math.max(16,frameMs)*1000000L;callback=cb;}
+    public void attachMapView(MapView view){
+        if(view==null||view==attached)return;
+        try{view.setMaximumFps(maximumFps);attached=view;}catch(RuntimeException ignored){/* Retry after map-ready; display callbacks remain bounded. */}
+    }
     public void start(){if(running)return;running=true;next=0;clock=Choreographer.getInstance();clock.postFrameCallback(tick);}
     public void stop(){running=false;next=0;if(clock!=null)clock.removeFrameCallback(tick);}
     private final Choreographer.FrameCallback tick=new Choreographer.FrameCallback(){public void doFrame(long frameTimeNanos){

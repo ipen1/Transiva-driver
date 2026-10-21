@@ -25,14 +25,15 @@ public final class NavigationGuidanceService extends Service implements Location
     private NavigationVoiceController voice;private NavigationInstructionController instructions;
     private NavigationRouteCoordinator requests;private DriverSessionOwner owner;
     private JSONObject snapshot;private StableRouteEngine.Result route;private String routeId="",key="";
-    private boolean closed,listening,wasForeground=true,suspect;
+    private boolean closed,listening,wasForeground=true,suspect,reacquiring;
+    private String guidanceTicket="";
     private double prior=Double.NaN,total;
-    static boolean start(Activity a,String routeKey){
-        if(a.isFinishing()||a.isDestroyed()||a.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED)return false;
-        try{ContextCompat.startForegroundService(a,new Intent(a,NavigationGuidanceService.class).putExtra("route_key",routeKey));return true;}
-        catch(RuntimeException e){NavigationDiagnostics.error(a,"NAV_GUIDANCE_SERVICE_START_FAILED",e);return false;}
+    static boolean start(Activity a,String routeKey,String ticket){
+        if(a.isFinishing()||a.isDestroyed()||a.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED){NavigationGuidanceHealth.failed(ticket);return false;}
+        try{ContextCompat.startForegroundService(a,new Intent(a,NavigationGuidanceService.class).putExtra("route_key",routeKey).putExtra("guidance_ticket",ticket));return true;}
+        catch(RuntimeException e){NavigationGuidanceHealth.failed(ticket);NavigationDiagnostics.error(a,"NAV_GUIDANCE_SERVICE_START_FAILED",e);return false;}
     }
-    static void stop(Context c){c.stopService(new Intent(c,NavigationGuidanceService.class));}
+    static void stop(Context c){NavigationGuidanceHealth.clear(NavigationSessionStore.identity(c));c.stopService(new Intent(c,NavigationGuidanceService.class));}
     @Override public void onCreate(){
         super.onCreate();owner=DriverSessionOwner.capture(this);locations=(LocationManager)getSystemService(LOCATION_SERVICE);
         voice=new NavigationVoiceController(this,()->!closed&&owner.current());
@@ -75,10 +76,18 @@ public final class NavigationGuidanceService extends Service implements Location
     }
     @Override public int onStartCommand(Intent intent,int flags,int id){
         if(intent!=null&&STOP.equals(intent.getAction())){NavigationSessionStore.clear(this);stopSelf();return START_NOT_STICKY;}
+        String requestedTicket=intent==null?"":intent.getStringExtra("guidance_ticket");
+        String requestedKey=intent==null?"":intent.getStringExtra("route_key");
+        if(!NavigationGuidanceHealth.owns(requestedTicket,NavigationSessionStore.identity(this),requestedKey)){
+            if(guidanceTicket.isEmpty())stopSelf();return START_NOT_STICKY;
+        }
+        if(requestedTicket.equals(guidanceTicket)&&NavigationGuidanceHealth.status(guidanceTicket,NavigationSessionStore.identity(this),requestedKey,SystemClock.elapsedRealtime())==NavigationGuidanceHealth.State.READY)return START_NOT_STICKY;
+        guidanceTicket=requestedTicket;
         snapshot=NavigationSessionStore.read(this);
-        if(snapshot==null||!owner.current()||intent==null||!snapshot.optString("key").equals(intent.getStringExtra("route_key"))){stopSelf();return START_NOT_STICKY;}
+        if(snapshot==null||!owner.current()||intent==null||!snapshot.optString("key").equals(intent.getStringExtra("route_key"))){NavigationGuidanceHealth.failed(guidanceTicket);stopSelf();return START_NOT_STICKY;}
         try{if(Build.VERSION.SDK_INT>=26){NotificationChannel channel=new NotificationChannel(CHANNEL,"Panduan navigasi",NotificationManager.IMPORTANCE_LOW);channel.setSound(null,null);getSystemService(NotificationManager.class).createNotificationChannel(channel);}startForeground(NOTICE,notification("Panduan perjalanan aktif"));}
-        catch(RuntimeException e){TransivaDiagnostics.error(this,"navigation","GUIDANCE_FOREGROUND_FAILED",e);stopSelf();return START_NOT_STICKY;}
+        catch(RuntimeException e){NavigationGuidanceHealth.failed(guidanceTicket);TransivaDiagnostics.error(this,"navigation","GUIDANCE_FOREGROUND_FAILED",e);stopSelf();return START_NOT_STICKY;}
+        if(!NavigationGuidanceHealth.acknowledge(guidanceTicket,NavigationSessionStore.identity(this),snapshot.optString("key"),SystemClock.elapsedRealtime())){NavigationGuidanceHealth.failed(guidanceTicket);stopSelf();return START_NOT_STICKY;}
         requests.invalidate();recovery.reset();evaluation=false;wasForeground=true;routeId="";stopLocation();voice.resumed(false);orderSync.active(false);
         main.removeCallbacks(tick);main.post(tick);return START_NOT_STICKY;
     }
@@ -90,6 +99,7 @@ public final class NavigationGuidanceService extends Service implements Location
     }
     private final Runnable tick=new Runnable(){public void run(){
         if(closed)return;
+        NavigationGuidanceHealth.heartbeat(guidanceTicket,SystemClock.elapsedRealtime());
         if(NavigationSessionStore.stopped||!owner.current()){stopSelf();return;}
         boolean foreground=NavigationSessionStore.foreground;
         if(foreground){orderSync.active(false);if(!wasForeground){requests.invalidate();if(evaluation)recovery.reset();evaluation=false;stopLocation();voice.resumed(false);}wasForeground=true;}
@@ -103,7 +113,7 @@ public final class NavigationGuidanceService extends Service implements Location
     private void install(){
         voice.enabled(getSharedPreferences("navigation_guidance",0).getBoolean("voice",true));
         String id=snapshot.optString("route_id");if(id.equals(routeId)&&route!=null)return;
-        route=NavigationSessionStore.route(snapshot);shape.clear();lengths.clear();total=0;prior=Double.NaN;routeId=id;deviation.reset();suspect=false;
+        route=NavigationSessionStore.route(snapshot);shape.clear();lengths.clear();total=0;prior=Double.NaN;routeId=id;deviation.reset();suspect=false;reacquiring=true;
         if(route==null){recovery.require(SystemClock.elapsedRealtime());return;}
         for(int i=0;i<route.latLngPoints.length();i++){JSONArray p=route.latLngPoints.optJSONArray(i);if(p==null)continue;double[] xy={p.optDouble(0),p.optDouble(1)};if(!shape.isEmpty()){double[] q=shape.get(shape.size()-1);total+=NavigationGeometry.meters(q[0],q[1],xy[0],xy[1]);}shape.add(xy);lengths.add(total);}
         refresh.hold(SystemClock.elapsedRealtime(),snapshot.optLong("manual_until")-System.currentTimeMillis());instructions.setDestination(snapshot.optString("mode"));voice.route(routeId);voice.enabled(getSharedPreferences("navigation_guidance",0).getBoolean("voice",true));
@@ -123,16 +133,20 @@ public final class NavigationGuidanceService extends Service implements Location
         if(closed||NavigationSessionStore.foreground||!owner.current()||raw==null)return;
         if(last!=null&&LocationManager.NETWORK_PROVIDER.equals(raw.getProvider())&&LocationManager.GPS_PROVIDER.equals(last.getProvider())&&SystemClock.elapsedRealtime()-fixAt<5500&&last.getAccuracy()<=45)return;
         SmoothLocationEngine.Fix accepted=smooth.offer(raw);if(accepted==null)return;
-        long now=SystemClock.elapsedRealtime();long elapsed=now-fixAt;Location previous=last;if(elapsed>12000)prior=Double.NaN;
+        long now=SystemClock.elapsedRealtime();long elapsed=now-fixAt;Location previous=last;if(fixAt>0&&(elapsed>12000||elapsed<0)){prior=Double.NaN;reacquiring=true;deviation.reset();}
         last=new Location(raw);if(!last.hasAccuracy())last.setAccuracy(50);
         if(!last.hasSpeed()&&previous!=null&&elapsed>=300&&elapsed<=15000)last.setSpeed((float)Math.min(50,NavigationGeometry.meters(previous.getLatitude(),previous.getLongitude(),last.getLatitude(),last.getLongitude())/(elapsed/1000d)));
         raw=last;fixAt=now;
         if(route==null){if(!requests.busy()&&(!recovery.needed()||recovery.due(now)))request();return;}
         if(!refresh.initialized())refresh.evaluated(now,raw.getLatitude(),raw.getLongitude());
-        NavigationGeometry.Projection p=NavigationGeometry.project(shape,lengths,raw.getLatitude(),raw.getLongitude(),prior,raw.hasBearing()?raw.getBearing():Double.NaN,raw.getAccuracy(),raw.hasSpeed()?raw.getSpeed():0);if(p.distance<Math.max(12,raw.getAccuracy()*1.5))prior=p.progress;
+        NavigationGeometry.Projection p=NavigationGeometry.project(shape,lengths,raw.getLatitude(),raw.getLongitude(),prior,raw.hasBearing()?raw.getBearing():Double.NaN,raw.getAccuracy(),raw.hasSpeed()?raw.getSpeed():0);if((!reacquiring||raw.getAccuracy()<=35)&&p.distance<Math.max(12,raw.getAccuracy()*1.5))prior=p.progress;
         double speed=raw.hasSpeed()?raw.getSpeed():0,bearing=raw.hasBearing()?raw.getBearing():Double.NaN;
         double angle=Double.isFinite(bearing)&&Double.isFinite(p.bearing)?Math.abs(((bearing-p.bearing+540)%360)-180):0;
         suspect=p.distance>Math.max(12,raw.getAccuracy()*1.8)||(angle>125&&speed>=2.5&&raw.getAccuracy()<=25);
+        if(reacquiring&&raw.getAccuracy()<=35){
+            if(suspect&&p.distance>Math.max(30,raw.getAccuracy()*1.8)){reacquiring=false;evaluation=false;recovery.require(now);request();return;}
+            if(!suspect)reacquiring=false;
+        }
         if(deviation.offer(now,raw.getLatitude(),raw.getLongitude(),raw.hasAccuracy()?raw.getAccuracy():50,speed,bearing,p.bearing,p.distance)!=NavigationDeviationDetector.Reason.NONE){evaluation=false;recovery.require(now);request();}
         else if(!suspect&&!recovery.needed()&&!requests.busy()&&refresh.due(now,raw.getLatitude(),raw.getLongitude(),speed,raw.getAccuracy(),NavigationProgress.remaining(route,p.progress,total).meters)){evaluation=true;request();}
         NavigationProgress remaining=NavigationProgress.remaining(route,p.progress,total);
@@ -142,5 +156,5 @@ public final class NavigationGuidanceService extends Service implements Location
     }
     @Override public void onProviderEnabled(String provider){} @Override public void onProviderDisabled(String provider){} @Override public void onStatusChanged(String provider,int status,Bundle extras){}
     @Override public IBinder onBind(Intent intent){return null;}
-    @Override public void onDestroy(){closed=true;main.removeCallbacksAndMessages(null);stopLocation();if(orderSync!=null)orderSync.close();if(requests!=null)requests.close();if(voice!=null)voice.close();if(owner!=null)owner.close();stopForeground(true);super.onDestroy();}
+    @Override public void onDestroy(){NavigationGuidanceHealth.failed(guidanceTicket);closed=true;main.removeCallbacksAndMessages(null);stopLocation();if(orderSync!=null)orderSync.close();if(requests!=null)requests.close();if(voice!=null)voice.close();if(owner!=null)owner.close();stopForeground(true);super.onDestroy();}
 }

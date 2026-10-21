@@ -218,6 +218,8 @@ abstract class DriverNavigationActivityLayer1 extends Activity {
     protected int lastRenderedRouteIndex = -1;
     protected long lastRouteLineUpdateAt = 0L;
     protected long lastMapRenderAt = 0L;
+    protected long lastNavigationUiAt;
+    protected SnapPoint visualMatch;
     protected long lastVisualFrameAt = 0L;
     protected long lastSpeedUiAt = 0L;
 

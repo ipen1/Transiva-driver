@@ -89,6 +89,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         readIdentity();
         applyNavigationResourceConfig();
         navProfile = NavigationCompatibilityProfile.resolve(this, navConfig != null ? navConfig.profile : "auto");
+        NavigationDisplayPolicy.prefer(this,navProfile.visualFrameMs);
         NavigationDiagnostics.event(this, "NAV_PROFILE_" + navProfile.mode.name(), null);
         frameController = new NavigationFrameController(main, navProfile.visualFrameMs, this::animateTowardLatestFix);
         routeScheduler = new NavigationRouteScheduler(main, new NavigationRouteScheduler.Callback() {
@@ -423,7 +424,10 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
      */
     protected void animateTowardLatestFix() {
         if(!valid(driverLat,driverLng)||map==null||!styleReady)return;
-        long now=SystemClock.elapsedRealtime();SnapPoint base=snapToRoute(driverLat,driverLng);
+        long now=SystemClock.elapsedRealtime();
+        boolean newFix=visualMatch==null||motionFixAt!=lastFixRealtimeMs||motionRevision!=routeVisualRevision;
+        if(newFix)visualMatch=snapToRoute(driverLat,driverLng);
+        SnapPoint base=visualMatch;
         if(lastFixRealtimeMs>0&&(motionFixAt!=lastFixRealtimeMs||motionRevision!=routeVisualRevision)){
             double heading=base.onRoute?base.bearing:currentBearing;
             vehicleMotion.offer(now,base.lat,base.lng,heading,base.progressMeters,currentSpeedKmh/3.6,lastGpsAccuracyM,base.onRoute,routeVisualRevision);
@@ -435,11 +439,13 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         displayLat=lat;displayLng=lng;displayInitialized=true;snappedBearing=renderedHeading.update(now,heading,currentSpeedKmh>=4.3||pose.velocity>=1.2);
         // One pose publication per display-paced callback. GPS callbacks never race the render loop.
         vehicleMotion.rendered(now,lat,lng);
-        boolean changed=!Double.isFinite(lastPoseLat)||meters(lastPoseLat,lastPoseLng,lat,lng)>.03||Math.abs(NavigationMotionInterpolator.delta(lastPoseHeading,snappedBearing))>.2||Math.abs(lastPoseSpeed-currentSpeedKmh)>.5;
+        boolean changed=!Double.isFinite(lastPoseLat)||meters(lastPoseLat,lastPoseLng,lat,lng)>.005||Math.abs(NavigationMotionInterpolator.delta(lastPoseHeading,snappedBearing))>.2||Math.abs(lastPoseSpeed-currentSpeedKmh)>.5;
         if(changed){poseChangedAt=now;lastPoseLat=lat;lastPoseLng=lng;lastPoseHeading=snappedBearing;lastPoseSpeed=currentSpeedKmh;}
         if(changed||now-poseChangedAt<1500||now-lastMapRenderAt>=250){updateNativePosition(false);lastMapRenderAt=now;}
-        maybeUpdateRemainingRouteLine();
-        // Instructions and arrival are based on accepted GPS progress, never delayed visual progress.
-        updateInstructionBanner(base.progressMeters);
+        if(newFix||now-lastNavigationUiAt>=100){
+            lastNavigationUiAt=now;maybeUpdateRemainingRouteLine();
+            // Instructions and arrival use accepted GPS progress, never visual delay.
+            updateInstructionBanner(base.progressMeters);
+        }
     }
 }

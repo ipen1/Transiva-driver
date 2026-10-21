@@ -281,7 +281,7 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
                 : DevicePerformanceProfile.title(selected);
         performanceModeValue.setText("Aktif: " + activeLabel);
         performanceRecommendedValue.setText("Rekomendasi perangkat: " + DevicePerformanceProfile.title(recommended)
-                + " · target " + effective.targetFps + " FPS · GPS " + effective.navigationGpsMs + " ms");
+                 + " · target navigasi " + (NavigationCompatibilityProfile.resolve(this,"auto").visualFrameMs<=8?"60–120":"60") + " FPS · GPS " + effective.navigationGpsMs + " ms");
         stylePerformanceButton(performanceAutoButton, selected == DevicePerformanceProfile.UserMode.AUTO);
         stylePerformanceButton(performanceLowButton, selected == DevicePerformanceProfile.UserMode.LOW);
         stylePerformanceButton(performanceNormalButton, selected == DevicePerformanceProfile.UserMode.NORMAL);

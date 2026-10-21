@@ -15,7 +15,7 @@ final class TripLiveRouteController implements AutoCloseable {
     private final List<double[]> shape=new ArrayList<>();private final List<Double> lengths=new ArrayList<>();
     private StableRouteEngine.Result route;private NavigationTargetPolicy.Target target;private Location last;
     private GoogleMap drawnMap;private Polyline reference;private String key="",used="car",referenceKey="";
-    private boolean active,closed,suspect,evaluation;private long fixAt;private double total,prior=Double.NaN,originLat,originLng;
+    private boolean active,closed,suspect,evaluation,reacquiring;private long fixAt;private double total,prior=Double.NaN,originLat,originLng;
     TripLiveRouteController(DriverTripActivityLayer2 h){host=h;requests=new NavigationRouteCoordinator(h,main,new NavigationRouteCoordinator.Callback(){
         public String currentTargetKey(){return currentKey();}
         public void ready(long generation,StableRouteEngine.RouteSet set){
@@ -32,14 +32,23 @@ final class TripLiveRouteController implements AutoCloseable {
     void active(boolean value){if(closed)return;active=value;main.removeCallbacks(tick);if(!value){requests.invalidate();if(evaluation)recovery.reset();evaluation=false;}else main.post(tick);}
     private final Runnable tick=new Runnable(){public void run(){if(closed||!active||!requests.valid())return;if(recovery.due(SystemClock.elapsedRealtime())&&!requests.busy())request(true);render();main.postDelayed(this,1000);}};
     void fix(Location raw){
-        if(closed||raw==null)return;last=new Location(raw);fixAt=SystemClock.elapsedRealtime();
+        if(closed||raw==null)return;
+        long now=SystemClock.elapsedRealtime();boolean reacquire=fixAt>0&&(now<fixAt||now-fixAt>12000);
+        if(reacquire){reacquiring=true;prior=Double.NaN;suspect=false;deviation.reset();eta.reset();}
+        last=new Location(raw);fixAt=now;
         if(!currentKey().equals(key)){request(true);return;}if(route==null){request(false);return;}
         NavigationGeometry.Projection p=NavigationGeometry.project(shape,lengths,raw.getLatitude(),raw.getLongitude(),prior,raw.hasBearing()?raw.getBearing():Double.NaN,raw.hasAccuracy()?raw.getAccuracy():50,raw.hasSpeed()?raw.getSpeed():host.currentSpeedKmh/3.6);
         double acc=raw.hasAccuracy()?Math.max(1,raw.getAccuracy()):50,speed=raw.hasSpeed()?raw.getSpeed():host.currentSpeedKmh/3.6,bearing=raw.hasBearing()?raw.getBearing():Double.NaN;
         double angle=Double.isFinite(bearing)&&Double.isFinite(p.bearing)?Math.abs(((bearing-p.bearing+540)%360)-180):0;
         suspect=p.distance>Math.max(12,acc*1.8)||(angle>125&&speed>=2.5&&acc<=25);
-        if(!suspect&&p.distance<=Math.max(12,Math.min(42,acc*1.5)))prior=p.progress;
+        if(!suspect&&(!reacquiring||acc<=35)&&p.distance<=Math.max(12,Math.min(42,acc*1.5)))prior=p.progress;
         eta.offer(fixAt,speed,acc,!suspect&&p.distance<=20);
+        // A stationary driver can return off the old route after a tunnel/background gap.
+        // Rebuild immediately from a fresh accurate fix; ordinary jitter still needs evidence.
+        if(reacquiring&&suspect&&acc<=35&&p.distance>Math.max(30,acc*1.8)){
+            reacquiring=false;evaluation=false;recovery.require(fixAt);request(true);render();return;
+        }
+        if(reacquiring&&!suspect&&acc<=35)reacquiring=false;
         if(deviation.offer(fixAt,raw.getLatitude(),raw.getLongitude(),acc,speed,bearing,p.bearing,p.distance)!=NavigationDeviationDetector.Reason.NONE){evaluation=false;recovery.require(fixAt);request(true);}
         else if(!suspect&&!recovery.needed()&&!requests.busy()&&refresh.due(fixAt,raw.getLatitude(),raw.getLongitude(),speed,acc,NavigationProgress.remaining(route,prior,total).meters)){evaluation=true;request(true);}
         render();
@@ -65,7 +74,7 @@ final class TripLiveRouteController implements AutoCloseable {
         if(p.distance>Math.max(12,Math.min(35,accuracy*1.5)))return null;NavigationGeometry.Point point=visualPoint(p.progress);if(point==null)return null;
         return new NavigationMotionInterpolator.Pose(point.lat,point.lng,point.bearing,p.progress,fix.hasSpeed()?fix.getSpeed():0,true);
     }
-    private void install(){visualRevision++;shape.clear();lengths.clear();total=0;for(int i=0;i<route.latLngPoints.length();i++){JSONArray p=route.latLngPoints.optJSONArray(i);if(p==null)continue;double[] xy={p.optDouble(0),p.optDouble(1)};if(!shape.isEmpty()){double[] q=shape.get(shape.size()-1);total+=NavigationGeometry.meters(q[0],q[1],xy[0],xy[1]);}shape.add(xy);lengths.add(total);}drawnMap=null;}
+    private void install(){reacquiring=false;visualRevision++;shape.clear();lengths.clear();total=0;for(int i=0;i<route.latLngPoints.length();i++){JSONArray p=route.latLngPoints.optJSONArray(i);if(p==null)continue;double[] xy={p.optDouble(0),p.optDouble(1)};if(!shape.isEmpty()){double[] q=shape.get(shape.size()-1);total+=NavigationGeometry.meters(q[0],q[1],xy[0],xy[1]);}shape.add(xy);lengths.add(total);}drawnMap=null;}
     void render(){
         try{renderMap();}catch(RuntimeException e){NavigationDiagnostics.error(host,"TRIP_LIVE_MAP_FAILED",e);summary("Peta belum siap • panduan rute tetap tersimpan");}
     }

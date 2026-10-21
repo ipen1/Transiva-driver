@@ -28,6 +28,7 @@ public final class NavigationVehicleController {
     private final Activity activity;
     private final String vehicleType;
     private Style style;
+    private double drawnLat=Double.NaN,drawnLng,drawnHeading=Double.NaN;
 
     public NavigationVehicleController(Activity activity, String vehicleType) {
         this.activity = activity;
@@ -35,6 +36,7 @@ public final class NavigationVehicleController {
     }
 
     public void install(Style style, double lat, double lng) {
+        if(this.style!=style){drawnLat=Double.NaN;drawnHeading=Double.NaN;}
         this.style = style;
         if (style == null) return;
         try {
@@ -57,8 +59,13 @@ public final class NavigationVehicleController {
         if (style == null || !valid(lat, lng)) return;
         try {
             GeoJsonSource source=style.getSourceAs(SOURCE);
-            if(source!=null)source.setGeoJson("{\"type\":\"Feature\",\"properties\":{},\"geometry\":{\"type\":\"Point\",\"coordinates\":["+lng+","+lat+"]}}");
-            SymbolLayer layer=style.getLayerAs(LAYER);if(layer!=null&&Double.isFinite(relativeBearing))layer.setProperties(iconRotate((float)NavigationMotionInterpolator.normalize(relativeBearing)));
+            if(source!=null&&(!Double.isFinite(drawnLat)||NavigationGeometry.meters(drawnLat,drawnLng,lat,lng)>=.005)){
+                source.setGeoJson("{\"type\":\"Feature\",\"properties\":{},\"geometry\":{\"type\":\"Point\",\"coordinates\":["+lng+","+lat+"]}}");drawnLat=lat;drawnLng=lng;
+            }
+            SymbolLayer layer=style.getLayerAs(LAYER);
+            if(layer!=null&&Double.isFinite(relativeBearing)&&(!Double.isFinite(drawnHeading)||Math.abs(NavigationMotionInterpolator.delta(drawnHeading,relativeBearing))>=.05)){
+                layer.setProperties(iconRotate((float)NavigationMotionInterpolator.normalize(relativeBearing)));drawnHeading=relativeBearing;
+            }
         } catch (Throwable t) { TransivaDiagnostics.error(activity, "navigation", "NAV_VEHICLE_UPDATE_FAILED", t); }
     }
 
