@@ -118,7 +118,7 @@ final class NavigationLiveRouteController implements AutoCloseable {
         if(current==null){if(!coordinator.busy()&&(!recovery.needed()||recovery.due(SystemClock.elapsedRealtime())))request(false);return;}
         if(!refresh.initialized())refresh.evaluated(SystemClock.elapsedRealtime(),raw.getLatitude(),raw.getLongitude());
         NavigationGeometry.Projection projection;
-        synchronized(host.routePoints){projection=NavigationGeometry.project(host.routePoints,host.routeCumulativeMeters,raw.getLatitude(),raw.getLongitude(),host.lastMatchedProgressMeters);}
+        synchronized(host.routePoints){projection=NavigationGeometry.project(host.routePoints,host.routeCumulativeMeters,raw.getLatitude(),raw.getLongitude(),host.lastMatchedProgressMeters,raw.hasBearing()?raw.getBearing():Double.NaN,raw.hasAccuracy()?raw.getAccuracy():50,raw.hasSpeed()?raw.getSpeed():host.currentSpeedKmh/3.6);}
         etaEstimator.offer(SystemClock.elapsedRealtime(),raw.hasSpeed()?raw.getSpeed():host.currentSpeedKmh/3.6,raw.hasAccuracy()?raw.getAccuracy():50,projection.distance<=20);
         double accuracy=raw.hasAccuracy()?Math.max(1,raw.getAccuracy()):50;
         double speed=raw.hasSpeed()?Math.max(0,raw.getSpeed()):host.currentSpeedKmh/3.6;

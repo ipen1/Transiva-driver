@@ -124,6 +124,8 @@ abstract class DriverNavigationActivityLayer1 extends Activity {
     protected NavigationInstructionController instructionController;
     protected NavigationLiveRouteController liveRoutes;
     protected NavigationCameraController cameraController;
+    protected final NavigationRenderedHeading renderedHeading=new NavigationRenderedHeading();
+    protected TextView recenterButton;
     protected NavigationVehicleController vehicleController;
     protected NavigationMarkerController markerController;
 
@@ -454,6 +456,7 @@ abstract class DriverNavigationActivityLayer1 extends Activity {
                                                          android.content.res.Configuration newConfig) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
         inPictureInPicture = isInPictureInPictureMode;
+        if(recenterButton!=null)recenterButton.setVisibility(!isInPictureInPictureMode&&cameraController!=null&&!cameraController.following()?View.VISIBLE:View.GONE);
         if(navigationRoot!=null){View header=navigationRoot.findViewWithTag("navigation_header_container");if(header!=null)header.setVisibility(isInPictureInPictureMode?View.GONE:View.VISIBLE);}
 
         // PiP is map-first: remove every large overlay that can collapse into a
@@ -500,6 +503,7 @@ abstract class DriverNavigationActivityLayer1 extends Activity {
     @Override protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
         if (mapController != null) mapController.onSaveInstanceState(outState);
+        if(cameraController!=null)outState.putBoolean("nav_camera_follow",cameraController.following());
     }
 
     @Override public void onTrimMemory(int level) {

@@ -129,7 +129,7 @@ public final class NavigationGuidanceService extends Service implements Location
         raw=last;fixAt=now;
         if(route==null){if(!requests.busy()&&(!recovery.needed()||recovery.due(now)))request();return;}
         if(!refresh.initialized())refresh.evaluated(now,raw.getLatitude(),raw.getLongitude());
-        NavigationGeometry.Projection p=NavigationGeometry.project(shape,lengths,raw.getLatitude(),raw.getLongitude(),prior);if(p.distance<Math.max(12,raw.getAccuracy()*1.5))prior=p.progress;
+        NavigationGeometry.Projection p=NavigationGeometry.project(shape,lengths,raw.getLatitude(),raw.getLongitude(),prior,raw.hasBearing()?raw.getBearing():Double.NaN,raw.getAccuracy(),raw.hasSpeed()?raw.getSpeed():0);if(p.distance<Math.max(12,raw.getAccuracy()*1.5))prior=p.progress;
         double speed=raw.hasSpeed()?raw.getSpeed():0,bearing=raw.hasBearing()?raw.getBearing():Double.NaN;
         double angle=Double.isFinite(bearing)&&Double.isFinite(p.bearing)?Math.abs(((bearing-p.bearing+540)%360)-180):0;
         suspect=p.distance>Math.max(12,raw.getAccuracy()*1.8)||(angle>125&&speed>=2.5&&raw.getAccuracy()<=25);

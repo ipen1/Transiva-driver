@@ -81,6 +81,9 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected TripLiveRouteController tripLiveRoutes;
     protected TripVehicleMotionController tripVehicleMotion;
     protected MapView mapView;
+    protected boolean tripCameraFollowing,tripCameraBrowsing;
+    protected com.google.android.gms.maps.model.CameraPosition tripSavedCamera;
+    protected TextView tripFollowButton;
     protected GoogleMap googleMap;
     protected Marker driverMarker, pickupMarker, deliveryMarker;
     protected final java.util.ArrayList<Marker> waypointMarkers = new java.util.ArrayList<>();

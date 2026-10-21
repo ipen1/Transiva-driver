@@ -59,9 +59,9 @@ public final class NavigationMapController {
                     .compassEnabled(false)
                     .attributionEnabled(false)
                     .logoEnabled(false)
-                    .rotateGesturesEnabled(false)
-                    .tiltGesturesEnabled(false)
-                    .scrollGesturesEnabled(false)
+                    .rotateGesturesEnabled(true)
+                    .tiltGesturesEnabled(true)
+                    .scrollGesturesEnabled(true)
                     .zoomGesturesEnabled(true);
 
             mapView = new MapView(activity, options);
@@ -75,9 +75,10 @@ public final class NavigationMapController {
                 safeMapReady(m);
                 try {
                     m.getUiSettings().setCompassEnabled(false);
-                    m.getUiSettings().setRotateGesturesEnabled(false);
-                    m.getUiSettings().setTiltGesturesEnabled(false);
+                    m.getUiSettings().setRotateGesturesEnabled(true);
+                    m.getUiSettings().setTiltGesturesEnabled(true);
                     m.getUiSettings().setZoomGesturesEnabled(true);
+                    m.getUiSettings().setScrollGesturesEnabled(true);
                     m.getUiSettings().setAttributionEnabled(false);
                     m.getUiSettings().setLogoEnabled(false);
                     loadStyle(config.primaryStyle, false);

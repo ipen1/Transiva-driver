@@ -34,7 +34,7 @@ final class TripLiveRouteController implements AutoCloseable {
     void fix(Location raw){
         if(closed||raw==null)return;last=new Location(raw);fixAt=SystemClock.elapsedRealtime();
         if(!currentKey().equals(key)){request(true);return;}if(route==null){request(false);return;}
-        NavigationGeometry.Projection p=NavigationGeometry.project(shape,lengths,raw.getLatitude(),raw.getLongitude(),prior);
+        NavigationGeometry.Projection p=NavigationGeometry.project(shape,lengths,raw.getLatitude(),raw.getLongitude(),prior,raw.hasBearing()?raw.getBearing():Double.NaN,raw.hasAccuracy()?raw.getAccuracy():50,raw.hasSpeed()?raw.getSpeed():host.currentSpeedKmh/3.6);
         double acc=raw.hasAccuracy()?Math.max(1,raw.getAccuracy()):50,speed=raw.hasSpeed()?raw.getSpeed():host.currentSpeedKmh/3.6,bearing=raw.hasBearing()?raw.getBearing():Double.NaN;
         double angle=Double.isFinite(bearing)&&Double.isFinite(p.bearing)?Math.abs(((bearing-p.bearing+540)%360)-180):0;
         suspect=p.distance>Math.max(12,acc*1.8)||(angle>125&&speed>=2.5&&acc<=25);
@@ -61,7 +61,7 @@ final class TripLiveRouteController implements AutoCloseable {
     NavigationGeometry.Point visualPoint(double progress){return NavigationGeometry.at(shape,lengths,progress);}
     NavigationMotionInterpolator.Pose visualPose(Location fix){
         if(route==null||suspect||shape.size()<2)return null;
-        NavigationGeometry.Projection p=NavigationGeometry.project(shape,lengths,fix.getLatitude(),fix.getLongitude(),prior);double accuracy=fix.hasAccuracy()?fix.getAccuracy():50;
+        NavigationGeometry.Projection p=NavigationGeometry.project(shape,lengths,fix.getLatitude(),fix.getLongitude(),prior,fix.hasBearing()?fix.getBearing():Double.NaN,fix.hasAccuracy()?fix.getAccuracy():50,fix.hasSpeed()?fix.getSpeed():host.currentSpeedKmh/3.6);double accuracy=fix.hasAccuracy()?fix.getAccuracy():50;
         if(p.distance>Math.max(12,Math.min(35,accuracy*1.5)))return null;NavigationGeometry.Point point=visualPoint(p.progress);if(point==null)return null;
         return new NavigationMotionInterpolator.Pose(point.lat,point.lng,point.bearing,p.progress,fix.hasSpeed()?fix.getSpeed():0,true);
     }

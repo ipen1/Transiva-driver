@@ -15,7 +15,7 @@ final class NavigationMotionInterpolator {
         if(!NavigationTargetPolicy.valid(lat,lng)||!Double.isFinite(bearing)||!Double.isFinite(speed)||!Double.isFinite(accuracy))return;
         speed=Math.max(0,Math.min(50,speed));Pose current=sample(now);
         long gap=lastOffer==0?0:now-lastOffer;
-        if(gap>150&&gap<3500){period=intervals++==0?gap:period*.65+gap*.35;}
+        if(gap>150&&gap<=4000){period=intervals++==0?gap:Math.max(gap,period*.65+gap*.35);}
         if(current!=null&&revision!=routeRevision&&now-drawnAt<150)current=new Pose(drawnLat,drawnLng,current.bearing,current.progress,current.velocity,current.onRoute);
         boolean fresh=current==null||gap>12000||NavigationGeometry.meters(current.lat,current.lng,lat,lng)>120;
         if(current!=null&&speed<1.2&&NavigationGeometry.meters(current.lat,current.lng,lat,lng)<3)bearing=current.bearing;
@@ -23,7 +23,7 @@ final class NavigationMotionInterpolator {
         if(fresh){from=to=next;at=now;duration=0;along=next.onRoute;revision=routeRevision;lastOffer=now;return;}
         along=revision==routeRevision&&current.onRoute&&next.onRoute&&progress>=current.progress-4;
         if(along&&progress<current.progress)next=new Pose(lat,lng,next.bearing,current.progress,speed,true);
-        from=current;to=next;at=now;duration=Math.max(300,Math.min(1500,period));
+        from=current;to=next;at=now;duration=Math.max(300,Math.min(3200,period));
         if(revision!=routeRevision)duration=450;
         double distance=along?Math.max(0,to.progress-from.progress):NavigationGeometry.meters(from.lat,from.lng,to.lat,to.lng);
         // Monotone cubic tangents preserve speed across fixes without overshooting the next fix.

@@ -29,7 +29,12 @@ public final class NavigationGeometry {
         return project(points,cumulative,lat,lng,Double.NaN).distance;
     }
     public static Projection project(List<double[]> points,List<Double> cumulative,double lat,double lng,double prior){
-        double best=Double.POSITIVE_INFINITY,bearing=Double.NaN,progress=0;
+        return project(points,cumulative,lat,lng,prior,Double.NaN,50,0);
+    }
+    /** Heading disambiguates nearby return legs only within the GPS uncertainty corridor.
+     * Never hide a true wrong-way fix by snapping to a distant, heading-compatible road. */
+    public static Projection project(List<double[]> points,List<Double> cumulative,double lat,double lng,double prior,
+                                     double heading,double accuracy,double speed){
         double sx=111320*Math.max(.15,Math.cos(Math.toRadians(lat))),sy=111320;
         int from=0,to=points.size()-2;
         if(Double.isFinite(prior)&&cumulative.size()==points.size()){
@@ -37,15 +42,26 @@ public final class NavigationGeometry {
             int high=java.util.Collections.binarySearch(cumulative,prior+650);
             from=Math.max(0,(low<0?-low-2:low)-1);to=Math.min(to,high<0?-high-1:high);
         }
-        for(int i=from;i<=to;i++){
+        double nearestDistance=Double.POSITIVE_INFINITY,nearestBearing=Double.NaN,nearestProgress=0;
+        double bestScore=Double.POSITIVE_INFINITY,preferredDistance=0,preferredBearing=0,preferredProgress=0;boolean preferred=false;
+        boolean directional=Double.isFinite(heading)&&accuracy>0&&accuracy<=25&&speed>=2.5;
+        // First pass finds the actual closest road; the second may only resolve ambiguity nearby.
+        for(int pass=0;pass<(directional?2:1);pass++)for(int i=from;i<=to;i++){
             double[] a=points.get(i),b=points.get(i+1);double length=i+1<cumulative.size()?Math.max(0,cumulative.get(i+1)-cumulative.get(i)):meters(a[0],a[1],b[0],b[1]);
+            if(length<.01)continue;
             double start=i<cumulative.size()?cumulative.get(i):0;
             if(Double.isFinite(prior)&&(start+length<prior-180||start>prior+650))continue;
             double vx=(b[1]-a[1])*sx,vy=(b[0]-a[0])*sy,px=(lng-a[1])*sx,py=(lat-a[0])*sy;
             double den=vx*vx+vy*vy,t=den<.0001?0:Math.max(0,Math.min(1,(px*vx+py*vy)/den));
-            double d=Math.hypot(px-vx*t,py-vy*t);
-            if(d<best){best=d;bearing=(Math.toDegrees(Math.atan2(vx,vy))+360)%360;progress=start+length*t;}
+            double d=Math.hypot(px-vx*t,py-vy*t),bearing=(Math.toDegrees(Math.atan2(vx,vy))+360)%360,progress=start+length*t;
+            if(pass==0){if(d<nearestDistance){nearestDistance=d;nearestBearing=bearing;nearestProgress=progress;}}
+            else if(d<=nearestDistance+Math.max(3,Math.min(10,accuracy*.5))){
+                double angle=Math.abs(((heading-bearing+540)%360)-180);
+                double score=d+angle*.08;
+                if(Double.isFinite(prior)&&progress<prior-4)score+=Math.min(6,(prior-progress)*.08);
+                if(score<bestScore){bestScore=score;preferredDistance=d;preferredBearing=bearing;preferredProgress=progress;preferred=true;}
+            }
         }
-        return new Projection(best,bearing,progress);
+        return preferred?new Projection(preferredDistance,preferredBearing,preferredProgress):new Projection(nearestDistance,nearestBearing,nearestProgress);
     }
 }

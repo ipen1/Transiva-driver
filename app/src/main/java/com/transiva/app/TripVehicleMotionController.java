@@ -7,10 +7,11 @@ import com.google.android.gms.maps.model.*;
 final class TripVehicleMotionController implements AutoCloseable {
     private final DriverTripActivityLayer2 host;
     private final NavigationMotionInterpolator motion=new NavigationMotionInterpolator();
+    private final NavigationRenderedHeading headingFilter=new NavigationRenderedHeading();
     private final NavigationFrameController frames;private Location last;
     private boolean active,closed;private long revision=-1;private double drawnLat=Double.NaN,drawnLng,drawnHeading;
     TripVehicleMotionController(DriverTripActivityLayer2 h){host=h;frames=new NavigationFrameController(new Handler(Looper.getMainLooper()),NavigationCompatibilityProfile.resolve(h,"auto").visualFrameMs,this::render);}
-    void active(boolean value){if(closed)return;active=value;if(value)frames.start();else{frames.stop();motion.clear();last=null;}}
+    void active(boolean value){if(closed)return;active=value;if(value)frames.start();else{frames.stop();motion.clear();headingFilter.clear();last=null;}}
     void offer(Location fix){
         if(closed||!active||fix==null)return;
         long age=SystemClock.elapsedRealtimeNanos()-fix.getElapsedRealtimeNanos();if(fix.getElapsedRealtimeNanos()<=0||age<0||age>12000_000_000L)return;
@@ -21,18 +22,25 @@ final class TripVehicleMotionController implements AutoCloseable {
         motion.offer(SystemClock.elapsedRealtime(),p==null?fix.getLatitude():p.lat,p==null?fix.getLongitude():p.lng,p!=null&&p.onRoute?p.bearing:heading,p==null?Double.NaN:p.progress,speed,fix.hasAccuracy()?fix.getAccuracy():50,p!=null&&p.onRoute,revision);
     }
     void mapReady(){if(active)render();}
+    void recenter(){if(host.googleMap!=null&&host.driverMarker!=null){com.google.android.gms.maps.model.LatLng p=host.driverMarker.getPosition();host.googleMap.moveCamera(com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(p,17f));}if(active)render();}
     private void render(){
         if(closed||!active||host.googleMap==null||!host.mapReady||NavigationTargetPolicy.terminal(host.order))return;
         if(last!=null&&host.tripLiveRoutes!=null&&revision!=host.tripLiveRoutes.visualRevision())offer(last);
         NavigationMotionInterpolator.Pose p=motion.sample(SystemClock.elapsedRealtime());if(p==null)return;
-        double lat=p.lat,lng=p.lng;if(p.onRoute&&host.tripLiveRoutes!=null){NavigationGeometry.Point point=host.tripLiveRoutes.visualPoint(p.progress);if(point!=null){lat=point.lat;lng=point.lng;}}
+        double lat=p.lat,lng=p.lng,heading=p.bearing;if(p.onRoute&&host.tripLiveRoutes!=null){NavigationGeometry.Point point=host.tripLiveRoutes.visualPoint(p.progress);if(point!=null){lat=point.lat;lng=point.lng;heading=point.bearing;}}
+        heading=headingFilter.update(SystemClock.elapsedRealtime(),heading,p.velocity>=1.2);
         motion.rendered(SystemClock.elapsedRealtime(),lat,lng);
         try{
-            if(host.driverMarker==null){host.driverMarker=host.googleMap.addMarker(new MarkerOptions().position(new LatLng(lat,lng)).title("Posisi Driver").flat(true).rotation((float)p.bearing).anchor(.5f,.5f).icon(host.driverVehicleIcon()));drawnLat=Double.NaN;}
-            if(host.driverMarker!=null&&(!Double.isFinite(drawnLat)||NavigationGeometry.meters(drawnLat,drawnLng,lat,lng)>=.05||Math.abs(NavigationMotionInterpolator.delta(drawnHeading,p.bearing))>=.25)){
-                host.driverMarker.setPosition(new LatLng(lat,lng));host.driverMarker.setRotation((float)p.bearing);drawnLat=lat;drawnLng=lng;drawnHeading=p.bearing;
+            if(host.driverMarker==null){host.driverMarker=host.googleMap.addMarker(new MarkerOptions().position(new LatLng(lat,lng)).title("Posisi Driver").flat(true).rotation((float)heading).anchor(.5f,.5f).icon(host.driverVehicleIcon()));drawnLat=Double.NaN;}
+            if(host.driverMarker!=null&&(!Double.isFinite(drawnLat)||NavigationGeometry.meters(drawnLat,drawnLng,lat,lng)>=.05||Math.abs(NavigationMotionInterpolator.delta(drawnHeading,heading))>=.25)){
+                host.driverMarker.setPosition(new LatLng(lat,lng));host.driverMarker.setRotation((float)heading);drawnLat=lat;drawnLng=lng;drawnHeading=heading;
+            }
+            if(host.tripCameraFollowing){
+                com.google.android.gms.maps.model.CameraPosition previous=host.googleMap.getCameraPosition();
+                if(NavigationGeometry.meters(previous.target.latitude,previous.target.longitude,lat,lng)>.03)
+                    host.googleMap.moveCamera(com.google.android.gms.maps.CameraUpdateFactory.newCameraPosition(new com.google.android.gms.maps.model.CameraPosition.Builder(previous).target(new LatLng(lat,lng)).build()));
             }
         }catch(RuntimeException e){NavigationDiagnostics.error(host,"TRIP_MOTION_RENDER_FAILED",e);}
     }
-    @Override public void close(){closed=true;frames.stop();motion.clear();last=null;}
+    @Override public void close(){closed=true;frames.stop();motion.clear();headingFilter.clear();last=null;}
 }

@@ -236,6 +236,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         Button back = outline("Kembali ke Dashboard"); back.setOnClickListener(v -> finish()); c.addView(back, btnLp(14)); add(c,0,dp(8),0,0);
     }
     protected void renderOrder(){
+        if(googleMap!=null&&(tripCameraBrowsing||tripCameraFollowing))try{tripSavedCamera=googleMap.getCameraPosition();}catch(RuntimeException e){NavigationDiagnostics.error(this,"TRIP_CAMERA_SNAPSHOT_FAILED",e);}
         if(mapView!=null){try{mapView.onPause();mapView.onStop();mapView.onDestroy();}catch(Exception ignored){}}
         mapView=null;googleMap=null;mapReady=false;pickupMarker=null;deliveryMarker=null;driverMarker=null;
         pickupPolyline=null;deliveryPolyline=null;waypointMarkers.clear();overviewMapApplied=false;
@@ -311,21 +312,33 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         mapView = new MapView(this);
         mapView.onCreate(null);
         try { MapsInitializer.initialize(getApplicationContext(), MapsInitializer.Renderer.LATEST, null); } catch (Throwable ignored) { TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
+        final MapView createdMapView=mapView;
         mapView.getMapAsync(map -> {
+            if(isFinishing()||isDestroyed()||mapView!=createdMapView)return;
             googleMap = map; mapReady = true;
             try {
                 googleMap.getUiSettings().setCompassEnabled(true);
                 googleMap.getUiSettings().setZoomControlsEnabled(false);
                 googleMap.getUiSettings().setMapToolbarEnabled(false);
                 googleMap.setBuildingsEnabled(true);
+                googleMap.getUiSettings().setScrollGesturesEnabled(true);
+                googleMap.getUiSettings().setZoomGesturesEnabled(true);
+                googleMap.getUiSettings().setRotateGesturesEnabled(true);
+                googleMap.getUiSettings().setTiltGesturesEnabled(true);
+                googleMap.setOnCameraMoveStartedListener(reason->{if(reason==com.google.android.gms.maps.GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE){tripCameraFollowing=false;tripCameraBrowsing=true;if(tripFollowButton!=null)tripFollowButton.setVisibility(View.VISIBLE);}});
             } catch (Throwable ignored) { TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
+            if(tripSavedCamera!=null){googleMap.moveCamera(CameraUpdateFactory.newCameraPosition(tripSavedCamera));tripSavedCamera=null;}
             initNativeTripMarkers();
             applyPendingRoute();
             updateMap();
             if(pendingPickupRoutePoints.isEmpty()) requestStableRoute(true);
         });
         LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(-1, dp(250)); mp.setMargins(0,dp(8),0,0);
-        c.addView(mapView, mp);if(realtimeTripRunning){mapView.onStart();mapView.onResume();} add(c,0,0,0,dp(12));
+        FrameLayout mapFrame=new NavigationGestureContainer(this);mapFrame.addView(mapView,new FrameLayout.LayoutParams(-1,-1));
+        tripFollowButton=text("◎  Ikuti",14,"#FFFFFF",true);tripFollowButton.setGravity(Gravity.CENTER);tripFollowButton.setBackground(round("#146DE8",dp(24)));tripFollowButton.setElevation(dp(4));tripFollowButton.setContentDescription("Ikuti posisi kendaraan pada peta perjalanan");
+        FrameLayout.LayoutParams flp=new FrameLayout.LayoutParams(dp(112),dp(48),Gravity.BOTTOM|Gravity.RIGHT);flp.setMargins(dp(10),dp(10),dp(10),dp(10));mapFrame.addView(tripFollowButton,flp);tripFollowButton.setVisibility(tripCameraFollowing?View.GONE:View.VISIBLE);
+        tripFollowButton.setOnClickListener(v->{tripCameraFollowing=true;tripCameraBrowsing=false;tripFollowButton.setVisibility(View.GONE);if(googleMap!=null)googleMap.stopAnimation();if(tripVehicleMotion!=null)tripVehicleMotion.recenter();});
+        c.addView(mapFrame, mp);if(realtimeTripRunning){mapView.onStart();mapView.onResume();} add(c,0,0,0,dp(12));
     }
 
     protected void initNativeTripMarkers(){
@@ -347,8 +360,9 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     }
 
     protected void fitNativeOverview(){
-        if(googleMap==null) return;
+        if(googleMap==null||tripCameraBrowsing||tripCameraFollowing) return;
         try{
+            final com.google.android.gms.maps.GoogleMap fittedMap=googleMap;final MapView fittedView=mapView;
             LatLngBounds.Builder b=new LatLngBounds.Builder(); int n=0;
             if(pickupMarker!=null){b.include(pickupMarker.getPosition());n++;}
             if(deliveryMarker!=null){b.include(deliveryMarker.getPosition());n++;}
@@ -356,7 +370,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             if(driverMarker!=null){b.include(driverMarker.getPosition());n++;}
             for(LatLng p:parseRoutePoints(pendingPickupRoutePoints)){b.include(p);n++;}
             for(LatLng p:parseRoutePoints(pendingDeliveryRoutePoints)){b.include(p);n++;}
-            if(n>=2) mapView.post(() -> { try{ googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(b.build(), dp(42))); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } });
+            if(n>=2) mapView.post(() -> { if(googleMap!=fittedMap||mapView!=fittedView||tripCameraBrowsing||tripCameraFollowing||isFinishing()||isDestroyed())return;try{ googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(b.build(), dp(42))); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } });
             else if(n==1){ LatLng x=driverMarker!=null?driverMarker.getPosition():(pickupMarker!=null?pickupMarker.getPosition():deliveryMarker.getPosition()); googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(x,15f)); }
         }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
     }

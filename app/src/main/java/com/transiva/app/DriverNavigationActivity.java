@@ -108,6 +108,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         });
         pipController = new NavigationPipController(this, navProfile);
         cameraController = new NavigationCameraController(navProfile);
+        if(savedInstanceState!=null&&!savedInstanceState.getBoolean("nav_camera_follow",true))cameraController.follow(false);
         vehicleController = new NavigationVehicleController(this, vehicleType);
         markerController = new NavigationMarkerController(this, order);
         seedLastKnownLocation();
@@ -215,6 +216,12 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         callButton=new TextView(this);LinearLayout.LayoutParams callLp=new LinearLayout.LayoutParams(0,dp(48),1);callLp.leftMargin=dp(6);bottomActions.addView(callButton,callLp);
         FrameLayout.LayoutParams bottomLp=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);bottomLp.setMargins(dp(12),0,dp(12),dp(22));page.addView(bottomActions,bottomLp);
         communicationController=new NavigationCommunicationController(this,order,messageButton,callButton);
+        recenterButton=new TextView(this);recenterButton.setText("◎  Ikuti");recenterButton.setTextSize(14);recenterButton.setTypeface(Typeface.DEFAULT,Typeface.BOLD);recenterButton.setGravity(Gravity.CENTER);
+        recenterButton.setTextColor(DriverThemeTokens.onAccent(this));recenterButton.setBackground(roundRect(DriverThemeTokens.color(this,"#146DE8"),24));recenterButton.setElevation(dp(5));recenterButton.setContentDescription("Kembali mengikuti posisi kendaraan");
+        FrameLayout.LayoutParams followLp=new FrameLayout.LayoutParams(dp(112),dp(48),Gravity.BOTTOM|Gravity.RIGHT);followLp.setMargins(dp(12),0,dp(12),dp(108));page.addView(recenterButton,followLp);
+        recenterButton.setVisibility(cameraController!=null&&!cameraController.following()?View.VISIBLE:View.GONE);
+        bottomActions.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,orr,ob)->{FrameLayout.LayoutParams fp=(FrameLayout.LayoutParams)recenterButton.getLayoutParams();int margin=bottomActions.getHeight()+dp(34);if(fp.bottomMargin!=margin){fp.bottomMargin=margin;recenterButton.setLayoutParams(fp);}});
+        recenterButton.setOnClickListener(v->{if(cameraController==null||map==null)return;map.cancelTransitions();cameraController.follow(true);recenterButton.setVisibility(View.GONE);updateNativePosition(true);});
 
         TextView attribution = new TextView(this);
         attribution.setText("© OpenStreetMap contributors");
@@ -240,6 +247,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
                     @Override public void onMapReady(MapLibreMap m) {
                         if (isFinishing()) return;
                         map = m;
+                        cameraController.bind(m,()->{if(recenterButton!=null)recenterButton.setVisibility(View.VISIBLE);},()->{if(styleReady)updateVehicleSource();});
                         mapView = mapController.view();
                         if (frameController != null) frameController.attachMapView(mapView);
                         NavigationDiagnostics.event(DriverNavigationActivity.this, "NAV_MAP_READY", null);
@@ -366,7 +374,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         if (vehicleController == null) return;
         double lat = displayInitialized ? displayLat : driverLat;
         double lng = displayInitialized ? displayLng : driverLng;
-        double cameraHeading=cameraController==null||!Double.isFinite(cameraController.bearing())?0:cameraController.bearing();
+        double cameraHeading=map==null?0:map.getCameraPosition().bearing;
         vehicleController.update(lat,lng,(Double.isFinite(smoothMarkerBearing)?smoothMarkerBearing:0)-cameraHeading);
     }
 
@@ -410,9 +418,8 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
     }
 
     /**
-     * Native continuous interpolation. The latest GPS fix becomes a moving
-     * target; the display advances a fraction every 50 ms instead of stopping
-     * between 1-second fixes.
+     * Display-paced interpolation follows the observed GPS cadence. Road tangent
+     * is resolved at the rendered progress, independently of camera browsing.
      */
     protected void animateTowardLatestFix() {
         if(!valid(driverLat,driverLng)||map==null||!styleReady)return;
@@ -423,13 +430,13 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
             motionFixAt=lastFixRealtimeMs;motionRevision=routeVisualRevision;
         }
         NavigationMotionInterpolator.Pose pose=vehicleMotion.sample(now);if(pose==null)return;
-        double lat=pose.lat,lng=pose.lng;
-        if(pose.onRoute){synchronized(routePoints){NavigationGeometry.Point point=NavigationGeometry.at(routePoints,routeCumulativeMeters,pose.progress);if(point!=null){lat=point.lat;lng=point.lng;visualRouteProgressMeters=pose.progress;visualRouteSegmentIndex=point.segment;}}}
-        displayLat=lat;displayLng=lng;displayInitialized=true;snappedBearing=pose.bearing;
+        double lat=pose.lat,lng=pose.lng,heading=pose.bearing;
+        if(pose.onRoute){synchronized(routePoints){NavigationGeometry.Point point=NavigationGeometry.at(routePoints,routeCumulativeMeters,pose.progress);if(point!=null){lat=point.lat;lng=point.lng;visualRouteProgressMeters=pose.progress;visualRouteSegmentIndex=point.segment;heading=point.bearing;}}}
+        displayLat=lat;displayLng=lng;displayInitialized=true;snappedBearing=renderedHeading.update(now,heading,currentSpeedKmh>=4.3||pose.velocity>=1.2);
         // One pose publication per display-paced callback. GPS callbacks never race the render loop.
         vehicleMotion.rendered(now,lat,lng);
-        boolean changed=!Double.isFinite(lastPoseLat)||meters(lastPoseLat,lastPoseLng,lat,lng)>.03||Math.abs(NavigationMotionInterpolator.delta(lastPoseHeading,pose.bearing))>.2||Math.abs(lastPoseSpeed-currentSpeedKmh)>.5;
-        if(changed){poseChangedAt=now;lastPoseLat=lat;lastPoseLng=lng;lastPoseHeading=pose.bearing;lastPoseSpeed=currentSpeedKmh;}
+        boolean changed=!Double.isFinite(lastPoseLat)||meters(lastPoseLat,lastPoseLng,lat,lng)>.03||Math.abs(NavigationMotionInterpolator.delta(lastPoseHeading,snappedBearing))>.2||Math.abs(lastPoseSpeed-currentSpeedKmh)>.5;
+        if(changed){poseChangedAt=now;lastPoseLat=lat;lastPoseLng=lng;lastPoseHeading=snappedBearing;lastPoseSpeed=currentSpeedKmh;}
         if(changed||now-poseChangedAt<1500||now-lastMapRenderAt>=250){updateNativePosition(false);lastMapRenderAt=now;}
         maybeUpdateRemainingRouteLine();
         // Instructions and arrival are based on accepted GPS progress, never delayed visual progress.

@@ -13,12 +13,27 @@ public final class NavigationCameraController {
     private double smoothTilt = Double.NaN;
     private int speedBand = -1;
     private long lastFrame;
+    private boolean following=true;
+    /** Called once for this map instance. Programmatic camera updates never detach following. */
+    public void bind(MapLibreMap map,Runnable onGesture,Runnable onCameraChange){
+        map.addOnCameraMoveStartedListener(reason->{
+            if(reason==MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE){follow(false);onGesture.run();}
+        });
+        map.addOnCameraMoveListener(()->{if(!following)onCameraChange.run();});
+    }
+    public boolean following(){return following;}
+    public void follow(boolean value){
+        following=value;
+        // Recenter uses normal smoothing from the new frame, not an old timestamp.
+        if(value){lastFrame=0;smoothBearing=Double.NaN;smoothZoom=Double.NaN;smoothTilt=Double.NaN;}
+    }
 
     public NavigationCameraController(NavigationCompatibilityProfile profile) { this.profile = profile; }
 
     public double update(MapLibreMap map, double lat, double lng, double desiredBearing,
                          double speedKmh, boolean pip, boolean immediate) {
         if (map == null) return desiredBearing;
+        if(!following)return map.getCameraPosition().bearing;
         long now=android.os.SystemClock.elapsedRealtime();long dt=lastFrame==0?33:Math.max(1,now-lastFrame);lastFrame=now;
         smoothBearing = easeBearing(smoothBearing, desiredBearing,immediate?1f:(float)NavigationMotionInterpolator.alpha(dt,280));
         double desiredZoom, desiredTilt;
@@ -44,7 +59,7 @@ public final class NavigationCameraController {
     }
 
     public void restore(MapLibreMap map, double lat, double lng) {
-        if (map == null) return;
+        if (map == null||!following) return;
         double tilt = profile != null ? profile.cameraTilt : 42d;
         map.moveCamera(CameraUpdateFactory.newCameraPosition(new CameraPosition.Builder()
                 .target(new LatLng(lat, lng)).zoom(17.8d)
