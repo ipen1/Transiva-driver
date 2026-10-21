@@ -225,8 +225,12 @@ jobs:
         run: ./gradlew assembleDebug assembleDebugAndroidTest -PtransivaCiRuntimeAbi=x86_64 --console=plain
       - name: Verify runtime CI failure handling
         run: python3 tools/ci/android_runtime_result_test.py
+      - name: Verify emulator SDK recovery
+        run: python3 tools/ci/prepare_emulator_sdk_test.py
+      - name: Prepare verified emulator SDK with bounded recovery
+        run: python3 tools/ci/prepare_emulator_sdk.py
       - name: Run connected instrumentation tests
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, verified installer contract
         with:
           api-level: ${{ matrix.api-level }}
           target: google_apis
