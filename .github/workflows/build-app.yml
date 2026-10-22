@@ -91,6 +91,7 @@ jobs:
           JSON_JAR="$RUNNER_TEMP/transiva-notice-json.jar" python3 tools/reliability/navigation_browse_regression.py
           JSON_JAR="$RUNNER_TEMP/transiva-notice-json.jar" python3 tools/reliability/navigation_reliability_regression.py
           JSON_JAR="$RUNNER_TEMP/transiva-notice-json.jar" python3 tools/reliability/navigation_voice_trip_regression.py
+          JSON_JAR="$RUNNER_TEMP/transiva-notice-json.jar" python3 tools/reliability/navigation_comfort_regression.py
 
       - name: Verify Play Store source policy gate
         run: |
