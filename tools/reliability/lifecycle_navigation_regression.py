@@ -90,6 +90,6 @@ public class RegressionProbe{
 with tempfile.TemporaryDirectory(prefix='transiva-lifecycle-target-') as temp:
  d=Path(temp)
  for n,s in files.items():p=d/n;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(s)
- sources=list(d.rglob('*.java'))+[test/'HostLifecycleTestActions.java',app/'NavigationInstructionController.java']
+ sources=list(d.rglob('*.java'))+[test/'HostLifecycleTestActions.java',app/'NavigationInstructionController.java',app/'NavigationSpeechText.java',app/'NavigationVoicePolicy.java',app/'NavigationTargetPolicy.java']
  subprocess.run([os.environ.get('JAVAC_BIN','javac'),'-cp',os.environ['JSON_JAR'],'-d',str(d/'classes'),*map(str,sources)],check=True)
  subprocess.run(['java','-cp',str(d/'classes')+os.pathsep+os.environ['JSON_JAR'],'com.transiva.app.RegressionProbe'],check=True)
