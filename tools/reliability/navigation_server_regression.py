@@ -7,7 +7,7 @@ server=Path(sys.argv[1]).resolve();php=os.environ.get('PHP_BIN','php')
 with tempfile.TemporaryDirectory(prefix='transiva-nav-server-') as temp:
  root=Path(temp)
  (root/'tmp').mkdir()
- for name in ['driver_navigation_route_helper.php','transiva_server_route.php','schema_runtime_guard.php']:shutil.copy2(server/name,root/name)
+ for name in ['driver_navigation_route_helper.php','driver_navigation_comfort.php','transiva_server_route.php','schema_runtime_guard.php']:shutil.copy2(server/name,root/name)
  (root/'probe.php').write_text('''<?php
 require 'driver_navigation_route_helper.php';$checks=0;
 function check($v,$label){global $checks;if(!$v)throw new RuntimeException($label);$checks++;echo "PASS $label\\n";}

@@ -29,7 +29,7 @@ function native_table_exists($c,$t){return true;}function native_out($ok,$msg,$d
  for state in ['finished','cancelled_by_customer']:
   r=request({'order_id':'A'},dict(row,status=state));check(r['order']['status']==state,'terminal '+state+' is returned unchanged')
  # Exercise actual profile helper, with no HTTP or DB dependency.
- for name in ['driver_navigation_route_helper.php','transiva_server_route.php','schema_runtime_guard.php']:shutil.copy2(server/name,d/name)
+ for name in ['driver_navigation_route_helper.php','driver_navigation_comfort.php','transiva_server_route.php','schema_runtime_guard.php']:shutil.copy2(server/name,d/name)
  (d/'strict.php').write_text('''<?php require 'driver_navigation_route_helper.php';try{dnr_profile('motor',['motor'=>[],'car'=>['https://car.example/route/'],'require_motor'=>true]);exit(1);}catch(TransivaRouteException $e){if($e->routeCode!=='MOTOR_PROFILE_UNAVAILABLE')exit(2);}echo 'OK';''')
  r=subprocess.run([php,'-n',str(d/'strict.php')],capture_output=True,text=True);check(r.returncode==0 and r.stdout=='OK','strict motor configuration refuses silent car fallback')
  print('NAVIGATION STATE SERVER: '+str(checks)+' checks PASS')

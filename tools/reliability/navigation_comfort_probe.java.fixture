@@ -1,0 +1,49 @@
+package com.transiva.app;
+import org.json.*;import android.widget.LinearLayout;import android.view.View;import android.location.Location;
+import com.transiva.app.driver.data.DriverApiClient;
+public class ComfortProbe{
+ static int checks;static void ck(boolean ok,String label){if(!ok)throw new AssertionError(label);checks++;System.out.println("PASS "+label);}
+ static Location fix(double lat){Location f=new Location("gps");f.setLatitude(lat);f.setLongitude(120);return f;}
+ public static void main(String[] args)throws Exception{
+  LinearLayout display=new LinearLayout(),fresh=new LinearLayout(),map=new LinearLayout();View old=new View(),before=new View(),after=new View(),slot=new View();display.addView(old);display.addView(map);fresh.addView(before);fresh.addView(slot);fresh.addView(after);
+  TripMapContent.apply(display,fresh,map,slot);
+  ck(display.getChildCount()==3&&display.getChildAt(0)==before&&display.getChildAt(1)==map&&display.getChildAt(2)==after,"cards update around the same attached map");
+  ck(map.parent==display&&map.removes==0,"map never detaches during reconciliation");
+  ck(old.parent==null&&slot.parent==null&&fresh.getChildCount()==0,"obsolete cards and temporary placeholders cannot accumulate");
+  fresh=new LinearLayout();slot=new View();fresh.addView(slot);fresh.addView(new View());TripMapContent.apply(display,fresh,map,slot);
+  ck(display.getChildAt(0)==map&&map.removes==0,"map remains attached when status changes its position in the page");
+  for(int i=0;i<100;i++){fresh=new LinearLayout();slot=new View();fresh.addView(new View());fresh.addView(slot);TripMapContent.apply(display,fresh,map,slot);}
+  ck(map.removes==0&&display.getChildCount()==2,"100 order refreshes neither detach nor duplicate the map");
+  LinearLayout first=new LinearLayout(),initial=new LinearLayout(),firstMap=new LinearLayout();initial.addView(firstMap);TripMapContent.apply(first,initial,firstMap,null);
+  ck(first.getChildAt(0)==firstMap,"first render installs map exactly once");
+  WaypointProbe w=new WaypointProbe();w.markCurrentWaypointArrived(2);ck(w.errors==1&&!w.waypointArrivalBusy,"no fresh arrival proof blocks waypoint mutation");
+  w.fix=fix(-.79);DriverApiClient.payload=null;w.markCurrentWaypointArrived(2);
+  ck(DriverApiClient.payload.getDouble("driver_lat")==-.79&&DriverApiClient.payload.getInt("sequence")==2,"waypoint sends trusted raw GPS with captured stop sequence");
+  ck(w.waypointArrivalBusy,"waypoint remains busy until UI response is delivered");JSONObject sent=DriverApiClient.payload;w.markCurrentWaypointArrived(2);ck(DriverApiClient.payload==sent,"repeated tap cannot submit a second waypoint transaction");
+  w.id="replacement";w.tripRouteScope.drain();ck(w.renders==0&&!w.waypointArrivalBusy,"late waypoint response cannot repaint another order");
+  w.id="one";DriverApiClient.response=new JSONObject().put("ecosystem",new JSONObject().put("waypoints",new JSONArray())).put("smart_waiting",new JSONObject().put("active",true));w.markCurrentWaypointArrived(2);w.tripRouteScope.drain();
+  ck(w.renders==1&&w.saves==1&&w.requests==1&&w.order.has("ecosystem")&&w.order.has("smart_waiting"),"successful waypoint applies server state before refreshing route");
+  DriverApiClient.fail=true;w.markCurrentWaypointArrived(2);w.tripRouteScope.drain();ck(w.errors==2&&!w.waypointArrivalBusy&&w.renders==1,"server rejection releases busy guard without fabricating success");DriverApiClient.fail=false;
+  w.tripRouteScope.accept=false;w.markCurrentWaypointArrived(2);ck(!w.waypointArrivalBusy,"rejected task submission releases waypoint busy guard");
+  w.tripRouteScope.accept=true;w.markCurrentWaypointArrived(2);w.state="finished";w.tripRouteScope.drain();ck(w.renders==1,"response after order completion cannot mutate its UI state");
+  NavigationFrameStats frames=new NavigationFrameStats();frames.offer(-1,16666667,0);ck(frames.frames()==0,"invalid frame metric is excluded");for(int i=0;i<95;i++)frames.offer(8000000,16666667,0);for(int i=0;i<5;i++)frames.offer(25000000,16666667,1);
+  ck(frames.frames()==100&&frames.percentile95()==9,"frame histogram calculates bounded P95 without per-frame allocations");
+  ck(frames.summary(60).contains("5,0%")&&frames.summary(60).contains("5"),"render deadline misses and dropped reports remain visible");
+  NavigationFrameStats slow=new NavigationFrameStats();slow.offer(300000000,8333333,0);ck(slow.percentile95()==300,"histogram overflow reports actual maximum rather than hiding long stalls");
+  JSONArray steps=new JSONArray().put(new JSONObject().put("distance_from_start",0).put("step_distance",200).put("step_duration",40)).put(new JSONObject().put("distance_from_start",200).put("step_distance",800).put("step_duration",40));
+  StableRouteEngine.Result route=new StableRouteEngine.Result(new JSONArray(),1000,80,steps);
+  ck(NavigationProgress.expectedSpeed(route,100,1000)==5&&NavigationProgress.expectedSpeed(route,500,1000)==20,"urban and highway segments supply different expected speeds");
+  ck(Double.isNaN(NavigationProgress.expectedSpeed(route,Double.NaN,1000)),"missing route progress cannot train road speed calibration");
+  NavigationEtaEstimator eta=new NavigationEtaEstimator();for(long t=1000;t<=41000;t+=1000)eta.offer(t,5,5,true,5);
+  ck(Math.abs(eta.seconds(41000,500,80,1000,80)-80)<.01,"normal urban travel cannot inherit highway-average ETA inflation");
+  eta.reset();for(long t=1000;t<=41000;t+=1000)eta.offer(t,5,5,true,10);double adjusted=eta.seconds(41000,500,80,1000,80);
+  ck(adjusted>90&&adjusted<140,"sustained slower-than-road travel conservatively increases ETA");
+  ck(eta.seconds(70000,500,80,1000,80)==80,"expired road-speed evidence falls back to provider ETA");
+  NavigationRefreshPolicy policy=new NavigationRefreshPolicy();StableRouteEngine.Result rough=new StableRouteEngine.Result(new JSONArray(),1000,100,new JSONArray()),smooth=new StableRouteEngine.Result(new JSONArray(),1400,130,new JSONArray());smooth.comfortableRoads=true;
+  ck(policy.betterRoute(1000,rough,100,smooth),"slightly longer comfortable route may replace unknown-surface route");
+  ck(!policy.betterRoute(1000,smooth,130,rough),"healthy comfortable route cannot be replaced by faster unverified fallback");
+  policy.manual(1000);ck(!policy.betterRoute(2000,rough,100,smooth),"manual route choice still has bounded protection");
+  smooth.latLngPoints.put(new JSONArray().put(-.8).put(120)).put(new JSONArray().put(-.79).put(120));smooth.roadPolicy=2;android.app.Activity a=new android.app.Activity();JSONObject saved=new JSONObject().put("route",NavigationSessionStore.route(smooth));ck(NavigationSessionStore.route(saved).comfortableRoads&&NavigationSessionStore.route(saved).roadPolicy==2,"background checkpoint preserves road-quality policy");
+  System.out.println("COMFORT CLIENT: "+checks+" checks PASS");
+ }
+}
