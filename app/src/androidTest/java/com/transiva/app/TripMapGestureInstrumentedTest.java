@@ -67,4 +67,27 @@ public class TripMapGestureInstrumentedTest {
             });
         }
     }
+    @Test public void orderCardRefreshNeverDetachesTheExistingMapSurface(){
+        AtomicReference<LinearLayout> displayRef=new AtomicReference<>(),mapRef=new AtomicReference<>();
+        java.util.concurrent.atomic.AtomicInteger detaches=new java.util.concurrent.atomic.AtomicInteger();
+        try(ActivityScenario<TestHarnessActivity> scenario=ActivityScenario.launch(TestHarnessActivity.class)){
+            scenario.onActivity(activity->{
+                LinearLayout display=new LinearLayout(activity);display.setOrientation(LinearLayout.VERTICAL);
+                LinearLayout map=new LinearLayout(activity);map.addView(new View(activity),new LinearLayout.LayoutParams(120,120));
+                map.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener(){public void onViewAttachedToWindow(View v){}public void onViewDetachedFromWindow(View v){detaches.incrementAndGet();}});
+                display.addView(map);activity.setContentView(display);displayRef.set(display);mapRef.set(map);
+            });
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+            scenario.onActivity(activity->{
+                LinearLayout display=displayRef.get(),map=mapRef.get();assertTrue(map.isAttachedToWindow());
+                for(int i=0;i<100;i++){
+                    LinearLayout fresh=new LinearLayout(activity);View slot=new View(activity);
+                    if(i%2==0)fresh.addView(new View(activity));fresh.addView(slot);fresh.addView(new View(activity));
+                    TripMapContent.apply(display,fresh,map,slot);
+                    assertSame(display,map.getParent());assertTrue(map.isAttachedToWindow());
+                }
+                assertEquals("Updating order cards must never detach the retained map",0,detaches.get());
+            });
+        }
+    }
 }
