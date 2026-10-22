@@ -20,7 +20,7 @@ final class NavigationOptionsController {
         android.view.View header=root.findViewWithTag("navigation_header");
         if(header instanceof LinearLayout)((LinearLayout)header).addView(row,new LinearLayout.LayoutParams(-1,-2));
         else root.addView(row,new FrameLayout.LayoutParams(-1,-2,Gravity.TOP));
-        profile.setOnClickListener(v->new AlertDialog.Builder(a).setTitle("Profil rute kendaraan").setMessage("Profil motor memerlukan provider khusus. Jika belum tersedia, label rute mobil akan ditampilkan.").setPositiveButton("Motor",(d,w)->listener.profile("motor")).setNeutralButton("Mobil",(d,w)->listener.profile("car")).setNegativeButton("Batal",null).show());
+        profile.setOnClickListener(v->new AlertDialog.Builder(a).setTitle("Profil rute kendaraan").setMessage("Pilih kendaraan Anda. Rute mengutamakan jalan nyaman sesuai data peta. Jika rute motor belum tersedia, gunakan Google Maps.").setPositiveButton("Motor",(d,w)->listener.profile("motor")).setNeutralButton("Mobil",(d,w)->listener.profile("car")).setNegativeButton("Batal",null).show());
         sound.setOnClickListener(v->{enabled=!enabled;updateVoice();listener.voice(enabled);});choices.setOnClickListener(v->listener.alternatives());
     }
     void profile(String requested,String used){profile.setText("motor".equals(requested)?("motor".equals(used)?"Motor":"Motor\n(rute mobil)"):"Mobil");}

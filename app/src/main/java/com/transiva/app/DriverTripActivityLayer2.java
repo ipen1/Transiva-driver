@@ -389,7 +389,23 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
     protected void renderEcosystemFeatures(){ if(order==null)return; DriverEcosystemFeatures f=DriverEcosystemFeatures.from(order); if(distanceHint!=null && !f.summary().isEmpty()){String old=String.valueOf(distanceHint.getText()); if(!old.contains("Guardian")) distanceHint.setText(old+f.summary());} }
 
     protected void markCurrentWaypointArrived(int sequence){
-        if(session==null||order==null)return; if(progressBar!=null)progressBar.setVisibility(View.VISIBLE);
-        DriverNetworkExecutor.execute(()->{try{JSONObject body=new JSONObject().put("action","arrive_waypoint").put("order_id",orderId()).put("sequence",sequence).put("driver_lat",lastDriverLat).put("driver_lng",lastDriverLng); new com.transiva.app.driver.data.DriverApiClient(session).post("ride_ecosystem_order.php",body); mainHandler.post(()->{loadEcosystemFeatures(); if(progressBar!=null)progressBar.setVisibility(View.GONE); renderOrder(); refreshButtons();});}catch(Exception e){mainHandler.post(()->{if(progressBar!=null)progressBar.setVisibility(View.GONE);tripInfo("Multi Destination",first(e.getMessage(),"Gagal menandai pemberhentian. Coba lagi."));});}});
+        if(session==null||order==null||waypointArrivalBusy)return;
+        final Location fix=trustedArrivalFix();
+        if(fix==null){tripInfo("Multi Destination","Menunggu GPS terbaru yang akurat. Coba lagi sebentar.");return;}
+        final String capturedOrder=orderId();final String capturedStatus=status();
+        waypointArrivalBusy=true;if(progressBar!=null)progressBar.setVisibility(View.VISIBLE);
+        boolean queued=tripRouteScope.execute(()->{
+            try{
+                JSONObject body=new JSONObject().put("action","arrive_waypoint").put("order_id",capturedOrder).put("sequence",sequence).put("driver_lat",fix.getLatitude()).put("driver_lng",fix.getLongitude());
+                JSONObject response=new com.transiva.app.driver.data.DriverApiClient(session).post("ride_ecosystem_order.php",body).body;
+                tripRouteScope.post(()->{
+                    waypointArrivalBusy=false;if(progressBar!=null)progressBar.setVisibility(View.GONE);
+                    if(order==null||!capturedOrder.equals(orderId())||!capturedStatus.equals(status()))return;
+                    try{if(response.optJSONObject("ecosystem")!=null)order.put("ecosystem",response.optJSONObject("ecosystem"));if(response.optJSONObject("smart_waiting")!=null)order.put("smart_waiting",response.optJSONObject("smart_waiting"));}catch(org.json.JSONException e){NavigationDiagnostics.error(this,"TRIP_WAYPOINT_RESPONSE",e);}
+                    saveActiveOrder();renderOrder();refreshButtons();requestStableRoute(true);
+                });
+            }catch(Exception e){tripRouteScope.post(()->{waypointArrivalBusy=false;if(progressBar!=null)progressBar.setVisibility(View.GONE);if(order!=null&&capturedOrder.equals(orderId()))tripInfo("Multi Destination",first(e.getMessage(),"Gagal menandai pemberhentian. Coba lagi."));});}
+        });
+        if(!queued){waypointArrivalBusy=false;if(progressBar!=null)progressBar.setVisibility(View.GONE);}
     }
 }

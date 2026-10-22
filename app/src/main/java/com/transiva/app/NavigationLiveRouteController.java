@@ -68,7 +68,7 @@ final class NavigationLiveRouteController implements AutoCloseable {
                     evaluation=false;double length; synchronized(host.routePoints){length=host.routeCumulativeMeters.isEmpty()?0:host.routeCumulativeMeters.get(host.routeCumulativeMeters.size()-1);}
                     NavigationProgress remaining=NavigationProgress.remaining(current,host.lastMatchedProgressMeters,length);
                     recovery.reset();failed=false;
-                    if(!refresh.better(now,remaining.seconds,result.routes.get(0).durationSeconds)){mapReady();return;}
+                    if(!refresh.betterRoute(now,current,remaining.seconds,result.routes.get(0))){mapReady();return;}
                 }
                 evaluation=false;routeGeneration=generation;restoredOnly=false;available=result;availableLat=originLat;availableLng=originLng;failed=false;apply(0);
                 mapReady();
@@ -142,7 +142,8 @@ final class NavigationLiveRouteController implements AutoCloseable {
         if(!refresh.initialized())refresh.evaluated(SystemClock.elapsedRealtime(),raw.getLatitude(),raw.getLongitude());
         NavigationGeometry.Projection projection;
         synchronized(host.routePoints){projection=NavigationGeometry.project(host.routePoints,host.routeCumulativeMeters,raw.getLatitude(),raw.getLongitude(),host.lastMatchedProgressMeters,raw.hasBearing()?raw.getBearing():Double.NaN,raw.hasAccuracy()?raw.getAccuracy():50,raw.hasSpeed()?raw.getSpeed():host.currentSpeedKmh/3.6);}
-        etaEstimator.offer(SystemClock.elapsedRealtime(),raw.hasSpeed()?raw.getSpeed():host.currentSpeedKmh/3.6,raw.hasAccuracy()?raw.getAccuracy():50,projection.distance<=20);
+        double etaLength; synchronized(host.routePoints){etaLength=host.routeCumulativeMeters.isEmpty()?0:host.routeCumulativeMeters.get(host.routeCumulativeMeters.size()-1);}
+        etaEstimator.offer(SystemClock.elapsedRealtime(),raw.hasSpeed()?raw.getSpeed():host.currentSpeedKmh/3.6,raw.hasAccuracy()?raw.getAccuracy():50,projection.distance<=20,NavigationProgress.expectedSpeed(current,projection.progress,etaLength));
         double accuracy=raw.hasAccuracy()?Math.max(1,raw.getAccuracy()):50;
         double speed=raw.hasSpeed()?Math.max(0,raw.getSpeed()):host.currentSpeedKmh/3.6;
         double bearing=raw.hasBearing()?raw.getBearing():Double.NaN;
@@ -188,7 +189,8 @@ final class NavigationLiveRouteController implements AutoCloseable {
         double seconds=etaEstimator.seconds(now,left.meters,left.seconds,current.distanceMeters,current.durationSeconds);
         String eta=new SimpleDateFormat("HH.mm",new Locale("id","ID")).format(new Date(System.currentTimeMillis()+(long)(seconds*1000)));
         int mins=(int)Math.ceil(seconds/60);
-        host.routeBadge.setText(arrived?"Tiba di "+NavigationInstructionController.destinationLabel(host.targetMode):String.format(Locale.US,"Sisa %.1f km • ±%d menit\nTiba %s%s",left.meters/1000,mins,eta,failed?" • rute tersimpan":""));
+        String badge=arrived?"Tiba di "+NavigationInstructionController.destinationLabel(host.targetMode):String.format(Locale.US,"Sisa %.1f km • ±%d menit\nTiba %s%s",left.meters/1000,mins,eta,failed?" • rute tersimpan":"");
+        host.routeBadge.setText(badge+(!arrived&&!current.comfortableRoads?"\nKualitas jalan belum terverifikasi":""));
     }
     private void alternatives(){
         if(closed||!coordinator.valid()||!host.activityResumed)return;
@@ -223,7 +225,7 @@ final class NavigationLiveRouteController implements AutoCloseable {
         try{String used=x.optString("used","car");available=new StableRouteEngine.RouteSet(java.util.Collections.singletonList(result),profile,used,!profile.equals(used));availableLat=host.driverLat;availableLng=host.driverLng;apply(0);}
         finally{restoring=false;}
         refresh.hold(SystemClock.elapsedRealtime(),x.optLong("manual_until")-System.currentTimeMillis());
-        if(x.optBoolean("needs_route")||System.currentTimeMillis()-x.optLong("saved")>120000)recovery.require(SystemClock.elapsedRealtime());
+        if(result.roadPolicy<2||x.optBoolean("needs_route")||System.currentTimeMillis()-x.optLong("saved")>120000)recovery.require(SystemClock.elapsedRealtime());
     }
     private void adoptCheckpointOrder(){
         org.json.JSONObject x=NavigationSessionStore.read(host);if(x==null)return;

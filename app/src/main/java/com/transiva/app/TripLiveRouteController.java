@@ -21,7 +21,7 @@ final class TripLiveRouteController implements AutoCloseable {
         public void ready(long generation,StableRouteEngine.RouteSet set){
             if(last!=null&&NavigationGeometry.meters(originLat,originLng,last.getLatitude(),last.getLongitude())>40&&NavigationGeometry.distanceTo(set.routes.get(0).latLngPoints,last.getLatitude(),last.getLongitude())>Math.max(30,Math.min(60,last.hasAccuracy()?last.getAccuracy()*1.5:50))){recovery.failed(SystemClock.elapsedRealtime());evaluation=false;return;}
             long now=SystemClock.elapsedRealtime();refresh.evaluated(now,host.lastDriverLat,host.lastDriverLng);recovery.reset();
-            if(evaluation&&route!=null){NavigationProgress p=NavigationProgress.remaining(route,prior,total);evaluation=false;if(!refresh.better(now,p.seconds,set.routes.get(0).durationSeconds)){render();return;}}
+            if(evaluation&&route!=null){NavigationProgress p=NavigationProgress.remaining(route,prior,total);evaluation=false;if(!refresh.betterRoute(now,route,p.seconds,set.routes.get(0))){render();return;}}
             evaluation=false;route=set.routes.get(0);used=set.usedProfile;eta.reset();deviation.routeChanged();suspect=false;prior=Double.NaN;install();render();if(!host.overviewMapApplied){host.fitNativeOverview();host.overviewMapApplied=true;}
         }
         public void failed(Exception e){recovery.failed(SystemClock.elapsedRealtime());summary("Rute belum diperbarui • mencoba kembali");}
@@ -42,7 +42,7 @@ final class TripLiveRouteController implements AutoCloseable {
         double angle=Double.isFinite(bearing)&&Double.isFinite(p.bearing)?Math.abs(((bearing-p.bearing+540)%360)-180):0;
         suspect=p.distance>Math.max(12,acc*1.8)||(angle>125&&speed>=2.5&&acc<=25);
         if(!suspect&&(!reacquiring||acc<=35)&&p.distance<=Math.max(12,Math.min(42,acc*1.5)))prior=p.progress;
-        eta.offer(fixAt,speed,acc,!suspect&&p.distance<=20);
+        eta.offer(fixAt,speed,acc,!suspect&&p.distance<=20,NavigationProgress.expectedSpeed(route,p.progress,total));
         // A stationary driver can return off the old route after a tunnel/background gap.
         // Rebuild immediately from a fresh accurate fix; ordinary jitter still needs evidence.
         if(reacquiring&&suspect&&acc<=35&&p.distance>Math.max(30,acc*1.8)){
@@ -94,6 +94,7 @@ final class TripLiveRouteController implements AutoCloseable {
         double gap=NavigationGeometry.meters(host.lastDriverLat,host.lastDriverLng,target.lat,target.lng);
         String label="pickup".equals(target.mode)?"penjemputan":target.mode.startsWith("waypoint_")?"stop berikutnya":"pengantaran";
         String text=p.meters<=20&&gap>35?"Ujung rute jalan • tujuan masih ±"+Math.round(gap)+" m":String.format(Locale.US,"Ke %s • sisa jalan %.1f km • ±%d menit",label,p.meters/1000,(int)Math.ceil(seconds/60));
+        if(!route.comfortableRoads)text+=" • kualitas jalan belum terverifikasi";
         if("motor".equals(profile())&&!"motor".equals(used))text+="\nProfil motor belum tersedia • rute mobil";
         if(recovery.needed())text+=" • memperbarui";summary(text);
     }

@@ -69,6 +69,7 @@ import static org.maplibre.android.style.layers.PropertyFactory.iconSize;
 import static org.maplibre.android.style.layers.Property.LINE_CAP_ROUND;
 import static org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND;
 abstract class DriverNavigationActivityLayer1 extends Activity {
+    private NavigationFrameTelemetry frameTelemetry;
     protected static final String MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
     protected static final String ROUTE_SOURCE = "transiva-route-source";
     protected static final String ROUTE_GLOW_LAYER = "transiva-route-glow";
@@ -428,7 +429,7 @@ abstract class DriverNavigationActivityLayer1 extends Activity {
     }
 
     @Override protected void onResume() {
-        super.onResume(); activityResumed = true; if(liveRoutes!=null)liveRoutes.resumed(true); if(frameController!=null)frameController.start(); if(routeScheduler!=null)routeScheduler.start(); if (mapController != null) mapController.onResume(); startLocationWatch();
+        super.onResume(); if(frameTelemetry==null)frameTelemetry=new NavigationFrameTelemetry(this,"navigation");frameTelemetry.start(); activityResumed = true; if(liveRoutes!=null)liveRoutes.resumed(true); if(frameController!=null)frameController.start(); if(routeScheduler!=null)routeScheduler.start(); if (mapController != null) mapController.onResume(); startLocationWatch();
     }
 
     /**
@@ -484,6 +485,7 @@ abstract class DriverNavigationActivityLayer1 extends Activity {
     }
 
     @Override protected void onPause() {
+        if(frameTelemetry!=null)frameTelemetry.close();
         activityResumed = false;
         if(liveRoutes!=null)liveRoutes.resumed(false);
         boolean pip = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && (inPictureInPicture || isInPictureInPictureMode());

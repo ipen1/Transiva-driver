@@ -19,6 +19,9 @@ public final class StableRouteEngine {
         public final JSONArray latLngPoints,maneuvers;
         public final double distanceMeters,durationSeconds;
         public final String summary;
+        public boolean comfortableRoads;
+        public int roadPolicy;
+        public String etaSource="road_model";
         Result(JSONArray points,double meters,double seconds,JSONArray turns){this(points,meters,seconds,turns,"");}
         Result(JSONArray points,double meters,double seconds,JSONArray turns,String summary){latLngPoints=points;distanceMeters=meters;durationSeconds=seconds;maneuvers=turns==null?new JSONArray():turns;this.summary=summary;}
         public String pointsJson(){return latLngPoints==null?"[]":latLngPoints.toString();}
@@ -53,13 +56,15 @@ public final class StableRouteEngine {
         if(meta==null)throw new IOException("Metadata profil rute tidak tersedia. Perbarui endpoint navigasi server.");
         if(!p.equals(meta.optString("requested_profile")))throw new IOException("Target profil respons berubah");
         String used=meta.optString("used_profile");if(!used.equals("motor")&&!used.equals("car"))throw new IOException("Profil rute tidak valid");
-        return new RouteSet(parseRoutes(response),p,used,!p.equals(used));
+        List<Result> routes=parseRoutes(response);
+        for(Result route:routes){route.roadPolicy=meta.optInt("schema_version",1);route.comfortableRoads="avoid_unpaved".equals(meta.optString("road_preference"));route.etaSource=meta.optString("eta_source","road_model");}
+        return new RouteSet(routes,p,used,!p.equals(used));
     }
     private static String query(double a,double b,double x,double y){return String.format(Locale.US,"?from_lat=%.7f&from_lng=%.7f&to_lat=%.7f&to_lng=%.7f",a,b,x,y);}
     private static JSONObject request(String url,DriverSessionOwner owner)throws Exception{
         HttpURLConnection c=com.transiva.app.driver.data.DriverConnectionRepository.open(url);
         try{
-            c.setRequestMethod("GET");c.setConnectTimeout(3000);c.setReadTimeout(18000);c.setUseCaches(false);c.setInstanceFollowRedirects(false);c.setRequestProperty("Accept","application/json");
+            c.setRequestMethod("GET");c.setConnectTimeout(3000);c.setReadTimeout(25000);c.setUseCaches(false);c.setInstanceFollowRedirects(false);c.setRequestProperty("Accept","application/json");
             if(owner!=null)owner.pin(c);
             int code=c.getResponseCode();InputStream stream=code>=200&&code<300?c.getInputStream():c.getErrorStream();
             if(stream==null)throw new IOException("Route HTTP "+code);

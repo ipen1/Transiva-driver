@@ -44,7 +44,7 @@ public final class NavigationGuidanceService extends Service implements Location
             public void ready(long generation,StableRouteEngine.RouteSet set){
                 if(last!=null&&NavigationGeometry.distanceTo(set.routes.get(0).latLngPoints,last.getLatitude(),last.getLongitude())>Math.max(30,Math.min(60,last.getAccuracy()*1.5))){evaluation=false;recovery.failed(SystemClock.elapsedRealtime());return;}
                 long now=SystemClock.elapsedRealtime();refresh.evaluated(now,last==null?0:last.getLatitude(),last==null?0:last.getLongitude());
-                if(evaluation&&route!=null){evaluation=false;NavigationProgress remaining=NavigationProgress.remaining(route,prior,total);if(!refresh.better(now,remaining.seconds,set.routes.get(0).durationSeconds)){recovery.reset();return;}}
+                if(evaluation&&route!=null){evaluation=false;NavigationProgress remaining=NavigationProgress.remaining(route,prior,total);if(!refresh.betterRoute(now,route,remaining.seconds,set.routes.get(0))){recovery.reset();return;}}
                 evaluation=false;recovery.reset();try{snapshot.put("route",NavigationSessionStore.route(set.routes.get(0))).put("needs_route",false).put("used",set.usedProfile).put("route_id",UUID.randomUUID().toString()).put("saved",System.currentTimeMillis());NavigationSessionStore.save(NavigationGuidanceService.this,snapshot);install();}
                 catch(Exception e){recovery.failed(SystemClock.elapsedRealtime());}
             }
@@ -115,6 +115,7 @@ public final class NavigationGuidanceService extends Service implements Location
         String id=snapshot.optString("route_id");if(id.equals(routeId)&&route!=null)return;
         route=NavigationSessionStore.route(snapshot);shape.clear();lengths.clear();total=0;prior=Double.NaN;routeId=id;deviation.reset();suspect=false;reacquiring=true;
         if(route==null){recovery.require(SystemClock.elapsedRealtime());return;}
+        if(route.roadPolicy<2)recovery.require(SystemClock.elapsedRealtime());
         for(int i=0;i<route.latLngPoints.length();i++){JSONArray p=route.latLngPoints.optJSONArray(i);if(p==null)continue;double[] xy={p.optDouble(0),p.optDouble(1)};if(!shape.isEmpty()){double[] q=shape.get(shape.size()-1);total+=NavigationGeometry.meters(q[0],q[1],xy[0],xy[1]);}shape.add(xy);lengths.add(total);}
         refresh.hold(SystemClock.elapsedRealtime(),snapshot.optLong("manual_until")-System.currentTimeMillis());instructions.setTarget(snapshot.optString("mode"),snapshot.optDouble("lat"),snapshot.optDouble("lng"));voice.route(routeId);voice.enabled(getSharedPreferences("navigation_guidance",0).getBoolean("voice",true));
     }

@@ -62,6 +62,9 @@ import java.text.NumberFormat;
 import java.util.Locale;
 import android.util.Base64;
 public class DriverTripActivity extends DriverTripActivityLayer2 {
+    private LinearLayout retainedMapCard;
+    private View retainedMapSlot;
+    private NavigationFrameTelemetry frameTelemetry;
     private boolean realtimeTripRunning=false,realtimeBusy;
     private long realtimeGeneration;
     private DriverApiClient realtimeClient;
@@ -108,8 +111,10 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             if(valid(lastDriverLat,lastDriverLng)) requestStableRoute(true);
         }, 250L);
     }
-    @Override protected void onResume(){ super.onResume(); NavigationDisplayPolicy.prefer(this,NavigationCompatibilityProfile.resolve(this,"auto").visualFrameMs); if(tripLiveRoutes!=null)tripLiveRoutes.active(true); if(tripVehicleMotion!=null)tripVehicleMotion.active(true); realtimeTripRunning=true; mainHandler.removeCallbacks(realtimeTripPoll); mainHandler.post(realtimeTripPoll); try{ if(mapView!=null) mapView.onResume(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_RESUME_FAILED",e); } if(order != null) startLocationWatch(); if(communicationController!=null) communicationController.onStart(); }
-    @Override protected void onPause(){ if(tripLiveRoutes!=null)tripLiveRoutes.active(false); if(tripVehicleMotion!=null)tripVehicleMotion.active(false); realtimeGeneration++;realtimeBusy=false;if(realtimeClient!=null)realtimeClient.shutdown(); destinationExtension.close(); realtimeTripRunning=false; mainHandler.removeCallbacks(realtimeTripPoll); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView!=null) mapView.onPause(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_PAUSE_FAILED",e); } super.onPause(); }
+    @Override protected void onStart(){super.onStart();try{if(mapView!=null)mapView.onStart();}catch(RuntimeException e){NavigationDiagnostics.error(this,"TRIP_MAP_START_FAILED",e);}}
+    @Override protected void onStop(){try{if(mapView!=null)mapView.onStop();}catch(RuntimeException e){NavigationDiagnostics.error(this,"TRIP_MAP_STOP_FAILED",e);}super.onStop();}
+    @Override protected void onResume(){ super.onResume(); NavigationDisplayPolicy.prefer(this,NavigationCompatibilityProfile.resolve(this,"auto").visualFrameMs); if(frameTelemetry==null)frameTelemetry=new NavigationFrameTelemetry(this,"trip");frameTelemetry.start(); if(tripLiveRoutes!=null)tripLiveRoutes.active(true); if(tripVehicleMotion!=null)tripVehicleMotion.active(true); realtimeTripRunning=true; mainHandler.removeCallbacks(realtimeTripPoll); mainHandler.post(realtimeTripPoll); try{ if(mapView!=null) mapView.onResume(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_RESUME_FAILED",e); } if(order != null) startLocationWatch(); if(communicationController!=null) communicationController.onStart(); }
+    @Override protected void onPause(){ if(frameTelemetry!=null)frameTelemetry.close(); if(tripLiveRoutes!=null)tripLiveRoutes.active(false); if(tripVehicleMotion!=null)tripVehicleMotion.active(false); realtimeGeneration++;realtimeBusy=false;if(realtimeClient!=null)realtimeClient.shutdown(); destinationExtension.close(); realtimeTripRunning=false; mainHandler.removeCallbacks(realtimeTripPoll); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView!=null) mapView.onPause(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_PAUSE_FAILED",e); } super.onPause(); }
     @Override protected void onDestroy(){ if(tripVehicleMotion!=null)tripVehicleMotion.close(); if(tripLiveRoutes!=null)tripLiveRoutes.close(); realtimeGeneration++;if(realtimeClient!=null)realtimeClient.shutdown(); tripRouteGeneration++; if(tripRequestOwner!=null)tripRequestOwner.close();if(tripRouteScope!=null)tripRouteScope.close(); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView != null) mapView.onDestroy(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_DESTROY_FAILED",e); } super.onDestroy(); }
     @Override public void onLowMemory(){ super.onLowMemory(); try{ if(mapView!=null) mapView.onLowMemory(); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } }
 
@@ -237,10 +242,10 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     }
     protected void renderOrder(){
         if(tripTouchingMap||tripSliding){pendingTripRender=true;return;}
-        if(googleMap!=null&&(tripCameraBrowsing||tripCameraFollowing))try{tripSavedCamera=googleMap.getCameraPosition();}catch(RuntimeException e){NavigationDiagnostics.error(this,"TRIP_CAMERA_SNAPSHOT_FAILED",e);}
-        if(mapView!=null){try{mapView.onPause();mapView.onStop();mapView.onDestroy();}catch(Exception ignored){}}
-        mapView=null;googleMap=null;mapReady=false;pickupMarker=null;deliveryMarker=null;driverMarker=null;
-        pickupPolyline=null;deliveryPolyline=null;waypointMarkers.clear();overviewMapApplied=false;
+        LinearLayout displayRoot=root;
+        root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);
+        retainedMapSlot=null;
+        try {
         root.removeAllViews(); top("Driver Trip", "");
         addHeaderCard();
         waitingView=new SmartWaitingTextView(this);waitingView.bind(order.optJSONObject("smart_waiting"));root.addView(waitingView,new LinearLayout.LayoutParams(-1,-2));
@@ -264,6 +269,11 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         addActions();
         if("arrived_delivery".equals(status()) && !extensionNeedsArrival())addMapCard();
         addFoodOrNoteCard();
+        } finally {
+            LinearLayout fresh=root;root=displayRoot;
+            TripMapContent.apply(displayRoot,fresh,retainedMapCard,retainedMapSlot);
+        }
+        if(mapReady){initNativeTripMarkers();applyPendingRoute();updateMap();}
     }
     protected void top(String title, String sub){
         LinearLayout row = new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(0,0,0,dp(14));
@@ -307,7 +317,8 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         add(c,0,0,0,dp(12));
     }
     protected void addMapCard(){
-        LinearLayout c = card(); c.setPadding(dp(12), dp(12), dp(12), dp(12));
+        if(retainedMapCard!=null){retainedMapSlot=new View(this);add(retainedMapSlot,0,0,0,0);return;}
+        LinearLayout c = card();retainedMapCard=c; c.setPadding(dp(12), dp(12), dp(12), dp(12));
         c.addView(text("🗺️ Peta Perjalanan", 16, "#0B3A78", true));
         
         mapView = new MapView(this);
@@ -346,8 +357,8 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         if(googleMap==null) return;
         double pLat=coord("pickup_lat","user_lat"), pLng=coord("pickup_lng","user_lng");
         double dLat=coord("delivery_lat","destination_lat"), dLng=coord("delivery_lng","destination_lng");
-        if(valid(pLat,pLng) && pickupMarker==null) pickupMarker=googleMap.addMarker(new MarkerOptions().position(new LatLng(pLat,pLng)).title("Pickup").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)));
-        if(valid(dLat,dLng) && deliveryMarker==null) deliveryMarker=googleMap.addMarker(new MarkerOptions().position(new LatLng(dLat,dLng)).title("Tujuan Akhir").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)));
+        if(valid(pLat,pLng)){LatLng position=new LatLng(pLat,pLng);if(pickupMarker==null)pickupMarker=googleMap.addMarker(new MarkerOptions().position(position).title("Pickup").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)));else pickupMarker.setPosition(position);}else if(pickupMarker!=null){pickupMarker.remove();pickupMarker=null;}
+        if(valid(dLat,dLng)){LatLng position=new LatLng(dLat,dLng);if(deliveryMarker==null)deliveryMarker=googleMap.addMarker(new MarkerOptions().position(position).title("Tujuan Akhir").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)));else deliveryMarker.setPosition(position);}else if(deliveryMarker!=null){deliveryMarker.remove();deliveryMarker=null;}
         for(Marker m:waypointMarkers){ try{m.remove();}catch(Exception ignored){} } waypointMarkers.clear();
         DriverEcosystemFeatures eco=DriverEcosystemFeatures.from(order);
         for(int i=0;i<eco.waypoints.length();i++){ JSONObject w=eco.waypoints.optJSONObject(i); if(w==null)continue; double wl=w.optDouble("latitude",0),wn=w.optDouble("longitude",0); if(!valid(wl,wn))continue; int seq=w.optInt("sequence",i+1); String note=first(w.optString("note"),w.optString("address"),""); Marker m=googleMap.addMarker(new MarkerOptions().position(new LatLng(wl,wn)).title("Stop "+seq+(note.isEmpty()?"":" • "+note)).icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE))); if(m!=null)waypointMarkers.add(m); }

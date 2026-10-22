@@ -115,6 +115,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected String driverUsername = "";
     protected String driverType = "motor";
     protected String orderKind = "order";
+    protected boolean waypointArrivalBusy;
     protected double lastDriverLat = 0, lastDriverLng = 0;
     protected double renderedDriverLat = 0, renderedDriverLng = 0;
     protected double prevDriverLat = 0, prevDriverLng = 0;
