@@ -1,22 +1,23 @@
 package com.transiva.app;
-
 import android.content.Context;
 import android.view.MotionEvent;
 import android.view.ViewParent;
 import android.widget.FrameLayout;
 
-/** Keeps map drags/pinches inside the map instead of scrolling the enclosing Trip page. */
+/** Owns the entire gesture, including child SDK requests to re-enable parent interception. */
 final class NavigationGestureContainer extends FrameLayout {
-    NavigationGestureContainer(Context context){super(context);}
+    private boolean touching;
+    private java.util.function.Consumer<Boolean> listener;
+    NavigationGestureContainer(Context context){super(context);setTag("navigation_trip_map");}
+    void interaction(java.util.function.Consumer<Boolean> callback){listener=callback;}
+    private void touching(boolean value){if(touching==value)return;touching=value;if(listener!=null)listener.accept(value);}
+    @Override public void requestDisallowInterceptTouchEvent(boolean value){super.requestDisallowInterceptTouchEvent(touching||value);}
     @Override public boolean dispatchTouchEvent(MotionEvent event){
-        ViewParent parent=getParent();int action=event.getActionMasked();
-        boolean ended=action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_CANCEL;
-        if(parent!=null)parent.requestDisallowInterceptTouchEvent(true);
+        int action=event.getActionMasked();boolean ended=action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_CANCEL;
+        if(action==MotionEvent.ACTION_DOWN)touching(true);
+        super.requestDisallowInterceptTouchEvent(true);
         try{return super.dispatchTouchEvent(event);}
-        finally{if(ended&&parent!=null)parent.requestDisallowInterceptTouchEvent(false);}
+        finally{if(ended){touching(false);super.requestDisallowInterceptTouchEvent(false);}}
     }
-    @Override protected void onDetachedFromWindow(){
-        ViewParent parent=getParent();if(parent!=null)parent.requestDisallowInterceptTouchEvent(false);
-        super.onDetachedFromWindow();
-    }
+    @Override protected void onDetachedFromWindow(){touching(false);super.requestDisallowInterceptTouchEvent(false);super.onDetachedFromWindow();}
 }

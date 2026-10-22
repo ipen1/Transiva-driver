@@ -129,11 +129,13 @@ final class TripDestinationExtensionController {
         if(r!=null)send("arrive",r.optLong("id"));
     }
     private void send(String action,long requestId) {
+        android.location.Location arrival=host.trustedArrivalFix();
+        final double latitude=arrival==null?host.lastDriverLat:arrival.getLatitude(),longitude=arrival==null?host.lastDriverLng:arrival.getLongitude();
         host.setLoading(true);
         DriverNetworkExecutor.execute(() -> {
             try {
                 JSONObject q=new JSONObject().put("id",Integer.parseInt(host.internalId())).put("action",action).put("request_id",requestId);
-                if("arrive".equals(action))q.put("driver_lat",host.lastDriverLat).put("driver_lng",host.lastDriverLng);
+                if("arrive".equals(action))q.put("driver_lat",latitude).put("driver_lng",longitude);
                 JSONObject r=new com.transiva.app.driver.data.DriverApiClient(host.session).post("driver_destination_extension.php",q).body;
                 JSONObject fresh=null;
                 try{fresh=new com.transiva.app.driver.data.DriverApiClient(host.session).post("driver_trip_realtime.php",new JSONObject().put("order_id",host.orderId())).body.optJSONObject("order");}catch(Exception ignored){}

@@ -1,18 +1,27 @@
 package com.transiva.app;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
-/** Monotonic announcement stages prevent noisy fixes from repeating or rewinding a prompt. */
+/** Two monotonic stages per maneuver; distance noise never rewinds an announcement. */
 public final class NavigationVoicePolicy {
     private final Map<Integer,Integer> announced=new HashMap<>();
+    private final Set<Integer> cruising=new HashSet<>();
     private long last=-100000;
-    public void reset(){announced.clear();last=-100000;}
-    public boolean shouldSpeak(int index,double meters,double speedMps,boolean arrival,long now){
-        if(index<0||!Double.isFinite(meters)||meters<0)return false;
-        double early=Math.max(140,Math.min(750,speedMps*25)),near=Math.max(35,Math.min(180,speedMps*7));
-        int stage=meters<=18?3:meters<=near?2:meters<=early?1:0;
-        if(arrival&&meters>18)return false;
-        if(stage==0||stage<=announced.getOrDefault(index,0)||now-last<4500)return false;
+    public void reset(){announced.clear();cruising.clear();last=-100000;}
+    static double early(double speed,boolean arrival){return arrival?200:speed>=50d/3.6?500:200;}
+    static double near(double speed){return Math.max(20,Math.min(60,Math.max(0,speed)*3));}
+    public boolean shouldSpeak(int index,double meters,double speed,boolean arrival,long now){return shouldSpeak(index,meters,speed,arrival,true,now);}
+    public boolean shouldSpeak(int index,double meters,double speed,boolean arrival,boolean confirmed,long now){
+        if(index<0||!Double.isFinite(meters)||meters<0||!Double.isFinite(speed))return false;
+        int stage=arrival?(meters<=25&&confirmed?2:meters>25&&meters<=200?1:0):(meters<=near(speed)?2:meters<=early(speed,false)?1:0);
+        if(stage==0||stage<=announced.getOrDefault(index,0)||now-last<(stage==2?1200:3000))return false;
         announced.put(index,stage);last=now;return true;
     }
+    boolean cruise(int index,double meters,double speed,long now){
+        if(index<0||!Double.isFinite(meters)||meters<=early(speed,false)+50||cruising.contains(index)||now-last<2500)return false;
+        cruising.add(index);last=now;return true;
+    }
+    void retry(int index){announced.remove(index);cruising.remove(index);}
 }

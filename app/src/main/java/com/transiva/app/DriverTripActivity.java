@@ -66,7 +66,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     private long realtimeGeneration;
     private DriverApiClient realtimeClient;
     private String realtimeSignature="";
-    private final Runnable realtimeTripPoll=new Runnable(){ public void run(){ if(!realtimeTripRunning||order==null||session==null)return; refreshTripRealtime(); if(tripRecovery.due(android.os.SystemClock.elapsedRealtime()))requestStableRoute(true); mainHandler.postDelayed(this,3000L); } };
+    private final Runnable realtimeTripPoll=new Runnable(){ public void run(){ if(!realtimeTripRunning||order==null||session==null)return; refreshButtons();refreshTripRealtime(); if(tripRecovery.due(android.os.SystemClock.elapsedRealtime()))requestStableRoute(true); mainHandler.postDelayed(this,3000L); } };
 
 
     @Override protected void onCreate(Bundle b){
@@ -218,7 +218,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     }
     protected void buildBase(){
         FrameLayout page = new FrameLayout(this); page.setBackgroundColor(DriverThemeTokens.color(this, "#F3F8FF"));
-        ScrollView scroll = new ScrollView(this); FrameLayout.LayoutParams scrollLp=new FrameLayout.LayoutParams(-1,-1);scrollLp.bottomMargin=dp(112);page.addView(scroll,scrollLp);
+        ScrollView scroll = new NavigationTripScrollView(this); FrameLayout.LayoutParams scrollLp=new FrameLayout.LayoutParams(-1,-1);scrollLp.bottomMargin=dp(112);page.addView(scroll,scrollLp);
         root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(14), dp(12), dp(14), dp(16));
         scroll.addView(root, new ScrollView.LayoutParams(-1,-2));
         progressBar = new ProgressBar(this); progressBar.setVisibility(View.GONE);
@@ -236,6 +236,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         Button back = outline("Kembali ke Dashboard"); back.setOnClickListener(v -> finish()); c.addView(back, btnLp(14)); add(c,0,dp(8),0,0);
     }
     protected void renderOrder(){
+        if(tripTouchingMap||tripSliding){pendingTripRender=true;return;}
         if(googleMap!=null&&(tripCameraBrowsing||tripCameraFollowing))try{tripSavedCamera=googleMap.getCameraPosition();}catch(RuntimeException e){NavigationDiagnostics.error(this,"TRIP_CAMERA_SNAPSHOT_FAILED",e);}
         if(mapView!=null){try{mapView.onPause();mapView.onStop();mapView.onDestroy();}catch(Exception ignored){}}
         mapView=null;googleMap=null;mapReady=false;pickupMarker=null;deliveryMarker=null;driverMarker=null;
@@ -334,7 +335,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             if(pendingPickupRoutePoints.isEmpty()) requestStableRoute(true);
         });
         LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(-1, dp(250)); mp.setMargins(0,dp(8),0,0);
-        FrameLayout mapFrame=new NavigationGestureContainer(this);mapFrame.addView(mapView,new FrameLayout.LayoutParams(-1,-1));
+        NavigationGestureContainer mapFrame=new NavigationGestureContainer(this);mapFrame.interaction(value->tripInteraction(true,value));mapFrame.addView(mapView,new FrameLayout.LayoutParams(-1,-1));
         tripFollowButton=text("◎  Ikuti",14,"#FFFFFF",true);tripFollowButton.setGravity(Gravity.CENTER);tripFollowButton.setBackground(round("#146DE8",dp(24)));tripFollowButton.setElevation(dp(4));tripFollowButton.setContentDescription("Ikuti posisi kendaraan pada peta perjalanan");
         FrameLayout.LayoutParams flp=new FrameLayout.LayoutParams(dp(112),dp(48),Gravity.BOTTOM|Gravity.RIGHT);flp.setMargins(dp(10),dp(10),dp(10),dp(10));mapFrame.addView(tripFollowButton,flp);tripFollowButton.setVisibility(tripCameraFollowing?View.GONE:View.VISIBLE);
         tripFollowButton.setOnClickListener(v->{tripCameraFollowing=true;tripCameraBrowsing=false;tripFollowButton.setVisibility(View.GONE);if(googleMap!=null)googleMap.stopAnimation();if(tripVehicleMotion!=null)tripVehicleMotion.recenter();});

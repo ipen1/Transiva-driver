@@ -213,6 +213,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         if(fix == null) return;
 
         Location accepted = fix.location;
+        tripArrivalFix=new Location(l);
         double newLat = accepted.getLatitude();
         double newLng = accepted.getLongitude();
         if(!valid(tripStartLat, tripStartLng)){
@@ -297,6 +298,8 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         String st = status();
         if(dockHint!=null)dockHint.setText(extensionNeedsArrival()?"Menuju tujuan tambahan":"Geser untuk melanjutkan perjalanan");
 
+        beginActionUpdate();
+        try{
         hideAction(arrivedPickupBtn);
         hideAction(startDeliveryBtn);
         hideAction(arrivedDeliveryBtn);
@@ -310,7 +313,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
             showAction(arrivedPickupBtn, false);
             float pd = distanceTo(coord("pickup_lat","user_lat"), coord("pickup_lng","user_lng"));
             if(pd >= 0){
-                boolean near = pd <= ARRIVE_RADIUS_METER;
+                boolean near = arrivalNear(coord("pickup_lat","user_lat"),coord("pickup_lng","user_lng"),pd,ARRIVE_RADIUS_METER);
                 showAction(arrivedPickupBtn, near);
                 distanceInfo.setText("📍 Jarak langsung ke penjemputan: " + meter(pd));
                 distanceHint.setText(near ? "✓ Anda sudah berada di area penjemputan. Geser kontrol Tiba di Penjemputan ke kanan." : "Menuju penjemputan • kontrol geser akan aktif dalam radius " + (int)ARRIVE_RADIUS_METER + " meter.");
@@ -334,7 +337,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
             showAction(updatePriceBtn, true);
             float dd = distanceTo(coord("delivery_lat","destination_lat"), coord("delivery_lng","destination_lng"));
             if(dd >= 0){
-                boolean near = dd <= ARRIVE_RADIUS_METER;
+                boolean near = arrivalNear(coord("delivery_lat","destination_lat"),coord("delivery_lng","destination_lng"),dd,ARRIVE_RADIUS_METER);
                 showAction(arrivedDeliveryBtn, near);
                 distanceInfo.setText("🏁 Jarak langsung ke pengantaran: " + meter(dd));
                 distanceHint.setText(near ? "✓ Anda sudah berada di area pengantaran. Geser kontrol Tiba di Pengantaran ke kanan." : "Menuju pengantaran • kontrol geser akan aktif dalam radius " + (int)ARRIVE_RADIUS_METER + " meter.");
@@ -347,7 +350,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         }
         if(st.equals("arrived_delivery") && extensionNeedsArrival()){
             float dd=distanceTo(coord("delivery_lat","destination_lat"),coord("delivery_lng","destination_lng"));
-            showAction(arrivedDeliveryBtn,dd>=0 && dd<=200);
+            showAction(arrivedDeliveryBtn,arrivalNear(coord("delivery_lat","destination_lat"),coord("delivery_lng","destination_lng"),dd,200));
             distanceInfo.setText(dd>=0 ? "🏁 Jarak langsung ke tujuan tambahan: "+meter(dd) : "Menunggu GPS tujuan tambahan");
             distanceHint.setText("Perjalanan tambahan disetujui. Tiba di semua stop, lalu geser Tiba di Pengantaran dalam radius 200 m.");
             return;
@@ -372,13 +375,15 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         showAction(arrivedPickupBtn, true);
         distanceInfo.setText("ℹ Status perjalanan: " + statusLabel(st));
         distanceHint.setText("Status server belum dikenali penuh. Gunakan kontrol geser tiba penjemputan bila order memang sedang menuju penjemputan.");
+            }finally{endActionUpdate();}
     }
 
     protected void hideAction(View b){
         if(b == null) return;
-        b.setVisibility(View.GONE);
-        b.setEnabled(false);
-        b.setAlpha(1f);
+        if(collectingActions){desiredActions.put(b,null);return;}
+        if(b.getVisibility()!=View.GONE)b.setVisibility(View.GONE);
+        if(b.isEnabled())b.setEnabled(false);
+        if(b.getAlpha()!=1f)b.setAlpha(1f);
     }
 
     protected void renderEcosystemFeatures(){ if(order==null)return; DriverEcosystemFeatures f=DriverEcosystemFeatures.from(order); if(distanceHint!=null && !f.summary().isEmpty()){String old=String.valueOf(distanceHint.getText()); if(!old.contains("Guardian")) distanceHint.setText(old+f.summary());} }

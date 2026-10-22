@@ -29,7 +29,7 @@ public final class NavigationVoiceController implements AutoCloseable {
             int language=engine.setLanguage(new Locale("id","ID"));
             ready=language!=TextToSpeech.LANG_MISSING_DATA&&language!=TextToSpeech.LANG_NOT_SUPPORTED;
             if(statusListener!=null)statusListener.accept(ready);
-            engine.setSpeechRate(.95f);
+            selectVoice();engine.setSpeechRate(.97f);engine.setPitch(1f);
             engine.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
         }));
     }
@@ -38,13 +38,32 @@ public final class NavigationVoiceController implements AutoCloseable {
     public void enabled(boolean value){enabled=value;if(!value&&engine!=null)engine.stop();if(value&&initialized&&!ready)Toast.makeText(context,"Suara Bahasa Indonesia belum siap. Periksa pengaturan Text-to-speech HP.",Toast.LENGTH_LONG).show();}
     public boolean enabled(){return enabled;}
     public void resumed(boolean value){resumed=value;if(!value&&engine!=null)engine.stop();}
-    public void speak(int index,double meters,String text,boolean arrival,double speedMps){
-        if(closed||!resumed||!enabled||!ready||engine==null||!alive.getAsBoolean())return;
+    private void selectVoice(){
+        try{
+            android.speech.tts.Voice best=null;java.util.Set<android.speech.tts.Voice> voices=engine.getVoices();if(voices==null)return;
+            for(android.speech.tts.Voice candidate:voices){
+                String language=candidate.getLocale().getLanguage();
+                if(candidate.getFeatures()!=null&&candidate.getFeatures().contains("notInstalled"))continue;
+                if(candidate.isNetworkConnectionRequired()||!("id".equals(language)||"in".equals(language)))continue;
+                if(best==null||candidate.getQuality()>best.getQuality()||candidate.getQuality()==best.getQuality()&&candidate.getLatency()<best.getLatency())best=candidate;
+            }
+            if(best!=null)engine.setVoice(best);
+        }catch(RuntimeException e){NavigationDiagnostics.error(context,"NAV_VOICE_SELECTION_FAILED",e);}
+    }
+    private boolean available(){
+        if(closed||!resumed||!enabled||!ready||engine==null||!alive.getAsBoolean())return false;
         AudioManager audio=(AudioManager)context.getSystemService(Context.AUDIO_SERVICE);
-        if(audio!=null&&audio.getMode()!=AudioManager.MODE_NORMAL)return;
-        long now=SystemClock.elapsedRealtime();if(!policy.shouldSpeak(index,meters,speedMps,arrival,now))return;
-        String prefix=arrival||meters<=18?"":"Dalam "+Math.round(meters/10)*10+" meter, ";
-        engine.speak(prefix+text,TextToSpeech.QUEUE_FLUSH,null,"nav-"+route+"-"+index);
+        return audio==null||audio.getMode()==AudioManager.MODE_NORMAL;
+    }
+    public void speak(int index,double meters,String text,boolean arrival,double speed){speak(index,meters,text,arrival,speed,true);}
+    public void speak(int index,double meters,String text,boolean arrival,double speed,boolean confirmed){
+        if(!available()||!policy.shouldSpeak(index,meters,speed,arrival,confirmed,SystemClock.elapsedRealtime()))return;
+        if(engine.speak(NavigationSpeechText.prompt(meters,speed,arrival,text),TextToSpeech.QUEUE_FLUSH,null,"nav-"+route+"-"+index)!=TextToSpeech.SUCCESS)policy.retry(index);
+    }
+    public boolean cruise(int index,double meters,double speed){
+        if(!available()||!policy.cruise(index,meters,speed,SystemClock.elapsedRealtime()))return false;
+        if(engine.speak("Terus lurus sejauh "+NavigationSpeechText.distance(meters)+".",TextToSpeech.QUEUE_FLUSH,null,"nav-"+route+"-cruise-"+index)!=TextToSpeech.SUCCESS){policy.retry(index);return false;}
+        return true;
     }
     @Override public void close(){closed=true;ready=false;if(engine!=null){engine.stop();engine.shutdown();engine=null;}}
 }

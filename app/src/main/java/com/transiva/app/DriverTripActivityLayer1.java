@@ -81,6 +81,23 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected TripLiveRouteController tripLiveRoutes;
     protected TripVehicleMotionController tripVehicleMotion;
     protected MapView mapView;
+    protected Location tripArrivalFix;
+    protected final TripArrivalGate arrivalGate=new TripArrivalGate();
+    protected boolean collectingActions,tripTouchingMap,tripSliding,pendingTripRender;
+    protected final java.util.LinkedHashMap<View,Boolean> desiredActions=new java.util.LinkedHashMap<>();
+    protected void beginActionUpdate(){collectingActions=true;desiredActions.clear();}
+    protected void endActionUpdate(){
+        collectingActions=false;
+        for(java.util.Map.Entry<View,Boolean> entry:desiredActions.entrySet()){
+            if(entry.getValue()==null)hideAction(entry.getKey());else showAction(entry.getKey(),entry.getValue());
+        }
+        desiredActions.clear();
+    }
+    protected boolean arrivalNear(double lat,double lng,float distance,double radius){return arrivalGate.eligible(NavigationTargetPolicy.identity(order)+"|"+status()+"|"+lat+"|"+lng,distance,radius);}
+    protected void tripInteraction(boolean map,boolean active){
+        if(map)tripTouchingMap=active;else tripSliding=active;
+        if(!tripTouchingMap&&!tripSliding&&pendingTripRender){pendingTripRender=false;mainHandler.post(()->{if(!isFinishing()&&!isDestroyed()){renderOrder();refreshButtons();}});}
+    }
     protected boolean tripCameraFollowing,tripCameraBrowsing;
     protected com.google.android.gms.maps.model.CameraPosition tripSavedCamera;
     protected TextView tripFollowButton;
@@ -172,6 +189,12 @@ abstract class DriverTripActivityLayer1 extends Activity {
             slider.setLayoutParams(sp);
             addView(slider);
 
+            slider.setOnTouchListener((view,event)->{
+                int eventAction=event.getActionMasked();
+                if(eventAction==android.view.MotionEvent.ACTION_DOWN)tripInteraction(false,true);
+                else if(eventAction==android.view.MotionEvent.ACTION_UP||eventAction==android.view.MotionEvent.ACTION_CANCEL)mainHandler.post(()->tripInteraction(false,false));
+                return false;
+            });
             slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                     if (!fromUser || fired) return;
@@ -227,6 +250,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
         }
 
         @Override public void setEnabled(boolean enabled) {
+            if(isEnabled()==enabled&&slider!=null&&slider.isEnabled()==enabled)return;
             super.setEnabled(enabled);
             if (slider != null) slider.setEnabled(enabled);
             if (labelView != null) {
@@ -242,9 +266,10 @@ abstract class DriverTripActivityLayer1 extends Activity {
 
     protected void showAction(View b, boolean enabled){
         if(b == null) return;
-        b.setVisibility(View.VISIBLE);
-        b.setEnabled(enabled && !updatingStatus);
-        b.setAlpha(enabled ? 1f : 0.48f);
+        if(collectingActions){desiredActions.put(b,enabled);return;}
+        if(b.getVisibility()!=View.VISIBLE)b.setVisibility(View.VISIBLE);
+        boolean desired=enabled&&!updatingStatus;if(b.isEnabled()!=desired)b.setEnabled(desired);
+        float alpha=desired?1f:0.48f;if(b.getAlpha()!=alpha)b.setAlpha(alpha);
     }
 
     protected boolean isDeliveryPhase(String st){ return DriverOrderStateMachine.isDeliveryPhase(st); }
@@ -280,6 +305,8 @@ abstract class DriverTripActivityLayer1 extends Activity {
             info("Status belum sesuai", "Urutan perjalanan harus: diterima → tiba pickup → dalam perjalanan → tiba tujuan → selesai.");
             return;
         }
+        Location arrival=trustedArrivalFix();boolean arriving="arrived_pickup".equals(next)||"arrived_delivery".equals(next);
+        final double statusLat=arriving&&arrival!=null?arrival.getLatitude():lastDriverLat,statusLng=arriving&&arrival!=null?arrival.getLongitude():lastDriverLng;
         updatingStatus = true; setLoading(true);
         DriverNetworkExecutor.execute(() -> { try{
             JSONObject p = new JSONObject();
@@ -290,7 +317,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
             p.put("order_kind", orderKind);
             p.put("source", isPickupOrder() ? "pickup_orders" : "orders");
             p.put("status", next);
-            p.put("driver_lat",lastDriverLat);p.put("driver_lng",lastDriverLng);
+            p.put("driver_lat",statusLat);p.put("driver_lng",statusLng);
             if(isPickupOrder() && (next.equals("finished") || next.equals("completed"))) p.put("otp", pendingFinishOtp);
             String endpoint = endpoint(next);
             JSONObject r = postJson(BASE_URL + endpoint, p);
@@ -483,7 +510,15 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected String cleanServiceLabel(){ String s=first(order.optString("service_name"), order.optString("order_type"), orderKind.equals("pickup") ? "TransPickup" : "Food Delivery"); return s.trim(); }
     protected double coord(String a, String b){ try{return Double.parseDouble(first(order.optString(a), order.optString(b), "0"));}catch(Exception e){return 0;} } protected double optDouble(String... keys){ for(String k: keys){ try{ if(order.has(k)) return Double.parseDouble(order.optString(k,"0")); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } } return 0; }
     protected String statusLabel(String s){ return DriverOrderStateMachine.label(s); }
-    protected float distanceTo(double lat, double lng){ if(!valid(lastDriverLat,lastDriverLng)||!valid(lat,lng))return -1; float[] r=new float[1]; Location.distanceBetween(lastDriverLat,lastDriverLng,lat,lng,r); return r[0]; }
+    protected Location trustedArrivalFix(){
+        Location l=tripArrivalFix;if(l==null||!l.hasAccuracy()||!Float.isFinite(l.getAccuracy())||l.getAccuracy()<=0||l.getAccuracy()>35||!NavigationTargetPolicy.valid(l.getLatitude(),l.getLongitude()))return null;
+        long age=android.os.SystemClock.elapsedRealtimeNanos()-l.getElapsedRealtimeNanos();return l.getElapsedRealtimeNanos()>0&&age>=0&&age<=15000_000_000L?new Location(l):null;
+    }
+    protected float distanceTo(double lat, double lng){
+        double a=lastDriverLat,b=lastDriverLng;Location fresh=trustedArrivalFix();
+        if(fresh!=null){a=fresh.getLatitude();b=fresh.getLongitude();}
+        if(!valid(a,b)||!valid(lat,lng))return -1;float[] result=new float[1];Location.distanceBetween(a,b,lat,lng,result);return result[0];
+    }
     protected boolean valid(double lat,double lng){ return lat!=0 && lng!=0 && !Double.isNaN(lat) && !Double.isNaN(lng); } protected String meter(float m){ return m>=1000 ? one(m/1000.0)+" km" : Math.round(m)+" meter"; }
     protected String rupiah(double v){ return "Rp " + NumberFormat.getNumberInstance(new Locale("id","ID")).format((long)v); } protected String one(double v){ return String.format(Locale.US,"%.1f",v); } protected String zero(double v){ return String.format(Locale.US,"%.0f",v); } protected String pref(String key){ try{return getSharedPreferences(PREF_NAME,MODE_PRIVATE).getString(key,"");}catch(Exception e){return "";} }
     protected String first(String... values){ if(values==null)return ""; for(String s: values) if(s!=null && s.trim().length()>0 && !"null".equalsIgnoreCase(s.trim())) return s.trim(); return ""; }

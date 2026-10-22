@@ -38,7 +38,7 @@ public final class NavigationGuidanceService extends Service implements Location
         super.onCreate();owner=DriverSessionOwner.capture(this);locations=(LocationManager)getSystemService(LOCATION_SERVICE);
         voice=new NavigationVoiceController(this,()->!closed&&owner.current());
         instructions=new NavigationInstructionController(new android.widget.TextView(this));
-        instructions.setVoice((index,meters,text,arrival)->{if(!NavigationSessionStore.foreground&&!suspect&&last!=null&&SystemClock.elapsedRealtime()-fixAt<5500&&last.getAccuracy()<=35)voice.speak(index,meters,text,arrival,last.hasSpeed()?last.getSpeed():0);});
+        instructions.setVoice(new NavigationGuidanceVoice(voice,()->!NavigationSessionStore.foreground&&!suspect&&last!=null&&SystemClock.elapsedRealtime()-fixAt<5500&&last.getAccuracy()<=35&&NavigationGuidanceVoice.fresh(last),()->last!=null&&last.hasSpeed()?last.getSpeed():0));
         requests=new NavigationRouteCoordinator(this,main,()->!closed&&!NavigationSessionStore.foreground,new NavigationRouteCoordinator.Callback(){
             public String currentTargetKey(){return key;}
             public void ready(long generation,StableRouteEngine.RouteSet set){
@@ -116,7 +116,7 @@ public final class NavigationGuidanceService extends Service implements Location
         route=NavigationSessionStore.route(snapshot);shape.clear();lengths.clear();total=0;prior=Double.NaN;routeId=id;deviation.reset();suspect=false;reacquiring=true;
         if(route==null){recovery.require(SystemClock.elapsedRealtime());return;}
         for(int i=0;i<route.latLngPoints.length();i++){JSONArray p=route.latLngPoints.optJSONArray(i);if(p==null)continue;double[] xy={p.optDouble(0),p.optDouble(1)};if(!shape.isEmpty()){double[] q=shape.get(shape.size()-1);total+=NavigationGeometry.meters(q[0],q[1],xy[0],xy[1]);}shape.add(xy);lengths.add(total);}
-        refresh.hold(SystemClock.elapsedRealtime(),snapshot.optLong("manual_until")-System.currentTimeMillis());instructions.setDestination(snapshot.optString("mode"));voice.route(routeId);voice.enabled(getSharedPreferences("navigation_guidance",0).getBoolean("voice",true));
+        refresh.hold(SystemClock.elapsedRealtime(),snapshot.optLong("manual_until")-System.currentTimeMillis());instructions.setTarget(snapshot.optString("mode"),snapshot.optDouble("lat"),snapshot.optDouble("lng"));voice.route(routeId);voice.enabled(getSharedPreferences("navigation_guidance",0).getBoolean("voice",true));
     }
     @android.annotation.SuppressLint("MissingPermission") private void startLocation(){
         if(listening||locations==null)return;

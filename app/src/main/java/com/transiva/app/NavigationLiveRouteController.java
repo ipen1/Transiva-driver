@@ -91,10 +91,9 @@ final class NavigationLiveRouteController implements AutoCloseable {
             public void alternatives(){NavigationLiveRouteController.this.alternatives();}
         });
         options.voice(enabled);voice.status(ready->{if(!closed&&coordinator.valid())options.voiceReady(ready);});options.profile(profile,profile);
-        h.instructionController.setVoice((index,distance,text,arrival)->{
-            if(coordinator.valid()&&!suspect&&host.activityResumed&&SystemClock.elapsedRealtime()-host.lastFixRealtimeMs<5500&&host.lastGpsAccuracyM<=35)
-                voice.speak(index,distance,text,arrival,host.currentSpeedKmh/3.6);
-        });
+        h.instructionController.setVoice(new NavigationGuidanceVoice(voice,
+                ()->coordinator.valid()&&!suspect&&host.activityResumed&&SystemClock.elapsedRealtime()-host.lastFixRealtimeMs<5500&&host.lastGpsAccuracyM<=35&&NavigationGuidanceVoice.fresh(host.lastLocation),
+                ()->host.currentSpeedKmh/3.6));
     }
     private boolean containsCurrentPosition(StableRouteEngine.Result route) {
         java.util.ArrayList<double[]> shape=new java.util.ArrayList<>();java.util.ArrayList<Double> lengths=new java.util.ArrayList<>();double total=0;
@@ -160,7 +159,7 @@ final class NavigationLiveRouteController implements AutoCloseable {
     private void apply(int index){
         if(closed||available==null||index<0||index>=available.routes.size())return;
         if(!restoring)restoredId=java.util.UUID.randomUUID().toString();selected=index;current=available.routes.get(index);reacquiring=restoring;recovery.reset();etaEstimator.reset();suspect=false;deviation.routeChanged();
-        try{host.pendingRouteGeoJson=host.routeGeoJson(current.pointsJson());}catch(Exception e){NavigationDiagnostics.error(host,"NAV_GEOMETRY_FAILED",e);return;}host.setRoutePoints(current.latLngPoints);host.routeManeuvers=current.maneuvers;
+        try{host.pendingRouteGeoJson=host.routeGeoJson(current.pointsJson());}catch(Exception e){NavigationDiagnostics.error(host,"NAV_GEOMETRY_FAILED",e);return;}host.setRoutePoints(current.latLngPoints);host.routeManeuvers=current.maneuvers;host.instructionController.setTarget(host.targetMode,host.targetLat(),host.targetLng());
         host.pendingRouteKm=current.distanceMeters/1000;host.pendingRouteSeconds=current.durationSeconds;host.lastRouteSuccessAt=System.currentTimeMillis();host.routeFailureCount=0;
         host.lastRenderedRouteIndex=-1;host.lastRenderedRouteProgressMeters=Double.NaN;
         voice.route(restoredId+"-"+index);options.profile(profile,available.usedProfile);

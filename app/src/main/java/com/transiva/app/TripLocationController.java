@@ -81,16 +81,16 @@ public final class TripLocationController {
     }
 
     private boolean fresh(Location l) {
-        if (l == null) return false;
+        if (l == null||!valid(l.getLatitude(),l.getLongitude())) return false;
         if (Build.VERSION.SDK_INT >= 17) {
             long age = android.os.SystemClock.elapsedRealtimeNanos() - l.getElapsedRealtimeNanos();
-            return age <= MAX_LOCATION_AGE_MS * 1_000_000L;
+            return l.getElapsedRealtimeNanos()>0&&age>=0&&age <= MAX_LOCATION_AGE_MS * 1_000_000L;
         }
         return System.currentTimeMillis() - l.getTime() <= MAX_LOCATION_AGE_MS;
     }
 
     private boolean accept(Location l) {
-        if (l == null || !valid(l.getLatitude(), l.getLongitude())) return false;
+        if (l == null || !valid(l.getLatitude(), l.getLongitude())||!fresh(l)) return false;
         long now = System.currentTimeMillis();
         if (LocationManager.NETWORK_PROVIDER.equals(l.getProvider()) && lastGpsFixAt > 0L && now - lastGpsFixAt < GPS_PRIORITY_MS) return false;
         if (lastAccepted != null) {
@@ -100,5 +100,5 @@ public final class TripLocationController {
         return true;
     }
 
-    private static boolean valid(double lat,double lng){ return lat!=0d && lng!=0d && !Double.isNaN(lat) && !Double.isNaN(lng); }
+    private static boolean valid(double lat,double lng){ return Double.isFinite(lat)&&Double.isFinite(lng)&&Math.abs(lat)<=90&&Math.abs(lng)<=180&&!(lat==0&&lng==0); }
 }

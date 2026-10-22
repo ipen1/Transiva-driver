@@ -97,6 +97,7 @@ public final class StableRouteEngine {
                 JSONObject step=steps.optJSONObject(i);if(step==null)continue;JSONObject man=step.optJSONObject("maneuver");
                 double distance=Math.max(0,step.optDouble("distance",0));
                 if(man!=null){JSONObject item=new JSONObject().put("distance_from_start",cumulative).put("step_distance",distance).put("step_duration",Math.max(0,step.optDouble("duration",0))).put("name",step.optString("name")).put("type",man.optString("type")).put("modifier",man.optString("modifier")).put("exit",man.optInt("exit",0)).put("destinations",step.optString("destinations"));
+                    if(Double.isFinite(man.optDouble("bearing_before",Double.NaN)))item.put("bearing_before",man.optDouble("bearing_before"));if(Double.isFinite(man.optDouble("bearing_after",Double.NaN)))item.put("bearing_after",man.optDouble("bearing_after"));
                     JSONArray loc=man.optJSONArray("location");if(loc!=null&&loc.length()>1)item.put("lng",loc.optDouble(0)).put("lat",loc.optDouble(1));
                     JSONArray intersections=step.optJSONArray("intersections");JSONObject junction=intersections==null?null:intersections.optJSONObject(0);
                     JSONArray lanes=junction==null?null:junction.optJSONArray("lanes"),junctionLocation=junction==null?null:junction.optJSONArray("location");
