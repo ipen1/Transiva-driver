@@ -105,7 +105,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected Marker driverMarker, pickupMarker, deliveryMarker;
     protected final java.util.ArrayList<Marker> waypointMarkers = new java.util.ArrayList<>();
     protected Polyline pickupPolyline, deliveryPolyline;
-    protected SlideActionView arrivedPickupBtn, startDeliveryBtn, arrivedDeliveryBtn, finishBtn;
+    protected SlideActionView arrivedPickupBtn, startDeliveryBtn, arrivedDeliveryBtn, waypointBtn, finishBtn;
     protected Button updatePriceBtn, cancelOrderBtn, customerChatBtn;
     protected TripCancellationController cancellationController;
     protected TripCommunicationController communicationController;
@@ -116,6 +116,11 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected String driverType = "motor";
     protected String orderKind = "order";
     protected boolean waypointArrivalBusy;
+    protected boolean tripStateFresh;
+    protected long tripLastSync=-1,tripMutationVersion;
+    protected boolean tripStateReady(){return tripStateFresh&&tripLastSync>=0&&android.os.SystemClock.elapsedRealtime()-tripLastSync<=15000L;}
+    protected void tripMutationStarted(){tripMutationVersion++;}
+    protected void tripNeedsSync(){tripStateFresh=false;refreshButtons();}
     protected double lastDriverLat = 0, lastDriverLng = 0;
     protected double renderedDriverLat = 0, renderedDriverLng = 0;
     protected double prevDriverLat = 0, prevDriverLng = 0;
@@ -269,7 +274,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
         if(b == null) return;
         if(collectingActions){desiredActions.put(b,enabled);return;}
         if(b.getVisibility()!=View.VISIBLE)b.setVisibility(View.VISIBLE);
-        boolean desired=enabled&&!updatingStatus;if(b.isEnabled()!=desired)b.setEnabled(desired);
+        boolean desired=enabled&&!updatingStatus&&!waypointArrivalBusy&&tripStateReady();if(b.isEnabled()!=desired)b.setEnabled(desired);
         float alpha=desired?1f:0.48f;if(b.getAlpha()!=alpha)b.setAlpha(alpha);
     }
 
@@ -301,14 +306,20 @@ abstract class DriverTripActivityLayer1 extends Activity {
 
     protected void confirm(String msg, String next){ if(updatingStatus)return; PremiumDialogs.builder(this).setTitle("Konfirmasi").setMessage(msg).setNegativeButton("Batal",null).setPositiveButton("Ya",(d,w)->updateStatus(next)).show(); }
     protected void updateStatus(String next){
-        if (updatingStatus) return;
+        if (updatingStatus||waypointArrivalBusy) return;
+        if(!tripStateReady()){info("Sinkronisasi perjalanan","Menunggu status terbaru dari server. Coba lagi sebentar.");return;}
+        if(("arrived_delivery".equals(next)||"finished".equals(next)||"completed".equals(next))&&!isPickupOrder()
+                && DriverEcosystemFeatures.from(order).nextPendingWaypoint()!=null){
+            info("Persinggahan belum selesai","Tiba di persinggahan berikutnya melalui geser utama terlebih dahulu.");return;
+        }
+        tripMutationStarted();
         if (!DriverOrderStateGuard.canTransition(status(), next)) {
             info("Status belum sesuai", "Urutan perjalanan harus: diterima → tiba pickup → dalam perjalanan → tiba tujuan → selesai.");
             return;
         }
         Location arrival=trustedArrivalFix();boolean arriving="arrived_pickup".equals(next)||"arrived_delivery".equals(next);
         final double statusLat=arriving&&arrival!=null?arrival.getLatitude():lastDriverLat,statusLng=arriving&&arrival!=null?arrival.getLongitude():lastDriverLng;
-        updatingStatus = true; setLoading(true);
+        updatingStatus = true; setLoading(true);refreshButtons();
         DriverNetworkExecutor.execute(() -> { try{
             JSONObject p = new JSONObject();
             p.put("id", internalId());
@@ -331,7 +342,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
                     pendingFinishOtp = "";
                     try{ order.put("status", next); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
                     saveActiveOrder();
-                    refreshButtons();
+                    tripNeedsSync();
                     mainHandler.postDelayed(() -> updateMap(), 250);
                     if(next.equals("finished") || next.equals("completed")){
                         NavigationSessionStore.clear(this);NavigationGuidanceService.stop(this);
@@ -504,7 +515,10 @@ abstract class DriverTripActivityLayer1 extends Activity {
     }
 
     protected void saveActiveOrder(){ if(tripSnapshotStore!=null) tripSnapshotStore.save(order, orderKind, resolveDriverTypeFromOrder()); }
-    protected void clearActiveOrder(){ if(tripSnapshotStore!=null) tripSnapshotStore.clear(); }
+    protected void clearActiveOrder(){
+        if(session!=null&&order!=null){String id=session.get("current_order_id");if(id.equals(order.optString("order_id"))||id.equals(order.optString("id")))session.remove("current_order_id");}
+        if(tripSnapshotStore!=null) tripSnapshotStore.clear();
+    }
     protected String orderId(){ return first(order.optString("order_id"), order.optString("id"), "-"); } protected String internalId(){ return first(order.optString("id"), order.optString("order_id"), ""); } protected String status(){ return normalizeStatus(first(order.optString("status"), "taken")); }
     protected String normalizeStatus(String raw){ return DriverOrderStateMachine.normalize(raw); }
     protected String pickupAddress(){ return first(order.optString("pickup_address"), order.optString("pickup"), order.optString("sender_address"), "-"); } protected String deliveryAddress(){ return first(order.optString("delivery_address"), order.optString("destination_address"), order.optString("destination"), order.optString("receiver_address"), "-"); }

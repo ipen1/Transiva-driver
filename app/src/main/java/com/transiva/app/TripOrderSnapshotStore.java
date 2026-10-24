@@ -8,13 +8,16 @@ import org.json.JSONObject;
 public final class TripOrderSnapshotStore {
     private static final String PREF_NAME = "transiva";
     private final SharedPreferences prefs;
+    private final Context context;
 
     public TripOrderSnapshotStore(Context context) {
+        this.context=context.getApplicationContext();
         prefs = context.getApplicationContext().getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
     }
 
     public void save(JSONObject order, String orderKind, String driverType) {
         if (order == null) return;
+        if(NavigationTargetPolicy.terminal(order)){clearFor(order);return;}
         prefs.edit()
                 .putString("driver_active_order_json", order.toString())
                 .putString("driver_active_order_id", first(order.optString("order_id"), order.optString("id"), "-"))
@@ -32,8 +35,21 @@ public final class TripOrderSnapshotStore {
                 .apply();
     }
 
+    private void clearFor(JSONObject order){
+        SessionManager session=new SessionManager(context);String current=session.get("current_order_id");
+        if(current.equals(order.optString("order_id"))||current.equals(order.optString("id")))session.remove("current_order_id");
+        DriverGuardianManager.invalidate(context);
+        String saved=prefs.getString("driver_active_order_id","");
+        if(saved.equals(order.optString("order_id"))||saved.equals(order.optString("id")))clear();
+    }
     public void clear() {
+        String saved=prefs.getString("driver_active_order_id","");
+        SessionManager session=new SessionManager(context);
+        if(!saved.isEmpty()&&saved.equals(session.get("current_order_id")))session.remove("current_order_id");
+        DriverGuardianManager.invalidate(context);
         prefs.edit()
+                .remove("active_order_json")
+                .remove("activeOrder")
                 .remove("driver_active_order_json")
                 .remove("driver_active_order_id")
                 .remove("driver_active_order_kind")

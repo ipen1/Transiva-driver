@@ -123,8 +123,10 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
 
         arrivedPickupBtn = slideAction("📍 Geser • Tiba di Penjemputan", () -> updateStatus("arrived_pickup")); actionDock.addView(arrivedPickupBtn, slideLp(0));
         startDeliveryBtn = slideAction(orderKind.equals("pickup") ? "📦 Geser • Paket Diambil, Mulai Antar" : vehicleEmoji() + " Geser • Mulai Perjalanan", () -> updateStatus("on_delivery")); actionDock.addView(startDeliveryBtn, slideLp(0));
-        DriverEcosystemFeatures ecoNow=DriverEcosystemFeatures.from(order); JSONObject pendingStop=ecoNow.nextPendingWaypoint();
-        if(isDeliveryPhase(status()) && pendingStop!=null){ int seq=pendingStop.optInt("sequence",1); SlideActionView stopBtn=slideAction("📍 Geser • Tiba di Stop "+seq, () -> markCurrentWaypointArrived(seq)); c.addView(stopBtn, slideLp(8)); }
+        JSONObject pendingStop=DriverEcosystemFeatures.from(order).nextPendingWaypoint();
+        final int stopSequence=pendingStop==null?0:pendingStop.optInt("sequence",1);
+        waypointBtn=slideAction("📍 Geser • Tiba di Persinggahan "+stopSequence,()->markCurrentWaypointArrived(stopSequence));
+        actionDock.addView(waypointBtn,slideLp(0));
         arrivedDeliveryBtn = slideAction("🏁 Geser • Tiba di Pengantaran", () -> { if(extensionNeedsArrival()) destinationExtension.arrive(); else updateStatus("arrived_delivery"); }); actionDock.addView(arrivedDeliveryBtn, slideLp(0));
         finishBtn = slideAction("✅ Geser • Selesaikan Order", () -> { if (isPickupOrder()) showPickupOtpDialog(); else updateStatus("finished"); }); actionDock.addView(finishBtn, slideLp(0));
         dockHint=text("Geser untuk melanjutkan perjalanan",12,"#64748B",false);actionDock.addView(dockHint);
@@ -295,6 +297,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
 
     protected void refreshButtons(){
         if(arrivedPickupBtn == null) return;
+        if(tripSliding)return;
         String st = status();
         if(dockHint!=null)dockHint.setText(extensionNeedsArrival()?"Menuju tujuan tambahan":"Geser untuk melanjutkan perjalanan");
 
@@ -303,6 +306,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         hideAction(arrivedPickupBtn);
         hideAction(startDeliveryBtn);
         hideAction(arrivedDeliveryBtn);
+        hideAction(waypointBtn);
         hideAction(finishBtn);
         hideAction(updatePriceBtn);
         hideAction(cancelOrderBtn);
@@ -331,6 +335,20 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
             distanceInfo.setText("✅ Anda sudah tiba di titik penjemputan.");
             distanceHint.setText(orderKind.equals("pickup") ? "Ambil paket, lalu geser Mulai Antar." : "Pastikan pesanan sudah siap, lalu mulai perjalanan ke pengantaran.");
             return;
+        }
+        if(!isPickupOrder() && (st.equals("on_delivery")||st.equals("arrived_delivery"))){
+            JSONObject stop=DriverEcosystemFeatures.from(order).nextPendingWaypoint();
+            if(stop!=null){
+                int seq=stop.optInt("sequence",1);
+                double lat=stop.optDouble("latitude",Double.NaN),lng=stop.optDouble("longitude",Double.NaN);
+                float distance=distanceTo(lat,lng);
+                boolean near=trustedArrivalFix()!=null&&arrivalNear(lat,lng,distance,200);
+                showAction(waypointBtn,near);showAction(updatePriceBtn,true);
+                if(dockHint!=null)dockHint.setText("Persinggahan "+seq+" • "+first(stop.optString("address"),stop.optString("note"),"Titik singgah customer"));
+                distanceInfo.setText(distance>=0?"📍 Jarak ke persinggahan "+seq+": "+meter(distance):"📡 Menunggu GPS persinggahan");
+                distanceHint.setText(near?"Anda dekat persinggahan. Geser kontrol utama untuk konfirmasi tiba.":"Menuju persinggahan "+seq+" • geser aktif dengan GPS terbaru dalam radius 200 meter.");
+                return;
+            }
         }
         if(st.equals("on_delivery")){
             showAction(arrivedDeliveryBtn, false);
@@ -371,11 +389,18 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
             return;
         }
 
+        if(NavigationTargetPolicy.terminal(order)){
+            distanceInfo.setText("Order telah berakhir.");distanceHint.setText("Kembali ke beranda untuk melihat order aktif.");
+            if(dockHint!=null)dockHint.setText("Perjalanan berakhir");return;
+        }
         // Fallback aman: status server yang belum dikenali tidak boleh membuat halaman tanpa tombol aksi.
         showAction(arrivedPickupBtn, true);
         distanceInfo.setText("ℹ Status perjalanan: " + statusLabel(st));
         distanceHint.setText("Status server belum dikenali penuh. Gunakan kontrol geser tiba penjemputan bila order memang sedang menuju penjemputan.");
-            }finally{endActionUpdate();}
+            }finally{
+                if(!tripStateReady()&&dockHint!=null&&!NavigationTargetPolicy.terminal(order))dockHint.setText("Menyinkronkan status perjalanan…");
+                endActionUpdate();
+            }
     }
 
     protected void hideAction(View b){
@@ -389,11 +414,15 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
     protected void renderEcosystemFeatures(){ if(order==null)return; DriverEcosystemFeatures f=DriverEcosystemFeatures.from(order); if(distanceHint!=null && !f.summary().isEmpty()){String old=String.valueOf(distanceHint.getText()); if(!old.contains("Guardian")) distanceHint.setText(old+f.summary());} }
 
     protected void markCurrentWaypointArrived(int sequence){
-        if(session==null||order==null||waypointArrivalBusy)return;
+        if(session==null||order==null||waypointArrivalBusy||updatingStatus)return;
+        if(!tripStateReady()){tripInfo("Sinkronisasi perjalanan","Menunggu status terbaru dari server.");return;}
+        JSONObject next=DriverEcosystemFeatures.from(order).nextPendingWaypoint();
+        if(NavigationTargetPolicy.terminal(order)||next==null||next.optInt("sequence",1)!=sequence){tripNeedsSync();return;}
+        if(!("on_delivery".equals(status())||"arrived_delivery".equals(status())))return;
         final Location fix=trustedArrivalFix();
         if(fix==null){tripInfo("Multi Destination","Menunggu GPS terbaru yang akurat. Coba lagi sebentar.");return;}
         final String capturedOrder=orderId();final String capturedStatus=status();
-        waypointArrivalBusy=true;if(progressBar!=null)progressBar.setVisibility(View.VISIBLE);
+        tripMutationStarted();waypointArrivalBusy=true;refreshButtons();if(progressBar!=null)progressBar.setVisibility(View.VISIBLE);
         boolean queued=tripRouteScope.execute(()->{
             try{
                 JSONObject body=new JSONObject().put("action","arrive_waypoint").put("order_id",capturedOrder).put("sequence",sequence).put("driver_lat",fix.getLatitude()).put("driver_lng",fix.getLongitude());
@@ -402,7 +431,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
                     waypointArrivalBusy=false;if(progressBar!=null)progressBar.setVisibility(View.GONE);
                     if(order==null||!capturedOrder.equals(orderId())||!capturedStatus.equals(status()))return;
                     try{if(response.optJSONObject("ecosystem")!=null)order.put("ecosystem",response.optJSONObject("ecosystem"));if(response.optJSONObject("smart_waiting")!=null)order.put("smart_waiting",response.optJSONObject("smart_waiting"));}catch(org.json.JSONException e){NavigationDiagnostics.error(this,"TRIP_WAYPOINT_RESPONSE",e);}
-                    saveActiveOrder();renderOrder();refreshButtons();requestStableRoute(true);
+                    saveActiveOrder();tripNeedsSync();renderOrder();refreshButtons();requestStableRoute(true);
                 });
             }catch(Exception e){tripRouteScope.post(()->{waypointArrivalBusy=false;if(progressBar!=null)progressBar.setVisibility(View.GONE);if(order!=null&&capturedOrder.equals(orderId()))tripInfo("Multi Destination",first(e.getMessage(),"Gagal menandai pemberhentian. Coba lagi."));});}
         });

@@ -26,7 +26,7 @@ final class NavigationTargetPolicy {
         if(toDelivery){
             JSONObject eco=o==null?null:o.optJSONObject("ecosystem");JSONArray stops=eco==null?(o==null?null:o.optJSONArray("waypoints")):eco.optJSONArray("waypoints");
             JSONObject next=null;int sequence=Integer.MAX_VALUE;
-            if(stops!=null)for(int i=0;i<stops.length();i++){JSONObject w=stops.optJSONObject(i);if(w==null)continue;String state=w.optString("status","pending");if("arrived".equalsIgnoreCase(state)||"cancelled".equalsIgnoreCase(state)||"skipped".equalsIgnoreCase(state))continue;
+            if(stops!=null)for(int i=0;i<stops.length();i++){JSONObject w=stops.optJSONObject(i);if(w==null)continue;String state=w.optString("status","pending");if("arrived".equalsIgnoreCase(state)||"cancelled".equalsIgnoreCase(state)||"canceled".equalsIgnoreCase(state)||"skipped".equalsIgnoreCase(state))continue;
                 double lat=w.optDouble("latitude",Double.NaN),lng=w.optDouble("longitude",Double.NaN);int seq=w.optInt("sequence",i+1);if(valid(lat,lng)&&seq<sequence){next=w;sequence=seq;}}
             if(next!=null)return new Target("waypoint_"+sequence,next.optDouble("latitude"),next.optDouble("longitude"));
         }

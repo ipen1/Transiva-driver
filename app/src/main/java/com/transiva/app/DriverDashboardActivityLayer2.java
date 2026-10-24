@@ -220,6 +220,7 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
             // Tidak tampilkan placeholder di panel prioritas. Bila ada tawaran,
             // tawaran langsung menjadi kartu pertama yang terlihat.
         } else {
+            session.put("current_order_source", state.activeOrders.get(0).source);
             session.put("current_order_id", state.activeOrders.get(0).id);
             int slot = 0;
             for (DriverOrder activeOrder : state.activeOrders) {
@@ -324,6 +325,7 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
 
     @Override public void openTrip(DriverOrder order) {
         try {
+            session.put("current_order_source", order.source);
             session.put("current_order_id", order.id);
             Intent intent = new Intent(this, DriverTripActivity.class);
             intent.putExtra("order_json", order.raw.toString());

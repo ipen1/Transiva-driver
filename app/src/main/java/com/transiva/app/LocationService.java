@@ -53,6 +53,11 @@ public class LocationService extends Service {
     private Location lastSent;
     private final SmoothLocationEngine smoothLocation = new SmoothLocationEngine(5000L);
     private final DriverGuardianManager guardian = new DriverGuardianManager();
+    private final android.os.Handler guardianHandler=new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable guardianPoll=new Runnable(){public void run(){
+        if(!canTrack())return;
+        guardian.refresh(LocationService.this);guardianHandler.postDelayed(this,15000L);
+    }};
 
     private final LocationListener listener = new LocationListener() {
         @Override public void onLocationChanged(Location location) {
@@ -107,6 +112,8 @@ public class LocationService extends Service {
         // Activity/Recent Apps dan tetap ada setelah UI diswipe.
         DriverBubbleController.start(this);
 
+        guardianHandler.removeCallbacks(guardianPoll);
+        guardianHandler.post(guardianPoll);
         requestUpdates();
         return START_STICKY;
     }
@@ -191,8 +198,7 @@ public class LocationService extends Service {
         if (fix == null || !fix.upload) return;
 
         Location accepted = fix.location;
-        String activeOrderId = session == null ? "" : session.get("current_order_id");
-        guardian.onLocation(this, accepted, activeOrderId != null && !activeOrderId.trim().isEmpty());
+        guardian.onLocation(this, accepted);
         long now = System.currentTimeMillis();
         if (lastSentAt > 0L && now - lastSentAt < desiredInterval()) return;
         lastSentAt = now;
@@ -290,6 +296,8 @@ public class LocationService extends Service {
     }
 
     private void stopTracking() {
+        guardianHandler.removeCallbacks(guardianPoll);
+        DriverGuardianManager.invalidate(this);
         try {
             if (locationManager != null) locationManager.removeUpdates(listener);
         } catch (Exception error) {
@@ -368,6 +376,7 @@ public class LocationService extends Service {
     }
 
     @Override public void onDestroy() {
+        guardianHandler.removeCallbacksAndMessages(null);guardian.close(this);
         try {
             if (locationManager != null) locationManager.removeUpdates(listener);
         } catch (Exception error) {

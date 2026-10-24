@@ -80,6 +80,7 @@ public final class TripCancellationController {
     private void perform(String reason) {
         final String gate = "cancel:" + host.tripInternalId();
         if (!DriverRequestGate.enter(gate)) return;
+        host.tripMutationStarted();
         host.tripSetLoading(true);
         if (cancelButton != null) cancelButton.setEnabled(false);
         DriverNetworkExecutor.execute(() -> {
@@ -97,6 +98,8 @@ public final class TripCancellationController {
                     DriverRequestGate.leave(gate);
                     host.tripSetLoading(false);
                     DriverMessageUnreadRepository.clearOrder(host, host.tripOrderId());
+                    try{host.order.put("status","cancelled");}catch(org.json.JSONException ignored){}
+                    host.tripNeedsSync();
                     host.tripClearActiveOrder();
                     PremiumDialogs.builder(host)
                             .setTitle("Order Dibatalkan")

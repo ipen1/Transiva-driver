@@ -131,6 +131,7 @@ final class TripDestinationExtensionController {
     private void send(String action,long requestId) {
         android.location.Location arrival=host.trustedArrivalFix();
         final double latitude=arrival==null?host.lastDriverLat:arrival.getLatitude(),longitude=arrival==null?host.lastDriverLng:arrival.getLongitude();
+        host.tripMutationStarted();host.tripNeedsSync();
         host.setLoading(true);
         DriverNetworkExecutor.execute(() -> {
             try {

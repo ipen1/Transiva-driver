@@ -234,6 +234,7 @@ public class SessionManager {
         synchronized(SessionManager.class){forceLogoutLocked(reason);}
     }
     private void forceLogoutLocked(String reason) {
+        DriverGuardianManager.invalidate(appContext);
         try {
             String fcmToken = prefs.getString("fcm_token", "");
             long fcmSavedAt = prefs.getLong("fcm_token_saved_at", 0L);
@@ -501,6 +502,8 @@ public class SessionManager {
             return;
         }
 
+        if (("current_order_id".equals(key)||"current_order_source".equals(key)) && !safe(value).equals(get(key))
+                || "driver_server_online".equals(key) && !"1".equals(safe(value))) DriverGuardianManager.invalidate(appContext);
         prefs.edit()
                 .putString(key, safe(value))
                 .apply();
@@ -519,6 +522,7 @@ public class SessionManager {
             return;
         }
 
+        if("current_order_id".equals(key)||"current_order_source".equals(key))DriverGuardianManager.invalidate(appContext);
         prefs.edit()
                 .remove(key)
                 .apply();
