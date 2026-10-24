@@ -4,6 +4,10 @@ import com.transiva.app.driver.data.DriverApiClient;
 public class ComfortProbe{
  static int checks;static void ck(boolean ok,String label){if(!ok)throw new AssertionError(label);checks++;System.out.println("PASS "+label);}
  static Location fix(double lat){Location f=new Location("gps");f.setLatitude(lat);f.setLongitude(120);return f;}
+ static void pendingStop(WaypointProbe w)throws Exception{
+  w.order=new JSONObject().put("status","on_delivery").put("ecosystem",new JSONObject().put("waypoints",new JSONArray().put(new JSONObject().put("sequence",2).put("status","pending").put("latitude",-.79).put("longitude",120))));
+  w.tripStateFresh=true;w.tripLastSync=android.os.SystemClock.elapsedRealtime();
+ }
  public static void main(String[] args)throws Exception{
   LinearLayout display=new LinearLayout(),fresh=new LinearLayout(),map=new LinearLayout();View old=new View(),before=new View(),after=new View(),slot=new View();display.addView(old);display.addView(map);fresh.addView(before);fresh.addView(slot);fresh.addView(after);
   TripMapContent.apply(display,fresh,map,slot);
@@ -16,16 +20,22 @@ public class ComfortProbe{
   ck(map.removes==0&&display.getChildCount()==2,"100 order refreshes neither detach nor duplicate the map");
   LinearLayout first=new LinearLayout(),initial=new LinearLayout(),firstMap=new LinearLayout();initial.addView(firstMap);TripMapContent.apply(first,initial,firstMap,null);
   ck(first.getChildAt(0)==firstMap,"first render installs map exactly once");
-  WaypointProbe w=new WaypointProbe();w.markCurrentWaypointArrived(2);ck(w.errors==1&&!w.waypointArrivalBusy,"no fresh arrival proof blocks waypoint mutation");
+  WaypointProbe w=new WaypointProbe();pendingStop(w);w.markCurrentWaypointArrived(2);ck(w.errors==1&&!w.waypointArrivalBusy,"no fresh arrival proof blocks waypoint mutation");
   w.fix=fix(-.79);DriverApiClient.payload=null;w.markCurrentWaypointArrived(2);
   ck(DriverApiClient.payload.getDouble("driver_lat")==-.79&&DriverApiClient.payload.getInt("sequence")==2,"waypoint sends trusted raw GPS with captured stop sequence");
   ck(w.waypointArrivalBusy,"waypoint remains busy until UI response is delivered");JSONObject sent=DriverApiClient.payload;w.markCurrentWaypointArrived(2);ck(DriverApiClient.payload==sent,"repeated tap cannot submit a second waypoint transaction");
   w.id="replacement";w.tripRouteScope.drain();ck(w.renders==0&&!w.waypointArrivalBusy,"late waypoint response cannot repaint another order");
   w.id="one";DriverApiClient.response=new JSONObject().put("ecosystem",new JSONObject().put("waypoints",new JSONArray())).put("smart_waiting",new JSONObject().put("active",true));w.markCurrentWaypointArrived(2);w.tripRouteScope.drain();
   ck(w.renders==1&&w.saves==1&&w.requests==1&&w.order.has("ecosystem")&&w.order.has("smart_waiting"),"successful waypoint applies server state before refreshing route");
-  DriverApiClient.fail=true;w.markCurrentWaypointArrived(2);w.tripRouteScope.drain();ck(w.errors==2&&!w.waypointArrivalBusy&&w.renders==1,"server rejection releases busy guard without fabricating success");DriverApiClient.fail=false;
+  pendingStop(w);DriverApiClient.fail=true;w.markCurrentWaypointArrived(2);w.tripRouteScope.drain();ck(w.errors==2&&!w.waypointArrivalBusy&&w.renders==1,"server rejection releases busy guard without fabricating success");DriverApiClient.fail=false;
   w.tripRouteScope.accept=false;w.markCurrentWaypointArrived(2);ck(!w.waypointArrivalBusy,"rejected task submission releases waypoint busy guard");
   w.tripRouteScope.accept=true;w.markCurrentWaypointArrived(2);w.state="finished";w.tripRouteScope.drain();ck(w.renders==1,"response after order completion cannot mutate its UI state");
+  WaypointProbe guarded=new WaypointProbe();pendingStop(guarded);guarded.fix=fix(-.79);DriverApiClient.payload=null;
+  guarded.tripStateFresh=false;guarded.markCurrentWaypointArrived(2);ck(DriverApiClient.payload==null&&!guarded.waypointArrivalBusy,"unconfirmed trip snapshot cannot submit a waypoint transaction");
+  guarded.tripStateFresh=true;guarded.tripLastSync=android.os.SystemClock.elapsedRealtime()-16001;guarded.markCurrentWaypointArrived(2);ck(DriverApiClient.payload==null&&!guarded.waypointArrivalBusy,"expired snapshot cannot submit a waypoint transaction");
+  pendingStop(guarded);guarded.markCurrentWaypointArrived(1);ck(DriverApiClient.payload==null&&!guarded.tripStateFresh,"outdated stop sequence requests fresh state without submitting the wrong stop");
+  pendingStop(guarded);guarded.updatingStatus=true;guarded.markCurrentWaypointArrived(2);ck(DriverApiClient.payload==null&&!guarded.waypointArrivalBusy,"in-flight main status update blocks a competing waypoint transaction");
+  guarded.updatingStatus=false;guarded.order.put("status","cancelled");guarded.markCurrentWaypointArrived(2);ck(DriverApiClient.payload==null&&!guarded.waypointArrivalBusy,"terminal trip blocks waypoint network mutation");
   NavigationFrameStats frames=new NavigationFrameStats();frames.offer(-1,16666667,0);ck(frames.frames()==0,"invalid frame metric is excluded");for(int i=0;i<95;i++)frames.offer(8000000,16666667,0);for(int i=0;i<5;i++)frames.offer(25000000,16666667,1);
   ck(frames.frames()==100&&frames.percentile95()==9,"frame histogram calculates bounded P95 without per-frame allocations");
   ck(frames.summary(60).contains("5,0%")&&frames.summary(60).contains("5"),"render deadline misses and dropped reports remain visible");
