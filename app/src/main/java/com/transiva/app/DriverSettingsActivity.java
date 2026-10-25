@@ -94,13 +94,25 @@ public class DriverSettingsActivity extends Activity {
         card.setBackground(round("#FFFFFF", 20));
         card.setElevation(dp(2));
 
-        card.addView(toggleRow(
-                "Mode Malam",
-                "Aktifkan tema gelap pada seluruh halaman driver",
-                DriverAppSettings.isDarkMode(this),
-                (button, checked) ->
-                        DriverAppSettings.setDarkMode(this, checked)
-        ));
+        TextView themeChoice = text("", 15, "#0B3A78", true);
+        themeChoice.setPadding(0, dp(10), 0, dp(10));
+        Runnable updateThemeLabel = () -> themeChoice.setText("Tema aplikasi  ›\n" +
+                ("dark".equals(DriverAppSettings.themeMode(this)) ? "Gelap" :
+                "light".equals(DriverAppSettings.themeMode(this)) ? "Terang" : "Ikuti tema HP (otomatis)"));
+        updateThemeLabel.run();
+        themeChoice.setOnClickListener(v -> {
+            String[] modes = {"system", "light", "dark"};
+            String current = DriverAppSettings.themeMode(this);
+            int selected = "dark".equals(current) ? 2 : "light".equals(current) ? 1 : 0;
+            new AlertDialog.Builder(this).setTitle("Tema aplikasi")
+                    .setSingleChoiceItems(new String[]{"Ikuti tema HP (disarankan)", "Terang", "Gelap"}, selected,
+                            (dialog, which) -> {
+                                dialog.dismiss();
+                                DriverAppSettings.setThemeMode(this, modes[which]);
+                                updateThemeLabel.run();
+                            }).setNegativeButton("Batal", null).show();
+        });
+        card.addView(themeChoice);
         root.addView(card);
 
         TextView callSection = text("Bubble & Overlay Opsional", 13, "#0B3A78", true);

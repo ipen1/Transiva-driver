@@ -32,6 +32,8 @@ import java.util.WeakHashMap;
 public final class DriverAppSettings {
     private static final String PREF = "driver_app_settings";
     private static final String KEY_DARK = "dark_mode";
+    private static final String KEY_THEME = "theme_mode";
+    private static boolean systemThemeListenerInstalled;
     private static final String KEY_VIBRATE = "vibration_enabled";
 
     public static final int DARK_PAGE = Color.rgb(9, 22, 37);       // #091625
@@ -43,6 +45,7 @@ public final class DriverAppSettings {
 
     private static final WeakHashMap<View, ViewTreeObserver.OnGlobalLayoutListener>
             INSTALLED_WATCHERS = new WeakHashMap<>();
+    private static final WeakHashMap<Activity, Boolean> RECREATE_PENDING = new WeakHashMap<>();
     private static final WeakHashMap<Activity, Boolean> APPLIED_ACTIVITY_THEMES =
             new WeakHashMap<>();
 
@@ -53,16 +56,44 @@ public final class DriverAppSettings {
                 .getSharedPreferences(PREF, Context.MODE_PRIVATE);
     }
 
-    public static boolean isDarkMode(Context context) {
-        return prefs(context).getBoolean(KEY_DARK, false);
+    public static String themeMode(Context context) {
+        String mode = prefs(context).getString(KEY_THEME, "system");
+        return "light".equals(mode) || "dark".equals(mode) ? mode : "system";
     }
 
+    public static boolean isDarkMode(Context context) {
+        String mode = themeMode(context);
+        if ("dark".equals(mode)) return true;
+        if ("light".equals(mode)) return false;
+        return (context.getResources().getConfiguration().uiMode
+                & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+                == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+    }
+
+    public static void setThemeMode(Context context, String mode) {
+        if (!"light".equals(mode) && !"dark".equals(mode)) mode = "system";
+        prefs(context).edit().putString(KEY_THEME, mode).remove(KEY_DARK).apply();
+        refreshTrackedActivities();
+    }
+
+    /** Compatibility entry point for existing callers selecting an explicit theme. */
     public static void setDarkMode(Context context, boolean enabled) {
-        boolean previous = isDarkMode(context);
-        prefs(context).edit().putBoolean(KEY_DARK, enabled).apply();
-        if (previous != enabled) {
-            refreshTrackedActivities();
-        }
+        setThemeMode(context, enabled ? "dark" : "light");
+    }
+
+    private static void installSystemThemeListener(Context context) {
+        if (systemThemeListenerInstalled) return;
+        systemThemeListenerInstalled = true;
+        Context app = context.getApplicationContext();
+        app.registerComponentCallbacks(new android.content.ComponentCallbacks() {
+            public void onConfigurationChanged(android.content.res.Configuration configuration) {
+                // Wait for Activity resources to receive the new configuration first.
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                    if ("system".equals(themeMode(app))) refreshTrackedActivities();
+                });
+            }
+            public void onLowMemory() { }
+        });
     }
 
     /**
@@ -99,16 +130,22 @@ public final class DriverAppSettings {
 
     /** Terapkan tema ke activity sesudah setContentView(). */
     public static void apply(Activity activity) {
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
+        installSystemThemeListener(activity);
         final boolean dark = isDarkMode(activity);
 
         // Activity driver yang masih berada di back stack telah memiliki warna yang
         // dimutasi langsung. Saat pilihan tema berubah, view lama harus dibuat ulang
         // supaya warna asli mode terang dibangun kembali tanpa menutup aplikasi.
         synchronized (APPLIED_ACTIVITY_THEMES) {
+            if (Boolean.TRUE.equals(RECREATE_PENDING.get(activity))) return;
             Boolean previouslyApplied = APPLIED_ACTIVITY_THEMES.get(activity);
             if (previouslyApplied != null && previouslyApplied != dark) {
                 APPLIED_ACTIVITY_THEMES.put(activity, dark);
-                activity.getWindow().getDecorView().post(activity::recreate);
+                RECREATE_PENDING.put(activity, true);
+                activity.getWindow().getDecorView().post(() -> {
+                    if (!activity.isFinishing() && !activity.isDestroyed()) activity.recreate();
+                });
                 return;
             }
             APPLIED_ACTIVITY_THEMES.put(activity, dark);
@@ -144,7 +181,7 @@ public final class DriverAppSettings {
     public static void release(Activity activity){
         View content=activity.findViewById(android.R.id.content);
         if(content!=null)removeDynamicViewWatcher(content);
-        synchronized(APPLIED_ACTIVITY_THEMES){APPLIED_ACTIVITY_THEMES.remove(activity);}
+        synchronized(APPLIED_ACTIVITY_THEMES){APPLIED_ACTIVITY_THEMES.remove(activity);RECREATE_PENDING.remove(activity);}
     }
 
     /** Bisa dipanggil setelah sebuah dialog atau card dinamis baru dibuat. */

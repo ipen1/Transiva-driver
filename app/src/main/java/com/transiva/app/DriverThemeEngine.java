@@ -69,6 +69,7 @@ public final class DriverThemeEngine {
 
     public static void applyAppWide(android.app.Activity activity) {
         if (activity == null || activity.getWindow() == null) return;
+        DriverAppSettings.apply(activity);
         View decor = activity.getWindow().getDecorView();
         if (decor != null) applyAppWide(decor);
     }
