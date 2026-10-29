@@ -119,15 +119,18 @@ public class DriverReceiptDetailActivity extends Activity {
 
         LinearLayout income = sectionCard();
         double voucherDiscount = num("voucher_discount");
+        double pointDiscount = num("point_discount");
+        double totalDiscount = Math.max(num("total_discount"),voucherDiscount+pointDiscount);
         double promoSubsidy = num("promo_subsidy");
         double protectedGross = num("driver_gross_protected");
         if (protectedGross <= 0) protectedGross = num("ongkir");
         double customerContribution = num("customer_contribution");
 
         income.addView(row("🛵 Ongkir Normal" + modeLabel, rupiah(Math.max(0,num("ongkir")-receipt.optDouble("waiting_fee"))), "#0F172A", false));
-        if (voucherDiscount > 0) {
+        if (totalDiscount > 0) {
             income.addView(row(isFood ? "👤 Total Dibayar Customer" : "👤 Dibayar Customer", rupiah(customerContribution), "#0F172A", false));
-            income.addView(row("🏷️ Voucher Customer", "- " + rupiah(voucherDiscount), "#DC2626", false));
+            if(voucherDiscount>0)income.addView(row("🏷️ Voucher Customer", "- " + rupiah(voucherDiscount), "#DC2626", false));
+            if(pointDiscount>0)income.addView(row("✨ Poin Transiva", "- " + rupiah(pointDiscount), "#DC2626", false));
             income.addView(row("🛡️ Subsidi Transiva", "+ " + rupiah(promoSubsidy), "#16A34A", true));
         }
         if (num("merchant_order") > 0) income.addView(row("🍔 Orderan Merchant", rupiah(num("merchant_order")), "#0F172A", false));
@@ -136,7 +139,7 @@ public class DriverReceiptDetailActivity extends Activity {
         root.addView(income);
         SmartWaitingTextView waiting=new SmartWaitingTextView(this);waiting.bind(receipt.optJSONObject("smart_waiting")!=null?receipt.optJSONObject("smart_waiting"):data.optJSONObject("smart_waiting"));root.addView(waiting);
 
-        if (voucherDiscount > 0) {
+        if (totalDiscount > 0) {
             LinearLayout protectedBox = sectionCard();
             protectedBox.setBackground(roundStroke("#ECFDF5", "#86EFAC", dp(22), 1));
             protectedBox.addView(text("🛡️ Pendapatan Dilindungi", 16, "#047857", true));

@@ -302,7 +302,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         statusBadge = text(statusLabel(status()), 12, "#FFFFFF", true); statusBadge.setGravity(Gravity.CENTER); statusBadge.setPadding(dp(12), dp(7), dp(12), dp(7)); statusBadge.setBackground(gradient("#086BFF", "#2EA2FF", dp(18))); top.addView(statusBadge);
         LinearLayout stats = new LinearLayout(this); stats.setOrientation(LinearLayout.HORIZONTAL); stats.setGravity(Gravity.CENTER); LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1,-2); sp.setMargins(0, dp(14),0,0); h.addView(stats, sp);
         mini(stats, "", "Total Bayar", rupiah(optDouble("price", "fare", "total"))); mini(stats, "", "Jarak Pesanan", one(optDouble("distance_km")) + " KM"); mini(stats, "", "Estimasi Awal", zero(optDouble("duration_minutes")) + " menit");
-        double orderVoucher = optDouble("voucher_discount"); if(orderVoucher > 0){ TextView subsidy=text("🏷 Customer memakai voucher " + rupiah(orderVoucher) + " • biaya ditanggung Transiva • pendapatan Anda tetap dihitung dari ongkir normal.",12,"#047857",true); subsidy.setPadding(dp(12),dp(10),dp(12),dp(10)); h.addView(subsidy); }
+        double orderVoucher = optDouble("total_discount", "voucher_discount"); if(orderVoucher > 0){ TextView subsidy=text("🏷 Customer mendapat potongan " + rupiah(orderVoucher) + " • biaya ditanggung Transiva • pendapatan Anda tetap dihitung dari ongkir normal.",12,"#047857",true); subsidy.setPadding(dp(12),dp(10),dp(12),dp(10)); h.addView(subsidy); }
         distanceInfo = text("📡 Mengukur jarak driver...", 13, "#64748B", false); distanceInfo.setPadding(0, dp(10),0,0); h.addView(distanceInfo);
         tripLiveSummary=text("Menyiapkan rute jalan…",13,"#0878F9",true);tripLiveSummary.setPadding(0,dp(6),0,dp(4));h.addView(tripLiveSummary);
         h.addView(text("Garis berwarna: panduan aktif • abu-abu: rute pesanan",11,"#64748B",false));
@@ -420,7 +420,11 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         rowText(c, "🧾 Total Makanan", rupiah(food.optDouble("food_total", 0)));
         rowText(c, vehicleEmoji() + " Ongkir", rupiah(food.optDouble("delivery_fee", optDouble("price"))));
         double voucherDiscount = food.optDouble("voucher_discount", optDouble("voucher_discount"));
-        if(voucherDiscount > 0){ rowText(c, "🏷 Voucher Customer", "- " + rupiah(voucherDiscount)); rowText(c, "🛡 Ditanggung", "Transiva • pendapatan driver tidak berkurang"); }
+        double pointDiscount=food.optDouble("point_discount",food.optDouble("hemat_discount",optDouble("point_discount")));
+        if(food.optInt("discount_breakdown_version",0)<2)voucherDiscount=Math.max(0,voucherDiscount-pointDiscount);
+        if(voucherDiscount>0)rowText(c,"🏷 Voucher Customer","- "+rupiah(voucherDiscount));
+        if(pointDiscount>0)rowText(c,"✨ Poin Transiva","- "+rupiah(pointDiscount));
+        if(voucherDiscount+pointDiscount>0)rowText(c,"🛡 Ditanggung","Transiva • pendapatan driver tidak berkurang");
         rowText(c, "💳 Pembayaran", first(food.optString("payment_label"), food.optString("payment_method"), "-"));
         rowText(c, "💰 Total Bayar", rupiah(food.optDouble("total", optDouble("price", "total"))));
         TextView menuTitle = text("📦 Menu Pesanan", 16, "#0B3A78", true); menuTitle.setPadding(0, dp(12),0,dp(6)); c.addView(menuTitle);
