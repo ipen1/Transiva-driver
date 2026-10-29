@@ -66,10 +66,12 @@ public final class DriverOrderCompletionDialog {
                 sourceOrder.optDouble("price", 0), sourceOrder.optDouble("total", 0));
         double gross = firstPositive(receipt.optDouble("ongkir", 0),
                 sourceOrder.optDouble("driver_earning", 0), sourceOrder.optDouble("price", 0));
-        double fee = Math.max(0, receipt.optDouble("app_fee", receipt.optDouble("total_potongan", 0)));
-        double earning = firstPositive(receipt.optDouble("driver_net", 0),
-                sourceOrder.optDouble("driver_earning", 0), Math.max(0, gross - fee));
-        if (earning <= 0) earning = Math.max(0, gross - fee);
+        double explicitNet = optionalNumber(receipt, "driver_net");
+        if (Double.isNaN(explicitNet)) explicitNet = optionalNumber(sourceOrder, "driver_net");
+        DriverIncomeSummary.Result income = DriverIncomeSummary.resolve(gross, explicitNet,
+                optionalNumber(receipt, "app_fee"), optionalNumber(receipt, "total_potongan"));
+        double fee = income.fee;
+        double earning = income.net;
 
         Dialog dialog = new Dialog(activity);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -95,12 +97,12 @@ public final class DriverOrderCompletionDialog {
         earningCard.setPadding(dp(activity, 18), dp(activity, 16), dp(activity, 18), dp(activity, 16));
         earningCard.setBackground(round(dark ? DriverThemeTokens.color(activity, "#13283A") : DriverThemeTokens.color(activity, "#F0FDF4"), dp(activity, 20), dark ? DriverThemeTokens.color(activity, "#1E4652") : DriverThemeTokens.color(activity, "#BBF7D0"), dp(activity, 1)));
         earningCard.addView(label(activity, "Pendapatan bersih Anda", 13, muted, false));
-        TextView amount = label(activity, rupiah(earning), 30, green, true);
+        TextView amount = label(activity, income.known ? rupiah(earning) : "Belum tersedia", 30, green, true);
         amount.setPadding(0, dp(activity, 3), 0, dp(activity, 7));
         earningCard.addView(amount);
         earningCard.addView(label(activity, "Pembayaran: " + payment + (totalPaid > 0 ? "  •  Dibayar customer " + rupiah(totalPaid) : ""), 12, muted, false));
-        if (fee > 0) {
-            TextView feeText = label(activity, "Biaya layanan: " + rupiah(fee), 12, muted, false);
+        if (fee > 0 || !income.known) {
+            TextView feeText = label(activity, income.known ? "Biaya layanan: " + rupiah(fee) : "Rincian pendapatan belum tersedia. Periksa riwayat transaksi.", 12, muted, false);
             feeText.setPadding(0, dp(activity, 4), 0, 0);
             earningCard.addView(feeText);
         }
@@ -286,4 +288,10 @@ public final class DriverOrderCompletionDialog {
         if (values != null) for (String s : values) if (s != null && !s.trim().isEmpty() && !"null".equalsIgnoreCase(s.trim())) return s.trim();
         return "";
     }
+    private static double optionalNumber(JSONObject json, String key) {
+        if (json == null || !json.has(key) || json.isNull(key)) return Double.NaN;
+        double n=json.optDouble(key,Double.NaN);
+        return Double.isNaN(n)||Double.isInfinite(n)||n<0 ? Double.NaN : n;
+    }
+
 }

@@ -258,7 +258,7 @@ public class DriverReceiptHistoryActivity extends Activity {
         left.setOrientation(LinearLayout.VERTICAL);
         top.addView(left, new LinearLayout.LayoutParams(0, -2, 1));
         String reference=firstNonEmpty(item.optString("reference"),"TRANSFER");
-        boolean appFee=reference.toUpperCase(Locale.US).startsWith("FEE-ORD");
+        boolean appFee=DriverIncomeSummary.isAppFee(item.optString("type"),reference);
         left.addView(text(appFee?"Biaya layanan aplikasi":reference,15,"#0B3A78",true));
         TextView date = text("🕒 " + firstNonEmpty(item.optString("created_at"), "-"), 12, "#64748B", false);
         date.setPadding(0, dp(4), 0, 0);
@@ -279,7 +279,7 @@ public class DriverReceiptHistoryActivity extends Activity {
         LinearLayout.LayoutParams flp = new LinearLayout.LayoutParams(-1, -2);
         flp.setMargins(0, dp(12), 0, 0);
         c.addView(footer, flp);
-        String badgeText = incoming ? "💰 Transfer Masuk" : "📤 Transfer Keluar";
+        String badgeText = appFee ? "Fee Aplikasi" : (incoming ? "💰 Transfer Masuk" : "📤 Transfer Keluar");
         String fill = incoming ? "#ECFDF5" : "#FFF7F7";
         String stroke = incoming ? "#86EFAC" : "#FECACA";
         String color = incoming ? "#047857" : "#DC2626";
