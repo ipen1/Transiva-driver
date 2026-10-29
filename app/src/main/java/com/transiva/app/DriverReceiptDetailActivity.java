@@ -42,6 +42,7 @@ public class DriverReceiptDetailActivity extends Activity {
     private void loadReceipt() {
         try { data = new JSONObject(getIntent().getStringExtra("receipt_json")); } catch (Exception ignored) {}
         try { receipt = new JSONObject(data != null ? data.optString("receipt_json", "{}") : "{}"); } catch (Exception ignored) {}
+        if(data!=null && data.optJSONObject("receipt_json")!=null)receipt=data.optJSONObject("receipt_json");
         if (receipt == null) receipt = new JSONObject();
     }
 
@@ -77,6 +78,7 @@ public class DriverReceiptDetailActivity extends Activity {
             return;
         }
 
+        if(data.optBoolean("grouped_order_wallet",false)){renderGroupedWallet();return;}
         if ("wallet".equalsIgnoreCase(data.optString("entry_kind"))) {
             renderWalletDetail();
             return;
@@ -96,7 +98,8 @@ public class DriverReceiptDetailActivity extends Activity {
         txt.setOrientation(LinearLayout.VERTICAL);
         header.addView(txt, new LinearLayout.LayoutParams(0, -2, 1));
         txt.addView(text("Detail Nota", 13, "#64748B", true));
-        txt.addView(text(firstNonEmpty(data.optString("order_code"), data.optString("order_id"), "-"), 22, "#0B3A78", true));
+        TextView orderReference=text(firstNonEmpty(data.optString("order_code"), data.optString("order_id"), "-"),14,"#0B3A78",true);
+        orderReference.setTextIsSelectable(true);txt.addView(orderReference,new LinearLayout.LayoutParams(-1,-2));
         root.addView(header);
 
         LinearLayout success = card();
@@ -129,7 +132,7 @@ public class DriverReceiptDetailActivity extends Activity {
         }
         if (num("merchant_order") > 0) income.addView(row("🍔 Orderan Merchant", rupiah(num("merchant_order")), "#0F172A", false));
         income.addView(divider());
-        income.addView(row(voucherDiscount > 0 ? "Pendapatan Driver Terlindungi" : "Total Pendapatan", rupiah(num("total_pendapatan")), "#16A34A", true));
+        income.addView(row("Nilai Order (termasuk merchant)", rupiah(num("total_pendapatan")), "#16A34A", true));
         root.addView(income);
         SmartWaitingTextView waiting=new SmartWaitingTextView(this);waiting.bind(receipt.optJSONObject("smart_waiting")!=null?receipt.optJSONObject("smart_waiting"):data.optJSONObject("smart_waiting"));root.addView(waiting);
 
@@ -151,19 +154,19 @@ public class DriverReceiptDetailActivity extends Activity {
         cut.addView(row("🏪 Fee Gross Up Merchant", "- " + rupiah(num("merchant_grossup_fee")), "#DC2626", false));
         cut.addView(divider());
         cut.addView(row("Total Potongan", "- " + rupiah(num("total_potongan")), "#DC2626", true));
-        if (num("driver_net") > 0) {
+        if (data.has("driver_net") || receipt.has("driver_net") || num("ongkir") > 0) {
             cut.addView(divider());
-            cut.addView(row("Pendapatan Bersih Driver", rupiah(num("driver_net")), "#16A34A", true));
+            cut.addView(row("Pendapatan Bersih Driver", rupiah(data.has("driver_net") || receipt.has("driver_net") ? num("driver_net") : Math.max(0,num("ongkir")-num("total_potongan"))), "#16A34A", true));
         }
         root.addView(cut);
 
         LinearLayout bal = sectionCard();
         bal.setBackground(roundStroke("#F8FBFF", "#B9DBFF", dp(22), 1));
         bal.addView(row("💳 Saldo Sebelum", rupiah(num("saldo_sebelum")), "#0F172A", false));
-        bal.addView(row("💰 Saldo Saat Ini", rupiah(num("saldo_saat_ini")), "#0F172A", false));
         bal.addView(divider());
-        bal.addView(row("Sisa Saldo", rupiah(num("sisa_saldo")), "#0B7CFF", true));
+        bal.addView(row("Saldo setelah order", rupiah(num("sisa_saldo")), "#0B7CFF", true));
         root.addView(bal);
+        addGroupedLedger();
 
         Button back = outlineButton("Kembali");
         back.setOnClickListener(v -> finish());
@@ -177,7 +180,7 @@ public class DriverReceiptDetailActivity extends Activity {
         boolean incoming = "in".equals(direction);
         String walletType = data.optString("type", "").toLowerCase(Locale.US);
         boolean promoSubsidy = "promo_subsidy".equals(walletType);
-        boolean appFeeEntry = "app_fee".equals(walletType);
+        boolean appFeeEntry = DriverIncomeSummary.isAppFee(walletType,data.optString("reference"));
         boolean escrowRelease = "escrow_release".equals(walletType);
         String counterpart = firstNonEmpty(data.optString("counterparty_username"), "Driver tidak diketahui");
         double amount = data.optDouble("amount", 0);
@@ -199,7 +202,7 @@ public class DriverReceiptDetailActivity extends Activity {
         header.addView(txt, new LinearLayout.LayoutParams(0, -2, 1));
         String walletTitle = promoSubsidy ? "Subsidi Voucher Transiva" : (appFeeEntry ? "Fee Aplikasi" : (escrowRelease ? "Pembayaran Customer" : (incoming ? "Transfer Masuk" : "Transfer Keluar")));
         txt.addView(text(walletTitle, 13, "#64748B", true));
-        txt.addView(text(firstNonEmpty(data.optString("reference"), "TRANSFER"), 20, "#0B3A78", true));
+        TextView reference=text(firstNonEmpty(data.optString("reference"),"TRANSFER"),14,"#0B3A78",true);reference.setTextIsSelectable(true);txt.addView(reference,new LinearLayout.LayoutParams(-1,-2));
         root.addView(header);
 
         LinearLayout status = sectionCard();
@@ -225,6 +228,7 @@ public class DriverReceiptDetailActivity extends Activity {
         bal.addView(row("Saldo Sebelum", rupiah(data.optDouble("balance_before", 0)), "#0F172A", false));
         bal.addView(row("Saldo Setelah", rupiah(data.optDouble("balance_after", 0)), "#0B7CFF", true));
         root.addView(bal);
+        addGroupedLedger();
 
         Button back = outlineButton("Kembali");
         back.setOnClickListener(v -> finish());
@@ -246,15 +250,39 @@ public class DriverReceiptDetailActivity extends Activity {
     }
 
     private LinearLayout row(String label, String value, String valueColor, boolean total) {
-        LinearLayout r = new LinearLayout(this);
-        r.setGravity(Gravity.CENTER_VERTICAL);
-        r.setPadding(0, dp(7), 0, dp(7));
-        TextView l = text(label, total ? 16 : 14, "#334155", total);
-        r.addView(l, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView v = text(value, total ? 18 : 15, valueColor, true);
-        v.setGravity(Gravity.RIGHT);
-        r.addView(v, new LinearLayout.LayoutParams(-2, -2));
-        return r;
+        LinearLayout r = new LinearLayout(this);r.setOrientation(LinearLayout.VERTICAL);
+        r.setPadding(0,dp(7),0,dp(7));
+        r.addView(text(label,total?14:12,"#64748B",total),new LinearLayout.LayoutParams(-1,-2));
+        TextView v=text(value,total?18:15,valueColor,true);v.setPadding(0,dp(3),0,0);v.setTextIsSelectable(true);
+        r.addView(v,new LinearLayout.LayoutParams(-1,-2));return r;
+    }
+    private void addGroupedLedger(){
+        org.json.JSONArray ledger=data.optJSONArray("grouped_wallet_entries");
+        if(ledger==null||ledger.length()==0)return;
+        LinearLayout box=sectionCard();box.addView(text("Mutasi saldo dalam order ini",15,"#0B3A78",true));
+        box.addView(text("Rincian berikut sudah digabung pada satu kartu order.",12,"#64748B",false));
+        for(int i=0;i<ledger.length();i++){
+            JSONObject w=ledger.optJSONObject(i);if(w==null)continue;
+            boolean incoming="in".equalsIgnoreCase(w.optString("direction"));
+            String type=w.optString("type"),title="app_fee".equals(type)?"Fee aplikasi & merchant":"promo_subsidy".equals(type)?"Subsidi voucher":"escrow_release".equals(type)?"Pembayaran customer":"Mutasi saldo";
+            box.addView(divider());box.addView(row(title,(incoming?"+ ":"− ")+rupiah(w.optDouble("amount")),incoming?"#16A34A":"#DC2626",false));
+            box.addView(row("Referensi mutasi",w.optString("reference","-"),"#334155",false));
+            box.addView(row("Saldo setelah mutasi",rupiah(w.optDouble("balance_after")),"#0F172A",false));
+        }
+        root.addView(box);
+    }
+    private void renderGroupedWallet(){
+        LinearLayout box=sectionCard();box.addView(text("Mutasi saldo order",20,"#0B3A78",true));
+        box.addView(row("Nomor order lengkap",data.optString("order_reference"),"#0B3A78",false));
+        box.addView(row("Waktu",data.optString("created_at"),"#64748B",false));
+        box.addView(row("Dana masuk saldo","+ "+rupiah(data.optDouble("wallet_credit")),"#16A34A",false));
+        box.addView(row("Fee aplikasi","− "+rupiah(data.optDouble("wallet_fee")),"#DC2626",false));
+        boolean incoming="in".equals(data.optString("direction"));
+        box.addView(row("Perubahan saldo",(incoming?"+ ":"− ")+rupiah(data.optDouble("amount")),incoming?"#16A34A":"#DC2626",true));
+        box.addView(row("Saldo setelah transaksi",rupiah(data.optDouble("balance_after")),"#0B7CFF",true));
+        box.addView(text("Perubahan saldo hanya mencakup dana yang melewati Transiva Pay. Pembayaran tunai diterima langsung dari customer.",12,"#64748B",false));
+        root.addView(box);addGroupedLedger();
+        Button back=outlineButton("Kembali");back.setOnClickListener(v->finish());root.addView(back,new LinearLayout.LayoutParams(-1,dp(52)));
     }
 
     private View divider() {
