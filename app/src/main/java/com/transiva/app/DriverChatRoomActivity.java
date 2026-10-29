@@ -210,6 +210,13 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
                 messagesBox,
                 new ScrollView.LayoutParams(-1, -2));
 
+        root.addView(TraviSivaStickers.launcher(this, () -> {
+            if (readOnly || sending || uploading) return;
+            android.view.inputmethod.InputMethodManager keyboard = (android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
+            if (keyboard != null) keyboard.hideSoftInputFromWindow(input.getWindowToken(), 0);
+            stickerDialog = TraviSivaStickers.show(this, this::sendSticker);
+        }), new LinearLayout.LayoutParams(-1, dp(46)));
+
         inputCard = new LinearLayout(this);
         inputCard.setGravity(Gravity.CENTER_VERTICAL);
         inputCard.setPadding(dp(9), dp(7), dp(9), dp(7));

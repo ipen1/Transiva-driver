@@ -140,7 +140,8 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
 
     protected PendingText addPendingText(String content) {
         LinearLayout wrapper = messageWrapper(true);
-        TextView bubble = text(content, 13, "#FFFFFF", false); bubble.setPadding(dp(13), dp(9), dp(13), dp(9)); bubble.setBackground(gradient("#086BFF", "#2EA2FF", 17)); wrapper.addView(bubble, new LinearLayout.LayoutParams(-2, -2));
+        if (content.startsWith(TraviSivaStickers.PREFIX)) wrapper.addView(TraviSivaStickers.bubble(this, content));
+        else { TextView bubble = text(content, 13, "#FFFFFF", false); bubble.setPadding(dp(13), dp(9), dp(13), dp(9)); bubble.setBackground(gradient("#086BFF", "#2EA2FF", 17)); wrapper.addView(bubble, new LinearLayout.LayoutParams(-2, -2)); }
         TextView state = text("Pending…", 9, "#94A3B8", false); state.setPadding(dp(7), dp(2), dp(7), 0); wrapper.addView(state, new LinearLayout.LayoutParams(-2, -2));
         animateMessage(wrapper, true);
         scrollBottom(); return new PendingText(wrapper, state);
@@ -387,7 +388,9 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
 
         LinearLayout wrapper = messageWrapper(mine);
 
-        if (ChatVoiceNote.isVoice(content)) {
+        if (content.startsWith(TraviSivaStickers.PREFIX)) {
+            wrapper.addView(TraviSivaStickers.bubble(this, content));
+        } else if (ChatVoiceNote.isVoice(content)) {
             wrapper.addView(ChatVoiceNote.createPlayerBubble(this, absoluteVoiceContent(content), mine), new LinearLayout.LayoutParams(-2, -2));
         } else if (content.startsWith(IMAGE_V2_PREFIX)
                 || content.startsWith(IMAGE_PREFIX)) {

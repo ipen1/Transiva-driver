@@ -103,7 +103,7 @@ abstract class DriverChatActivityLayer1 extends Activity {
         String last = item.optString("last_message", "").trim();
         boolean image = isImageMessage(last);
         boolean voice = last.startsWith(VOICE_PREFIX);
-        String preview = voice
+        String preview = last.startsWith(TraviSivaStickers.PREFIX) ? TraviSivaStickers.preview(last) : voice
                 ? (isLastMessageMine(item) ? "Anda mengirim voice note" : customer + " mengirim voice note")
                 : (image
                 ? (isLastMessageMine(item) ? "Anda mengirim foto" : customer + " mengirim foto")

@@ -54,6 +54,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 abstract class DriverChatRoomActivityLayer1 extends Activity {
+    protected android.app.Dialog stickerDialog;
     protected DriverUiScope chatScope;
 
     protected static final String BASE_URL = "https://transiva.my.id/";
@@ -262,16 +263,17 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
         loadRemoteImage(image, url);
     }
 
-    protected void sendMessage() {
+    protected void sendMessage() { sendChatContent(input.getText().toString().trim(), true); }
+    protected void sendSticker(String wire) { sendChatContent(wire, false); }
+    private void sendChatContent(String message, boolean clearDraft) {
         if (readOnly || sending || uploading) return;
 
-        String message = input.getText().toString().trim();
         if (message.isEmpty()) return;
 
         sending = true;
         setSendingEnabled(false);
         final PendingText pending = addPendingText(message);
-        input.setText("");
+        if (clearDraft) input.setText("");
 
         JSONObject body = new JSONObject();
 
@@ -532,6 +534,7 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
 
     @Override
     protected void onPause() {
+        if (stickerDialog != null) { stickerDialog.dismiss(); stickerDialog = null; }
         chatVisible = false;
         readVisibilityGeneration++;
         focusedSinceElapsedMs = 0L;
