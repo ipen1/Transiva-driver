@@ -21,7 +21,7 @@ public final class SmartWaitingTextView extends android.widget.TextView {
         setVisibility(VISIBLE);JSONObject active=state.optJSONObject("active");long fee=state.optLong("total_fee");
         String message="⏱ Smart Waiting";
         if(active!=null){
-            long elapsed=active.optLong("elapsed_seconds")+Math.max(0,(SystemClock.elapsedRealtime()-sampledAt)/1000);
+            long elapsed=active.optLong("elapsed_seconds")+Math.min(30,Math.max(0,(SystemClock.elapsedRealtime()-sampledAt)/1000));
             long free=active.optLong("free_seconds",300), rate=active.optLong("rate_per_minute",500);
             long activeFee=((Math.max(0,elapsed-free)+59)/60)*rate;
             fee=fee-active.optLong("fee")+activeFee;
@@ -32,7 +32,7 @@ public final class SmartWaitingTextView extends android.widget.TextView {
         if(active==null){
             for(int i=0;i<sessions.length();i++){JSONObject s=sessions.optJSONObject(i);if(s!=null)message+="\n"+s.optString("label")+" • "+s.optInt("paid_minutes")+" menit berbayar • "+money(s.optLong("fee"));}
         }
-        if(active==null)message+="\nGratis 5 menit setiap titik; menit tambahan yang dimulai Rp500.";
+        message+="\n100% biaya tunggu untuk driver. Karena waktu Anda berharga.";
         setText(message);
     }
 }

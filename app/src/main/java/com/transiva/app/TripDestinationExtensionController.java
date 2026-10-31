@@ -113,7 +113,7 @@ final class TripDestinationExtensionController {
                     }
                     close();
                     PremiumDialogs.builder(host).setTitle("Konfirmasi pengajuan tujuan")
-                        .setMessage("Tujuan baru: "+r.optString("address")+"\nJarak sebelumnya: "+host.one(r.optDouble("previous_distance_km"))+" km\nJarak tambahan: "+host.one(r.optDouble("distance_km"))+" km\nOngkir tambahan: "+host.rupiah(r.optDouble("extra_fare"))+"\nSeluruh rute: "+host.one(r.optDouble("total_distance_km"))+" km\nTotal baru: "+host.rupiah(r.optDouble("total"))+"\n\nTujuan dan biaya berlaku setelah customer menyetujui. Ongkir dihitung dari total jarak. Tarif minimum hanya berlaku sekali; tambahan bisa Rp 0 selama masih dalam jarak minimum.")
+                        .setMessage("Tujuan baru: "+r.optString("address")+"\nJarak sebelumnya: "+host.one(r.optDouble("previous_distance_km"))+" km\nJarak tambahan: "+host.one(r.optDouble("distance_km"))+" km\nOngkir tambahan: "+host.rupiah(r.optDouble("extra_fare"))+"\nTermasuk biaya singgah: "+host.rupiah(r.optDouble("stop_fee"))+"\nSeluruh rute: "+host.one(r.optDouble("total_distance_km"))+" km\nTotal baru: "+host.rupiah(r.optDouble("total"))+"\n\nTujuan dan biaya berlaku setelah customer menyetujui. Ongkir dihitung dari total jarak, ditambah biaya persinggahan. Tarif minimum hanya berlaku sekali. Biaya singgah 100% untuk driver.")
                         .setNegativeButton("Batal",null).setPositiveButton("Kirim ke customer",(v,w)->send("request",r.optLong("request_id"))).show();
                 });
             } catch(Exception e) {

@@ -555,6 +555,8 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         add(card, serviceExplain, 0, dp(6), 0, 0);
         add(card, text("Penjemputan:\n" + order.pickupAddress,
                 13, "#334155", false), 0, dp(8), 0, 0);
+        JSONObject stopPolicy=order.raw==null?null:order.raw.optJSONObject("stop_pricing");
+        if(stopPolicy!=null)add(card,text("100% biaya singgah & tunggu untuk Anda.\nBiaya singgah "+rupiah(stopPolicy.optInt("total_stop_fee"))+" • Kami menghargai waktu driver.",12,"#047857",true),0,dp(8),0,0);
         JSONObject ecoPayload = order.raw == null ? null : order.raw.optJSONObject("ecosystem");
         JSONArray routeStops = ecoPayload == null ? null : ecoPayload.optJSONArray("waypoints");
         if (routeStops != null) {
