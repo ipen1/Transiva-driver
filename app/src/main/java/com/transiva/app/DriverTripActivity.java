@@ -262,8 +262,10 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         if(stopPolicy!=null){
             LinearLayout appreciation=card();appreciation.setPadding(dp(14),dp(12),dp(14),dp(12));
             appreciation.addView(text("WAKTU ANDA BERHARGA",11,"#A17A2B",true));
-            appreciation.addView(text("100% biaya singgah & tunggu untuk Anda",14,"#0B477D",true));
-            appreciation.addView(text("Kami menghargai setiap waktu dan perjalanan Anda.\nBiaya singgah Rp"+java.text.NumberFormat.getNumberInstance(new Locale("id","ID")).format(stopPolicy.optInt("total_stop_fee"))+" • tanpa potongan aplikasi",12,"#64748B",false));
+            appreciation.addView(text("100% biaya tunggu untuk Anda",14,"#0B477D",true));
+            appreciation.addView(text("Kami menghargai setiap waktu dan perjalanan Anda.\nBiaya singgah Rp"+java.text.NumberFormat.getNumberInstance(new Locale("id","ID")).format(stopPolicy.optInt("total_stop_fee"))+" • mengikuti potongan aplikasi",12,"#64748B",false));
+            JSONObject commission=order.optJSONObject("commission");
+            if(commission!=null)appreciation.addView(text("Potongan ongkir & singgah Rp"+java.text.NumberFormat.getNumberInstance(new Locale("id","ID")).format(commission.optInt("app_fee"))+" • Bersih Rp"+java.text.NumberFormat.getNumberInstance(new Locale("id","ID")).format(commission.optInt("driver_net"))+" + biaya tunggu",12,"#64748B",false));
             add(appreciation,0,dp(8),0,dp(8));
         }
         waitingView=new SmartWaitingTextView(this);waitingView.bind(order.optJSONObject("smart_waiting"));root.addView(waitingView,new LinearLayout.LayoutParams(-1,-2));

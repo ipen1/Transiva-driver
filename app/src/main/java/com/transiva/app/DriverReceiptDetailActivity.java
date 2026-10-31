@@ -127,7 +127,7 @@ public class DriverReceiptDetailActivity extends Activity {
         double customerContribution = num("customer_contribution");
 
         income.addView(row("🛵 Ongkir Normal" + modeLabel, rupiah(Math.max(0,num("ongkir")-num("waiting_fee")-num("stop_fee"))), "#0F172A", false));
-        if(num("stop_fee")>0)income.addView(row("Biaya persinggahan • 100% driver",rupiah(num("stop_fee")),"#047857",true));
+        if(num("stop_fee")>0)income.addView(row("Biaya persinggahan",rupiah(num("stop_fee")),"#0F172A",false));
         if(num("waiting_fee")>0)income.addView(row("Biaya tunggu • 100% driver",rupiah(num("waiting_fee")),"#047857",true));
         if (totalDiscount > 0) {
             income.addView(row(isFood ? "👤 Total Dibayar Customer" : "👤 Dibayar Customer", rupiah(customerContribution), "#0F172A", false));
@@ -141,8 +141,6 @@ public class DriverReceiptDetailActivity extends Activity {
         root.addView(income);
         SmartWaitingTextView waiting=new SmartWaitingTextView(this);waiting.bind(receipt.optJSONObject("smart_waiting")!=null?receipt.optJSONObject("smart_waiting"):data.optJSONObject("smart_waiting"));root.addView(waiting);
 
-        if(num("stop_fee")>0)income.addView(row("Biaya persinggahan • 100% driver",rupiah(num("stop_fee")),"#047857",true));
-        if(num("waiting_fee")>0)income.addView(row("Biaya tunggu • 100% driver",rupiah(num("waiting_fee")),"#047857",true));
         if (totalDiscount > 0) {
             LinearLayout protectedBox = sectionCard();
             protectedBox.setBackground(roundStroke("#ECFDF5", "#86EFAC", dp(22), 1));
@@ -157,8 +155,11 @@ public class DriverReceiptDetailActivity extends Activity {
 
         LinearLayout cut = sectionCard();
         cut.setBackground(roundStroke("#FFF7F7", "#FECACA", dp(22), 1));
-        cut.addView(row("⚙️ Fee Aplikasi dari Ongkir" + modeLabel, "- " + rupiah(num("app_fee")), "#DC2626", false));
+        cut.addView(row("⚙️ Potongan ongkir & singgah" + modeLabel, "- " + rupiah(num("app_fee")), "#DC2626", false));
         cut.addView(row("🏪 Fee Gross Up Merchant", "- " + rupiah(num("merchant_grossup_fee")), "#DC2626", false));
+        JSONObject feeRule=receipt.optJSONObject("fee_rule");if(feeRule==null)feeRule=data.optJSONObject("fee_rule");
+        if(feeRule!=null)cut.addView(row("Tarif potongan aplikasi","percent".equals(feeRule.optString("fee_type"))?java.text.NumberFormat.getNumberInstance(new java.util.Locale("id","ID")).format(feeRule.optDouble("fee_value"))+"%":rupiah(feeRule.optDouble("fee_value")),"#64748B",false));
+        if(num("commission_base")>0)cut.addView(row("Dasar potongan (tanpa tunggu)",rupiah(num("commission_base")),"#64748B",false));
         cut.addView(divider());
         cut.addView(row("Total Potongan", "- " + rupiah(num("total_potongan")), "#DC2626", true));
         if (data.has("driver_net") || receipt.has("driver_net") || num("ongkir") > 0) {

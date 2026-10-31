@@ -556,7 +556,9 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         add(card, text("Penjemputan:\n" + order.pickupAddress,
                 13, "#334155", false), 0, dp(8), 0, 0);
         JSONObject stopPolicy=order.raw==null?null:order.raw.optJSONObject("stop_pricing");
-        if(stopPolicy!=null)add(card,text("100% biaya singgah & tunggu untuk Anda.\nBiaya singgah "+rupiah(stopPolicy.optInt("total_stop_fee"))+" • Kami menghargai waktu driver.",12,"#047857",true),0,dp(8),0,0);
+        if(stopPolicy!=null)add(card,text("100% biaya tunggu untuk Anda.\nBiaya singgah "+rupiah(stopPolicy.optInt("total_stop_fee"))+" • Ongkir & singgah mengikuti potongan aplikasi.",12,"#047857",true),0,dp(8),0,0);
+        JSONObject feePreview=order.raw==null?null:order.raw.optJSONObject("commission");
+        if(feePreview!=null)add(card,text("Potongan aplikasi "+rupiah(feePreview.optInt("app_fee"))+" • Bersih "+rupiah(feePreview.optInt("driver_net"))+" + biaya tunggu",12,"#64748B",false),0,dp(4),0,0);
         JSONObject ecoPayload = order.raw == null ? null : order.raw.optJSONObject("ecosystem");
         JSONArray routeStops = ecoPayload == null ? null : ecoPayload.optJSONArray("waypoints");
         if (routeStops != null) {
@@ -573,7 +575,7 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         add(card, text("Tujuan akhir:\n" + order.destinationAddress,
                 13, "#334155", false), 0, dp(6), 0, 0);
 
-        String meta = "Pendapatan " + rupiah(order.driverEarning) + " • " + ("balance".equalsIgnoreCase(order.paymentMethod) ? "💳 TransPay" : "💵 Tunai");
+        String meta = (feePreview!=null?"Ongkir + singgah ":"Pendapatan ") + rupiah(order.driverEarning) + " • " + ("balance".equalsIgnoreCase(order.paymentMethod) ? "💳 TransPay" : "💵 Tunai");
         if (!clean(order.pickupDistanceText).isEmpty()) {
             meta += " • " + order.pickupDistanceText;
         }
