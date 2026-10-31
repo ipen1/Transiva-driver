@@ -514,51 +514,36 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         return "Jemput penumpang • layanan motor Transiva";
     }
 
+    private void addOrderPoint(LinearLayout card,String label,String address,String color) {
+        LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.VERTICAL);
+        row.addView(text(label,10,color,true));TextView value=text(address,13,"#334155",false);
+        value.setMaxLines(2);value.setEllipsize(android.text.TextUtils.TruncateAt.END);row.addView(value);
+        row.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle(label).setMessage(address).setPositiveButton("Tutup",null).show());
+        add(card,row,0,dp(7),0,0);
+    }
     protected View orderCard(DriverOrder order, boolean active) {
         LinearLayout card = card();
         boolean queued = !active && order.raw != null && order.raw.optBoolean("queued", false);
         int queuePosition = order.raw == null ? 0 : order.raw.optInt("queue_position", 0);
         int concurrentSlot = order.raw == null ? 0 : order.raw.optInt("concurrent_slot", 0);
         String cardTitle = active ? (concurrentSlot > 0 ? "Order Aktif " + concurrentSlot + "/2" : "Order Aktif") : (queued ? "Order Antrean" : "Tawaran");
-        card.addView(text(
-                cardTitle + " #" + order.id,
-                17, "#0B3A78", true));
+        String serviceLabel = aiServiceLabel(order);
+        card.addView(DriverKdiUi.header(this,serviceIcon(serviceLabel)+"  "+serviceLabel,cardTitle+" #"+order.id));
         if (queued) {
             add(card, text("Sudah diterima • antrean " + Math.max(1, queuePosition) + ". Selesaikan order aktif terlebih dahulu.",
                     13, "#B45309", true), 0, dp(6), 0, 0);
         }
-        String serviceLabel = aiServiceLabel(order);
-        String serviceIcon = serviceIcon(serviceLabel);
-        TextView serviceBadge = text(serviceIcon + "  " + serviceLabel, 15, "#0B7CFF", true);
-        serviceBadge.setPadding(dp(12), dp(8), dp(12), dp(8));
-        serviceBadge.setBackground(roundStroke("#EFF6FF", "#BFDBFE", dp(16), 1));
-        add(card, serviceBadge, 0, dp(7), 0, 0);
-
         JSONObject identityRaw = order.raw == null ? new JSONObject() : order.raw;
         boolean familyOrder = "family".equalsIgnoreCase(identityRaw.optString("account_type", "personal"));
         String customerName = firstNonEmpty(identityRaw.optString("customer_name", ""), "Customer");
         String familyName = firstNonEmpty(identityRaw.optString("family_name", ""), customerName);
         String familyRelation = firstNonEmpty(identityRaw.optString("family_relationship", ""), "Keluarga");
-        String identityTitle = familyOrder ? "👨‍👩‍👧 Transiva Family" : "👤 Akun Pribadi";
         String identityName = familyOrder ? (familyName + " • " + familyRelation) : customerName;
-        LinearLayout identity = new LinearLayout(this);
-        identity.setOrientation(LinearLayout.VERTICAL);
-        identity.setPadding(dp(12), dp(10), dp(12), dp(10));
-        identity.setBackground(roundStroke(familyOrder ? "#F5F3FF" : "#F8FAFC", familyOrder ? "#DDD6FE" : "#E2E8F0", dp(14), 1));
-        identity.addView(text(identityTitle, 12, familyOrder ? "#6D28D9" : "#475569", true));
-        TextView identityPerson = text(identityName, 16, "#0F172A", true);
-        identityPerson.setPadding(0, dp(3), 0, 0);
-        identity.addView(identityPerson);
-        add(card, identity, 0, dp(8), 0, 0);
-
-        TextView serviceExplain = text(serviceSubtitle(serviceLabel), 12, "#64748B", false);
-        add(card, serviceExplain, 0, dp(6), 0, 0);
-        add(card, text("Penjemputan:\n" + order.pickupAddress,
-                13, "#334155", false), 0, dp(8), 0, 0);
-        JSONObject stopPolicy=order.raw==null?null:order.raw.optJSONObject("stop_pricing");
-        if(stopPolicy!=null)add(card,text("100% biaya tunggu untuk Anda.\nBiaya singgah "+rupiah(stopPolicy.optInt("total_stop_fee"))+" • Ongkir & singgah mengikuti potongan aplikasi.",12,"#047857",true),0,dp(8),0,0);
+        TextView identityPerson=text(identityName+" · "+(familyOrder?"Transiva Family":"Akun Pribadi"),13,"#0B3A78",true);
+        identityPerson.setSingleLine(true);identityPerson.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        add(card,identityPerson,0,dp(10),0,dp(2));
+        addOrderPoint(card,"Jemput",order.pickupAddress,"#128568");
         JSONObject feePreview=order.raw==null?null:order.raw.optJSONObject("commission");
-        if(feePreview!=null)add(card,text("Potongan aplikasi "+rupiah(feePreview.optInt("app_fee"))+" • Bersih "+rupiah(feePreview.optInt("driver_net"))+" + biaya tunggu",12,"#64748B",false),0,dp(4),0,0);
         JSONObject ecoPayload = order.raw == null ? null : order.raw.optJSONObject("ecosystem");
         JSONArray routeStops = ecoPayload == null ? null : ecoPayload.optJSONArray("waypoints");
         if (routeStops != null) {
@@ -568,34 +553,26 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
                 int seq = stop.optInt("sequence", i + 1);
                 String address = firstNonEmpty(stop.optString("address", ""), "Titik Stop " + seq);
                 String note = firstNonEmpty(stop.optString("note", ""));
-                String stopLine = "Stop " + seq + ":\n" + address + (note.isEmpty() ? "" : "\n📝 " + note);
-                add(card, text(stopLine, 13, "#B45309", true), 0, dp(6), 0, 0);
+                addOrderPoint(card,"Singgah "+seq,address+(note.isEmpty()?"":"\nCatatan: "+note),"#B45309");
             }
         }
-        add(card, text("Tujuan akhir:\n" + order.destinationAddress,
-                13, "#334155", false), 0, dp(6), 0, 0);
-
-        String meta = (feePreview!=null?"Ongkir + singgah ":"Pendapatan ") + rupiah(order.driverEarning) + " • " + ("balance".equalsIgnoreCase(order.paymentMethod) ? "💳 TransPay" : "💵 Tunai");
-        if (!clean(order.pickupDistanceText).isEmpty()) {
-            meta += " • " + order.pickupDistanceText;
-        }
-        add(card, text(meta, 13, "#0F172A", true), 0, dp(8), 0, 0);
-
-        if (!active) {
-            double tripKm = order.raw == null ? 0d : Math.max(order.raw.optDouble("distance_km", 0d), order.raw.optDouble("trip_distance_km", 0d));
-            double pickupKm = order.raw == null ? 0d : Math.max(order.raw.optDouble("pickup_distance_km", 0d), order.raw.optDouble("driver_distance_km", 0d));
-            double basisKm = tripKm > 0d ? tripKm : pickupKm;
-            String radar = "📡 Smart Radar";
-            if (pickupKm > 0d) radar += " • " + String.format(Locale.US, "%.1f km ke pickup", pickupKm);
-            if (tripKm > 0d) radar += " • trip " + String.format(Locale.US, "%.1f km", tripKm);
-            if (basisKm > 0d && order.driverEarning > 0) radar += " • ±" + rupiah(Math.round(order.driverEarning / basisKm)) + "/km";
-            add(card, text(radar, 12, "#0B7CFF", true), 0, dp(7), 0, 0);
-        }
+        addOrderPoint(card,"Tujuan",order.destinationAddress,"#0B7CFF");
+        double tripKm=order.raw==null?Double.NaN:order.raw.optDouble("distance_km",Double.NaN);
+        if(Double.isNaN(tripKm)&&order.raw!=null)tripKm=order.raw.optDouble("trip_distance_km",Double.NaN);
+        double pickupKm=order.raw==null?Double.NaN:order.raw.optDouble("pickup_distance_km",Double.NaN);
+        if(Double.isNaN(pickupKm)&&order.raw!=null)pickupKm=order.raw.optDouble("driver_distance_km",Double.NaN);
+        String pickupDistance=DriverDistanceText.kilometers(pickupKm);
+        if(!Double.isNaN(pickupKm)&&!Double.isInfinite(pickupKm)&&pickupKm>=0)pickupDistance="± "+pickupDistance;
+        add(card,DriverKdiUi.distances(this,pickupDistance,DriverDistanceText.kilometers(tripKm)),0,dp(9),0,0);
+        String payment="balance".equalsIgnoreCase(order.paymentMethod)?"TransPay":"Tunai";
+        add(card,text("Tarif order "+rupiah(order.driverEarning)+" · "+payment,13,"#0B3A78",true),0,dp(9),0,0);
+        if(feePreview!=null)add(card,text("Potongan "+rupiah(feePreview.optInt("app_fee"))+" · Bersih "+rupiah(feePreview.optInt("driver_net")),12,"#64748B",false),0,dp(3),0,0);
+        add(card,DriverKdiUi.appreciation(this),0,0,0,0);
 
         String customerNote = customerNote(order.raw);
         if (!customerNote.isEmpty()) {
             add(card, text("📝 Catatan customer: " + customerNote,
-                    13, "#7C2D12", true), 0, dp(7), 0, 0);
+                    12, "#7C2D12", false), 0, dp(7), 0, 0);
         }
 
         if (isFoodOrder(order)) {
