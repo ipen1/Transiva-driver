@@ -352,7 +352,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
                         DriverMessageUnreadRepository.clearOrder(this, finishedOrderId);
                         clearActiveOrder();
                         DriverOrderCompletionDialog.show(this, r, order,
-                                (rating, review, callback) -> DriverNetworkExecutor.execute(() -> {
+                                (rating, review, reasons, callback) -> DriverNetworkExecutor.execute(() -> {
                                     try {
                                         JSONObject ratingPayload = new JSONObject();
                                         ratingPayload.put("source", finishedSource);
@@ -360,6 +360,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
                                         ratingPayload.put("order_id", finishedOrderId);
                                         ratingPayload.put("rating", rating);
                                         ratingPayload.put("review", review);
+                                        ratingPayload.put("reasons",reasons);
                                         JSONObject ratingResponse = postJson(BASE_URL + "driver_rate_customer.php", ratingPayload);
                                         callback.complete(ratingResponse.optBoolean("success", false), first(ratingResponse.optString("message"), "Penilaian customer tersimpan."));
                                     } catch (Exception ex) {

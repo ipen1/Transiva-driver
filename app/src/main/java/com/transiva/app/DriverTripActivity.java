@@ -423,6 +423,9 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     }
 
     protected void addFoodOrNoteCard(){
+        JSONObject shoppingPlan=DriverShoppingPlanView.plan(order);
+        if(shoppingPlan!=null){add(DriverShoppingPlanView.view(this,shoppingPlan,false),0,0,0,dp(10));return;}
+
         JSONObject food = parseFoodNote();
         if(food == null){ addPlainNoteCard(); return; }
         LinearLayout c = card(); c.setPadding(dp(16), dp(13), dp(16), dp(13));

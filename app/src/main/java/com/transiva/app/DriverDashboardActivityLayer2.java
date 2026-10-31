@@ -542,6 +542,9 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         TextView identityPerson=text(identityName+" · "+(familyOrder?"Transiva Family":"Akun Pribadi"),13,"#0B3A78",true);
         identityPerson.setSingleLine(true);identityPerson.setEllipsize(android.text.TextUtils.TruncateAt.END);
         add(card,identityPerson,0,dp(10),0,dp(2));
+        JSONObject rep=identityRaw.optJSONObject("customer_reputation");
+        if(rep!=null){int count=rep.optInt("rating_count");String reputation=rep.optBoolean("unavailable")?"Rating belum tersedia":rep.optBoolean("is_new",true)?"Customer baru · "+count+" penilaian":"⭐ "+String.format(new Locale("id","ID"),"%.1f",rep.optDouble("average_rating"))+" · "+count+" penilaian";if(rep.optBoolean("is_exemplary"))reputation+=" · Customer Teladan";add(card,text(reputation,12,"#A17A2B",true),0,dp(2),0,dp(4));}
+
         addOrderPoint(card,"Jemput",order.pickupAddress,"#128568");
         JSONObject feePreview=order.raw==null?null:order.raw.optJSONObject("commission");
         JSONObject ecoPayload = order.raw == null ? null : order.raw.optJSONObject("ecosystem");
@@ -553,7 +556,7 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
                 int seq = stop.optInt("sequence", i + 1);
                 String address = firstNonEmpty(stop.optString("address", ""), "Titik Stop " + seq);
                 String note = firstNonEmpty(stop.optString("note", ""));
-                addOrderPoint(card,"Singgah "+seq,address+(note.isEmpty()?"":"\nCatatan: "+note),"#B45309");
+                addOrderPoint(card,"Singgah "+seq,address+(note.isEmpty()||DriverShoppingPlanView.plan(order.raw)!=null?"":"\nCatatan: "+note),"#B45309");
             }
         }
         addOrderPoint(card,"Tujuan",order.destinationAddress,"#0B7CFF");
@@ -569,7 +572,9 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         if(feePreview!=null)add(card,text("Potongan "+rupiah(feePreview.optInt("app_fee"))+" · Bersih "+rupiah(feePreview.optInt("driver_net")),12,"#64748B",false),0,dp(3),0,0);
         add(card,DriverKdiUi.appreciation(this),0,0,0,0);
 
-        String customerNote = customerNote(order.raw);
+        JSONObject shoppingPlan=DriverShoppingPlanView.plan(order.raw);
+        if(shoppingPlan!=null)add(card,DriverShoppingPlanView.view(this,shoppingPlan,true),0,dp(8),0,0);
+        String customerNote = shoppingPlan==null?customerNote(order.raw):"";
         if (!customerNote.isEmpty()) {
             add(card, text("📝 Catatan customer: " + customerNote,
                     12, "#7C2D12", false), 0, dp(7), 0, 0);

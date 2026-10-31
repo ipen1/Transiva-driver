@@ -25,7 +25,7 @@ import java.util.Locale;
 /** Premium post-trip summary + customer rating sheet. */
 public final class DriverOrderCompletionDialog {
     public interface SaveHandler {
-        void save(int rating, String review, SaveCallback callback);
+        void save(int rating, String review, org.json.JSONArray reasons, SaveCallback callback);
     }
     public interface SaveCallback {
         void complete(boolean success, String message);
@@ -140,6 +140,12 @@ public final class DriverOrderCompletionDialog {
         TextView customerLabel = label(activity, customer + " · Penilaian opsional", 12, muted, false);
         card.addView(customerLabel);
 
+        LinearLayout reasonsBox=new LinearLayout(activity);reasonsBox.setOrientation(LinearLayout.VERTICAL);reasonsBox.setVisibility(View.GONE);
+        String[] reasonCodes={"pickup_unclear","unreachable","long_wait","payment_issue","impolite","other"};
+        String[] reasonNames={"Titik jemput kurang jelas","Sulit dihubungi","Menunggu terlalu lama","Kendala pembayaran","Perilaku kurang sopan","Masalah lain"};
+        final android.widget.CheckBox[] reasonChecks=new android.widget.CheckBox[reasonCodes.length];
+        TextView reasonsTitle=label(activity,"Alasan (opsional, hanya terlihat admin)",11,muted,false);reasonsBox.addView(reasonsTitle);
+        for(int i=0;i<reasonCodes.length;i++){android.widget.CheckBox cb=new android.widget.CheckBox(activity);cb.setText(reasonNames[i]);cb.setTextSize(12);cb.setTextColor(text);cb.setMinHeight(dp(activity,44));reasonChecks[i]=cb;reasonsBox.addView(cb);}
         LinearLayout stars = new LinearLayout(activity);
         stars.setOrientation(LinearLayout.HORIZONTAL);
         stars.setGravity(Gravity.CENTER);
@@ -153,6 +159,7 @@ public final class DriverOrderCompletionDialog {
             star.setContentDescription(value + " bintang");
             star.setOnClickListener(v -> {
                 selected[0] = value;
+                reasonsBox.setVisibility(value<=3?View.VISIBLE:View.GONE);if(value>3)for(android.widget.CheckBox cb:reasonChecks)cb.setChecked(false);
                 for (int j = 0; j < starViews.length; j++) {
                     if (starViews[j] != null) starViews[j].setTextColor(j < value ? gold : (dark ? DriverThemeTokens.color(activity, "#425367") : DriverThemeTokens.color(activity, "#CBD5E1")));
                 }
@@ -160,7 +167,7 @@ public final class DriverOrderCompletionDialog {
             starViews[i] = star;
             stars.addView(star, new LinearLayout.LayoutParams(0, dp(activity, 44), 1f));
         }
-        card.addView(stars);
+        card.addView(stars);card.addView(reasonsBox);
 
         EditText review = new EditText(activity);
         review.setHint("Tulis catatan singkat (opsional)");
@@ -215,7 +222,8 @@ public final class DriverOrderCompletionDialog {
                 finishDialog.run();
                 return;
             }
-            saveHandler.save(selected[0], finalNote, (success, message) -> activity.runOnUiThread(() -> {
+            org.json.JSONArray reasonPayload=new org.json.JSONArray();for(int i=0;i<reasonCodes.length;i++)if(reasonChecks[i].isChecked())reasonPayload.put(reasonCodes[i]);
+            saveHandler.save(selected[0], finalNote, reasonPayload, (success, message) -> activity.runOnUiThread(() -> {
                 if (success) {
                     status.setTextColor(green);
                     status.setText(first(message, "Penilaian customer tersimpan."));
