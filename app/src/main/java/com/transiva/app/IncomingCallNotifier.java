@@ -77,7 +77,8 @@ final class IncomingCallNotifier {
     static Intent callIntent(Context c,Intent source){
         return new Intent(c,WebRtcCallActivity.class).putExtras(source).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
     }
-    static Notification build(Context c,Intent source,boolean sound){
+    static Notification build(Context c,Intent source,boolean sound){return build(c,source,sound,false);}
+    private static Notification build(Context c,Intent source,boolean sound,boolean compatibility){
         source=new Intent(source).putExtra("incoming_system_alert",sound);
         String call=source.getStringExtra("call_id");int number=id(call),flags=PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE;
         PendingIntent view=PendingIntent.getActivity(c,number,callIntent(c,source),flags);
@@ -86,6 +87,12 @@ final class IncomingCallNotifier {
         for(String key:new String[]{"push_outbox_id","push_event","push_transport","target_session_hash","target_user_id","target_app_scope"})if(source.hasExtra(key))reject.putExtra(key,source.getStringExtra(key));
         PendingIntent decline=PendingIntent.getBroadcast(c,number+2,reject,flags);
         String name=source.getStringExtra("caller_name");if(name==null||name.trim().isEmpty())name="Transiva";
+        if(compatibility){
+            Notification notification=plain(c,source,name,view,sound)
+                .addAction(android.R.drawable.ic_menu_close_clear_cancel,"Tolak",decline)
+                .addAction(android.R.drawable.sym_action_call,"Terima",accept).build();
+            if(sound)notification.flags|=Notification.FLAG_INSISTENT;return notification;
+        }
         NotificationCompat.Builder b=base(c,source,sound,name,view);
         Notification notification;
         try{
@@ -93,7 +100,7 @@ final class IncomingCallNotifier {
             notification=b.build();
         }catch(RuntimeException unavailable){
             // Rebuild without CallStyle: some devices fail only when build() runs.
-            b=base(c,source,sound,name,view);
+            b=plain(c,source,name,view,sound);
             b.addAction(android.R.drawable.ic_menu_close_clear_cancel,"Tolak",decline).addAction(android.R.drawable.sym_action_call,"Terima",accept);
             notification=b.build();
         }
@@ -115,16 +122,48 @@ final class IncomingCallNotifier {
         if(fullscreen)b.setFullScreenIntent(view,true);
         return b;
     }
+    /** Plain notification works even when the OS refuses CallStyle at notify(), not build(). */
+    private static NotificationCompat.Builder plain(Context c,Intent source,String name,PendingIntent view,boolean sound){
+        NotificationCompat.Builder b=new NotificationCompat.Builder(c,sound?AUDIBLE:SILENT)
+            .setSmallIcon(android.R.drawable.sym_action_call).setContentTitle(name)
+            .setContentText("video".equals(source.getStringExtra("call_type"))?"Video call masuk":"Panggilan suara masuk")
+            .setCategory(NotificationCompat.CATEGORY_CALL).setPriority(NotificationCompat.PRIORITY_MAX)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC).setOngoing(true).setAutoCancel(false)
+            .setOnlyAlertOnce(true).setTimeoutAfter(Math.max(1,remaining(source))).setContentIntent(view);
+        if(sound)b.setDefaults(NotificationCompat.DEFAULT_SOUND|(DriverAppSettings.isVibrationEnabled(c)?NotificationCompat.DEFAULT_VIBRATE:0));else b.setSilent(true);
+        return b;
+    }
+    private static boolean currentAlert(Context c,Intent i){
+        return remaining(i)>0&&validOwner(c,i)&&!IncomingCallAlertManager.isResolved(i.getStringExtra("call_id"));
+    }
+    private static void notifyOnce(Context c,Intent i,boolean sound,boolean compatibility){
+        // Permission can change after admission; keep this check beside notify for Lint too.
+        if(Build.VERSION.SDK_INT>=33&&ContextCompat.checkSelfPermission(c,Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
+            throw new SecurityException("Notification permission unavailable");
+        NotificationManagerCompat.from(c).notify(id(i.getStringExtra("call_id")),build(c,i,sound,compatibility));
+    }
+    private static String failureReason(String prefix,RuntimeException failure){
+        String name=failure.getClass().getSimpleName().toUpperCase(java.util.Locale.US).replaceAll("[^A-Z0-9_]","");
+        String code=prefix+name;return code.length()>64?code.substring(0,64):code;
+    }
     static boolean post(Context c,Intent i,boolean sound){
-        if(remaining(i)<=0||!validOwner(c,i)||IncomingCallAlertManager.isResolved(i.getStringExtra("call_id")))return false;
-        try{channels(c);if(!allowed(c,sound?AUDIBLE:SILENT)){CallDeliveryTrace.record(c,i,"NOTIFICATION_BLOCKED",CallDeliveryTrace.notificationBlockReason(c,sound?AUDIBLE:SILENT));return false;}
-            // Keep this check at the notify call site so Lint can verify the permission.
-            if(Build.VERSION.SDK_INT>=33&&ContextCompat.checkSelfPermission(c,Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)return false;
-            NotificationManagerCompat.from(c).notify(id(i.getStringExtra("call_id")),build(c,i,sound));CallDeliveryTrace.record(c,i,"NOTIFICATION_POSTED",sound?"SYSTEM_SOUND_REQUESTED":"SERVICE_SOUND_OWNER");return true;
-        }catch(SecurityException denied){
-            // Permission can be revoked after the check, before notify reaches the system.
-            CallDeliveryTrace.record(c,i,"NOTIFICATION_FAILED","PERMISSION_CHANGED");android.util.Log.w("TransivaIncoming","Call notification permission denied",denied);return false;
-        }catch(RuntimeException failure){CallDeliveryTrace.record(c,i,"NOTIFICATION_FAILED","NOTIFY_EXCEPTION");android.util.Log.w("TransivaIncoming","Call notification failed",failure);return false;}
+        if(!currentAlert(c,i))return false;
+        try{
+            channels(c);if(!allowed(c,sound?AUDIBLE:SILENT)){CallDeliveryTrace.record(c,i,"NOTIFICATION_BLOCKED",CallDeliveryTrace.notificationBlockReason(c,sound?AUDIBLE:SILENT));return false;}
+            try{
+                notifyOnce(c,i,sound,false);
+                CallDeliveryTrace.record(c,i,"NOTIFICATION_POSTED",sound?"SYSTEM_SOUND_REQUESTED":"SERVICE_SOUND_OWNER");return true;
+            }catch(SecurityException denied){throw denied;}
+            catch(RuntimeException richRejected){
+                CallDeliveryTrace.record(c,i,"NOTIFICATION_FAILED",failureReason("PRIMARY_",richRejected));
+                android.util.Log.w("TransivaIncoming","Rich call notification rejected; trying plain call notification",richRejected);
+            }
+            if(!currentAlert(c,i))return false;
+            if(!allowed(c,sound?AUDIBLE:SILENT)){CallDeliveryTrace.record(c,i,"NOTIFICATION_BLOCKED",CallDeliveryTrace.notificationBlockReason(c,sound?AUDIBLE:SILENT));return false;}
+            notifyOnce(c,i,sound,true);
+            CallDeliveryTrace.record(c,i,"NOTIFICATION_POSTED",sound?"PLAIN_SYSTEM_SOUND":"PLAIN_SERVICE_SOUND_OWNER");return true;
+        }catch(SecurityException denied){CallDeliveryTrace.record(c,i,"NOTIFICATION_FAILED","PERMISSION_CHANGED");android.util.Log.w("TransivaIncoming","Call notification permission denied",denied);return false;}
+        catch(RuntimeException failure){CallDeliveryTrace.record(c,i,"NOTIFICATION_FAILED",failureReason("PLAIN_",failure));android.util.Log.w("TransivaIncoming","Call notification failed",failure);return false;}
     }
     static void cancel(Context c,String id){try{NotificationManagerCompat.from(c).cancel(id(id));}catch(RuntimeException ignored){}}
     static void channels(Context c){
