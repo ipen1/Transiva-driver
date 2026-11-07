@@ -427,6 +427,10 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
 
         add(homeSections, wallet, 0, dp(12), 0, 0);
 
+        Button offlineCases = primaryButton("Peninjauan Perjalanan");
+        offlineCases.setOnClickListener(view -> DriverOfflineOrderCases.open(this));
+        add(homeSections, offlineCases, 0, dp(8), 0, 0);
+
         // Statistik dipindahkan ke menu Aktivitas agar dashboard lebih fokus.
         ratingText = new TextView(this);
         onlineMinutesText = new TextView(this);
