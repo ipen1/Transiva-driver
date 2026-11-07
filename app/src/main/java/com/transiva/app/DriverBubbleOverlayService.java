@@ -208,13 +208,19 @@ public final class DriverBubbleOverlayService extends Service {
     private void installDrag() {
         bubbleRoot.setOnTouchListener(new View.OnTouchListener() {
             float downRawX, downRawY;
+            float centerOffsetX, centerOffsetY;
             int startX, startY;
             boolean dragging;
+            final int[] closeLocation = new int[2];
+
             @Override public boolean onTouch(View v, MotionEvent e) {
                 switch (e.getActionMasked()) {
                     case MotionEvent.ACTION_DOWN:
                         downRawX = e.getRawX(); downRawY = e.getRawY();
+                        centerOffsetX = v.getWidth() / 2f - e.getX();
+                        centerOffsetY = v.getHeight() / 2f - e.getY();
                         startX = bubbleLp.x; startY = bubbleLp.y; dragging = false;
+                        closeTarget.setAlpha(.72f);
                         closeTarget.setVisibility(View.VISIBLE);
                         hidePreviewNow();
                         return true;
@@ -225,37 +231,40 @@ public final class DriverBubbleOverlayService extends Service {
                         bubbleLp.x = startX + Math.round(dx);
                         bubbleLp.y = Math.max(0, startY + Math.round(dy));
                         try { wm.updateViewLayout(bubbleRoot, bubbleLp); } catch (Throwable ignored) {}
-                        boolean hit = isOverClose(e.getRawX(), e.getRawY());
+                        boolean hit = dragging && isOverClose(e);
                         closeTarget.setAlpha(hit ? 1f : .72f);
                         return true;
                     case MotionEvent.ACTION_UP:
-                    case MotionEvent.ACTION_CANCEL:
-                        boolean close = isOverClose(e.getRawX(), e.getRawY());
+                        boolean close = dragging && isOverClose(e);
                         closeTarget.setVisibility(View.GONE);
                         if (close) {
-                            // Saat ONLINE bubble tidak boleh hilang hanya karena
-                            // terseret ke target X. Penonaktifan tetap tersedia
-                            // secara eksplisit dari Pengaturan Driver, sedangkan
-                            // status OFFLINE akan menutup bubble otomatis.
                             hidePreviewNow();
-                            snapToEdge();
+                            bubbleRoot.setVisibility(View.GONE);
+                            DriverBubbleController.disable(DriverBubbleOverlayService.this);
                             return true;
                         }
                         if (!dragging) v.performClick();
                         snapToEdge();
                         return true;
+                    case MotionEvent.ACTION_CANCEL:
+                        closeTarget.setVisibility(View.GONE);
+                        snapToEdge();
+                        return true;
                 }
                 return false;
             }
-        });
-    }
 
-    private boolean isOverClose(float rawX, float rawY) {
-        android.graphics.Point p = new android.graphics.Point();
-        wm.getDefaultDisplay().getSize(p);
-        float cx = p.x / 2f;
-        float cy = p.y - dp(65);
-        return Math.hypot(rawX - cx, rawY - cy) < dp(82);
+            private boolean isOverClose(MotionEvent e) {
+                if (closeTarget.getWidth() == 0 || closeTarget.getHeight() == 0) return false;
+                closeTarget.getLocationOnScreen(closeLocation);
+                float targetX = closeLocation[0] + closeTarget.getWidth() / 2f;
+                float targetY = closeLocation[1] + closeTarget.getHeight() / 2f;
+                float bubbleX = e.getRawX() + centerOffsetX;
+                float bubbleY = e.getRawY() + centerOffsetY;
+                return Math.hypot(bubbleX - targetX, bubbleY - targetY)
+                        <= closeTarget.getWidth() / 2f + dp(18);
+            }
+        });
     }
 
     private void snapToEdge() {
@@ -268,7 +277,7 @@ public final class DriverBubbleOverlayService extends Service {
 
     private void showEvent(String type, String text, String orderId, String roomId,
                            long mentionId, boolean newOrder) {
-        if (bubbleRoot == null) return;
+        if (bubbleRoot == null || !DriverBubbleController.enabled(this)) return;
         lastType = safe(type);
         lastOrderId = safe(orderId);
         lastRoomId = safe(roomId);
