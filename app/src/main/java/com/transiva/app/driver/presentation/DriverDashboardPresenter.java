@@ -8,7 +8,6 @@ import com.transiva.app.driver.domain.DriverDashboardRepository;
 import com.transiva.app.driver.domain.DriverDashboardState;
 import com.transiva.app.driver.domain.DriverOrder;
 
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -17,6 +16,7 @@ public final class DriverDashboardPresenter {
     private final DriverDashboardRepository repository;
     private final com.transiva.app.DriverSessionOwner owner;
     private DriverDashboardContract.View view;
+    private boolean freshOrdersPending;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final AtomicBoolean loading = new AtomicBoolean(false);
     private final AtomicBoolean actionRunning = new AtomicBoolean(false);
@@ -32,13 +32,20 @@ public final class DriverDashboardPresenter {
         this.view = view;
     }
 
+    public void refreshOrders() {
+        freshOrdersPending = true;
+        load(false);
+    }
+
     public void load(boolean showLoading) {
         if(owner!=null&&!owner.current())return;
-        if (!loading.compareAndSet(false, true)) return;
+        if (actionRunning.get() || !loading.compareAndSet(false, true)) return;
+        final boolean freshOrders = freshOrdersPending;
+        freshOrdersPending = false;
         final long requestEpoch = stateEpoch.get();
         if (showLoading && view != null) view.showLoading(true);
 
-        repository.loadDashboard(new DriverDashboardRepository.DashboardCallback() {
+        repository.loadDashboard(freshOrders, new DriverDashboardRepository.DashboardCallback() {
             @Override public void onSuccess(DriverDashboardState state) {
                 postIfCurrent(() -> {
                     // Refresh yang dimulai sebelum set ONLINE/OFFLINE tidak boleh
@@ -48,6 +55,7 @@ public final class DriverDashboardPresenter {
                     if (view == null) return;
                     view.showLoading(false);
                     view.showDashboard(state);
+                    if (freshOrdersPending) load(false);
                 });
             }
 
@@ -60,7 +68,8 @@ public final class DriverDashboardPresenter {
                     if (isSessionError(httpCode, code)) {
                         view.showSessionExpired();
                     } else {
-                        view.showMessage(message);
+                        if (showLoading) view.showMessage(message);
+                        if (freshOrdersPending) load(false);
                     }
                 });
             }
@@ -89,17 +98,20 @@ public final class DriverDashboardPresenter {
                 });
     }
 
-    public void acceptOrder(String orderId, String source) {
-        String gateKey = "accept:" + orderId;
-        if (!DriverRequestGate.enter(gateKey)) return;
-        if (!actionRunning.compareAndSet(false, true)) { DriverRequestGate.leave(gateKey); return; }
+    public boolean acceptOrder(String orderId, String source, String offerToken) {
+        if (owner != null && !owner.current()) return false;
+        String gateKey = "accept:" + source + ":" + orderId;
+        if (!DriverRequestGate.enter(gateKey)) return false;
+        if (!actionRunning.compareAndSet(false, true)) { DriverRequestGate.leave(gateKey); return false; }
+        stateEpoch.incrementAndGet();
+        loading.set(false);
         String action = gateKey;
         if (view != null) view.showActionLoading(action, true);
 
         repository.acceptOrder(
                 orderId,
                 source,
-                UUID.randomUUID().toString(),
+                offerToken,
                 new DriverDashboardRepository.ActionCallback() {
                     @Override public void onSuccess(String message, DriverOrder order) {
                         DriverRequestGate.leave(gateKey);
@@ -112,29 +124,33 @@ public final class DriverDashboardPresenter {
                     }
                 }
         );
+        return true;
     }
 
     public void cancelOrder(
             String orderId,
             String source,
-            String currentStatus,
+            String assignmentVersion,
             String reason
     ) {
-        String gateKey = "cancel:" + orderId;
+        if (owner != null && !owner.current()) return;
+        String gateKey = "cancel:" + source + ":" + orderId;
         if (!DriverRequestGate.enter(gateKey)) return;
         if (!actionRunning.compareAndSet(false, true)) { DriverRequestGate.leave(gateKey); return; }
+        stateEpoch.incrementAndGet();
+        loading.set(false);
         String action = gateKey;
         if (view != null) view.showActionLoading(action, true);
 
         repository.cancelOrder(
                 orderId,
                 source,
-                currentStatus,
+                assignmentVersion,
                 reason,
                 new DriverDashboardRepository.ActionCallback() {
                     @Override public void onSuccess(String message, DriverOrder order) {
                         DriverRequestGate.leave(gateKey);
-                        postIfCurrent(()->{if(view!=null)view.onOrderCancelled(orderId);});
+                        postIfCurrent(()->{if(view!=null)view.onOrderCancelled(orderId, source);});
                         finishAction(action, message, false, null);
                     }
 
@@ -157,8 +173,11 @@ public final class DriverDashboardPresenter {
             if (view == null) return;
             view.showActionLoading(action, false);
             view.showMessage(message);
-            if (openTrip && order != null) view.openTrip(order);
-            else load(false);
+            if (openTrip && order != null) {
+                freshOrdersPending = true;
+                view.openTrip(order);
+            }
+            else refreshOrders();
         });
     }
 
@@ -176,7 +195,7 @@ public final class DriverDashboardPresenter {
                 view.showSessionExpired();
             } else {
                 view.showMessage(message);
-                load(false);
+                refreshOrders();
             }
         });
     }
