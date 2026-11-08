@@ -31,6 +31,8 @@ class VoiceTripProbe{
   stop2.put("status","arrived");stops.refreshButtons();check(stops.waypointBtn.getVisibility()==View.GONE&&stops.arrivedDeliveryBtn.getVisibility()==View.VISIBLE,"final delivery swipe returns after all stops are arrived");
   stops.tripArrivalFix=fix(-.8101,120,5);stops.refreshButtons();check(stops.arrivedDeliveryBtn.isEnabled(),"final arrival uses final destination GPS rather than a previous stop");
   stops.tripStateFresh=false;stops.refreshButtons();check(!stops.arrivedDeliveryBtn.isEnabled(),"reopened trip waits for server synchronization before enabling swipe");
+  stops.tripConnectionLost=true;stops.refreshButtons();check(stops.dockHint.text.contains("Menghubungkan ulang"),"unavailable server status displays reconnecting hint");stops.tripConnectionLost=false;
+  stops.tripStateFresh=true;stops.tripLastSync=SystemClock.now;stops.tripCancelRunning=true;stops.refreshButtons();check(!stops.arrivedDeliveryBtn.isEnabled(),"pending cancellation prevents arrival swipe");stops.tripCancelRunning=false;
   stops.tripStateFresh=true;stops.tripLastSync=SystemClock.now-16001;stops.refreshButtons();check(!stops.arrivedDeliveryBtn.isEnabled(),"expired trip snapshot cannot enable an arrival action");
   stops.tripLastSync=SystemClock.now;stops.refreshButtons();check(stops.arrivedDeliveryBtn.isEnabled(),"fresh server snapshot restores arrival action without recreating the page");
   stop1.put("status","pending");stops.order.put("source","pickup_orders");stops.refreshButtons();check(stops.waypointBtn.getVisibility()==View.GONE&&stops.arrivedDeliveryBtn.getVisibility()==View.VISIBLE,"pickup orders retain their own delivery action without ride waypoint controls");
