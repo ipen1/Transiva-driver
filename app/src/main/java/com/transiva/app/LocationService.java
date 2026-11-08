@@ -9,6 +9,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationListener;
@@ -40,8 +41,10 @@ public class LocationService extends Service {
     private static final String CHANNEL_ID = "driver_location_native_v2";
     private static final int NOTIFICATION_ID = 2206;
     private static final long ACTIVE_INTERVAL = 5000L;
-    private static final long IDLE_INTERVAL = 12000L;
-    private static final float MIN_DISTANCE = 1f;
+    private static final long IDLE_HEARTBEAT = 90_000L;
+    private static final long IDLE_GPS_WINDOW = 20_000L;
+    private static final long IDLE_PROBE_INTERVAL = 100_000L;
+    private static final float IDLE_MOVE_METERS = 75f;
     private static final long MAX_AGE = 60000L;
     private static final float MAX_ACCURACY = 150f;
 
@@ -49,30 +52,53 @@ public class LocationService extends Service {
     private DriverApiClient api;
     private LocationManager locationManager;
     private final AtomicBoolean sendInFlight = new AtomicBoolean(false);
-    private long lastSentAt;
-    private Location lastSent;
+    private long lastAttempt, lastSyncedAt;
+    private int modeGeneration;
+    private Location standbyAnchor;
+    private boolean tracking, activeTrip, gpsRequested;
+    private final android.os.Handler guardianHandler=new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable endProbe = () -> { if (!activeTrip) stopGps(); };
+    private final Runnable idleProbe = new Runnable() {
+        @Override public void run() {
+            if (!tracking || activeTrip) return;
+            if (lastSyncedAt == 0 || SystemClock.elapsedRealtime() - lastSyncedAt >= IDLE_HEARTBEAT) {
+                startIdleProbe();
+            }
+            guardianHandler.postDelayed(this, IDLE_PROBE_INTERVAL);
+        }
+    };
+    private final SharedPreferences.OnSharedPreferenceChangeListener sessionChanges = (prefs, key) -> {
+        if (!tracking) return;
+        if ("current_order_id".equals(key)) configureMode(false);
+        if ("driver_server_online".equals(key) && !canTrack()) stopTracking();
+    };
     private final SmoothLocationEngine smoothLocation = new SmoothLocationEngine(5000L);
     private final DriverGuardianManager guardian = new DriverGuardianManager();
-    private final android.os.Handler guardianHandler=new android.os.Handler(android.os.Looper.getMainLooper());
     private final Runnable guardianPoll=new Runnable(){public void run(){
-        if(!canTrack())return;
+        if(!tracking || !activeTrip || !canTrack())return;
         guardian.refresh(LocationService.this);guardianHandler.postDelayed(this,15000L);
     }};
 
-    private final LocationListener listener = new LocationListener() {
-        @Override public void onLocationChanged(Location location) {
-            handle(location);
-        }
-        @Override public void onProviderEnabled(String provider) {}
-        @Override public void onProviderDisabled(String provider) {
-            Log.w(TAG, "Provider lokasi nonaktif: " + provider);
-        }
-        @Override public void onStatusChanged(String provider, int status, Bundle extras) {}
-    };
+    private final LocationListener listener = locationListener(false);
+    private final LocationListener gpsListener = locationListener(true);
+
+    private LocationListener locationListener(boolean gps) {
+        return new LocationListener() {
+            @Override public void onLocationChanged(Location location) { handle(location, gps); }
+            @Override public void onProviderEnabled(String provider) {
+                if (tracking) configureMode(true);
+            }
+            @Override public void onProviderDisabled(String provider) {
+                if (tracking) configureMode(true);
+            }
+            @Override public void onStatusChanged(String provider, int status, Bundle extras) {}
+        };
+    }
 
     @Override public void onCreate() {
         super.onCreate();
         session = new SessionManager(this);
+        session.observe(sessionChanges);
         api = new DriverApiClient(session);
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
         createChannel();
@@ -96,7 +122,7 @@ public class LocationService extends Service {
 
         try {
             startForeground(NOTIFICATION_ID,
-                    notification("Menyiapkan lokasi driver…"));
+                    notification(tracking ? modeLabel() : "Menyiapkan lokasi driver…"));
         } catch (SecurityException error) {
             Log.e(TAG, "Foreground location service ditolak; dashboard tetap berjalan", error);
             stopTracking();
@@ -112,20 +138,11 @@ public class LocationService extends Service {
         // Activity/Recent Apps dan tetap ada setelah UI diswipe.
         DriverBubbleController.start(this);
 
-        guardianHandler.removeCallbacks(guardianPoll);
-        guardianHandler.post(guardianPoll);
-        requestUpdates();
-        return START_STICKY;
-    }
-
-    private long desiredInterval() {
-        try {
-            String orderId = session == null ? "" : session.get("current_order_id");
-            return orderId == null || orderId.trim().isEmpty() ? IDLE_INTERVAL : ACTIVE_INTERVAL;
-        } catch (Exception e) {
-            TransivaDiagnostics.error(this,"location","DESIRED_INTERVAL_FAILED",e);
-            return IDLE_INTERVAL;
+        if (!tracking) {
+            tracking = true;
+            configureMode(true);
         }
+        return START_STICKY;
     }
 
     private boolean canTrack() {
@@ -147,44 +164,66 @@ public class LocationService extends Service {
         }
     }
 
-    @SuppressLint("MissingPermission")
-    private void requestUpdates() {
-        if (locationManager == null || !hasPermission()) {
+    private void configureMode(boolean force) {
+        if (!canTrack()) {
             stopTracking();
             return;
         }
-
-        try {
-            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                locationManager.requestLocationUpdates(
-                        LocationManager.GPS_PROVIDER,
-                        ACTIVE_INTERVAL,
-                        MIN_DISTANCE,
-                        listener
-                );
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "GPS listener gagal", e);
+        boolean trip = !session.get("current_order_id").trim().isEmpty();
+        if (!force && trip == activeTrip) return;
+        activeTrip = trip;
+        modeGeneration++;
+        lastAttempt = 0;
+        lastSyncedAt = 0;
+        standbyAnchor = null;
+        guardianHandler.removeCallbacks(idleProbe);
+        guardianHandler.removeCallbacks(guardianPoll);
+        guardian.refresh(this);
+        stopGps();
+        locationManager.removeUpdates(listener);
+        if (activeTrip) {
+            guardianHandler.post(guardianPoll);
+            listen(LocationManager.GPS_PROVIDER, ACTIVE_INTERVAL, 1f, gpsListener);
+            listen(LocationManager.NETWORK_PROVIDER, ACTIVE_INTERVAL, 1f, listener);
+        } else {
+            listen(LocationManager.NETWORK_PROVIDER, 30_000L, 0f, listener);
+            listen(LocationManager.PASSIVE_PROVIDER, 15_000L, IDLE_MOVE_METERS, listener);
+            startIdleProbe();
+            guardianHandler.postDelayed(idleProbe, IDLE_PROBE_INTERVAL);
         }
-
-        try {
-            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                locationManager.requestLocationUpdates(
-                        LocationManager.NETWORK_PROVIDER,
-                        ACTIVE_INTERVAL,
-                        MIN_DISTANCE,
-                        listener
-                );
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Network listener gagal", e);
-        }
-
-        // Notification foreground dibuat sekali saat service start.
-        // Jangan notify ulang setiap update GPS agar panel notifikasi tetap tenang.
+        updateNotification(modeLabel());
     }
 
-    private void handle(Location location) {
+    private String modeLabel() {
+        return activeTrip ? "Online • perjalanan aktif" : "Online • standby pesanan";
+    }
+
+    @SuppressLint("MissingPermission")
+    private boolean listen(String provider, long interval, float distance, LocationListener target) {
+        try {
+            if (!locationManager.isProviderEnabled(provider)) return false;
+            locationManager.requestLocationUpdates(provider, interval, distance, target);
+            return true;
+        } catch (RuntimeException error) {
+            Log.w(TAG, "Provider lokasi gagal: " + provider, error);
+            return false;
+        }
+    }
+
+    private void startIdleProbe() {
+        if (gpsRequested || activeTrip || !tracking) return;
+        gpsRequested = listen(LocationManager.GPS_PROVIDER, 3_000L, 0f, gpsListener);
+        if (gpsRequested) guardianHandler.postDelayed(endProbe, IDLE_GPS_WINDOW);
+    }
+
+    private void stopGps() {
+        guardianHandler.removeCallbacks(endProbe);
+        if (locationManager != null) locationManager.removeUpdates(gpsListener);
+        gpsRequested = false;
+    }
+
+    private void handle(Location location, boolean gps) {
+        if (!tracking) return;
         if (!canTrack()) {
             stopTracking();
             return;
@@ -194,30 +233,47 @@ public class LocationService extends Service {
             return;
         }
         if (!usable(location)) return;
-        SmoothLocationEngine.Fix fix = smoothLocation.offer(location);
-        if (fix == null || !fix.upload) return;
-
-        Location accepted = fix.location;
-        guardian.onLocation(this, accepted);
-        long now = System.currentTimeMillis();
-        if (lastSentAt > 0L && now - lastSentAt < desiredInterval()) return;
-        lastSentAt = now;
-        lastSent = new Location(accepted);
-        session.saveLastLocation(
-                String.valueOf(accepted.getLatitude()),
-                String.valueOf(accepted.getLongitude())
-        );
-
-        if (sendInFlight.compareAndSet(false, true)) {
-            boolean acceptedTask = DriverNetworkExecutor.execute(() -> {
-                try { send(accepted); }
-                finally { sendInFlight.set(false); }
-            });
-            if (!acceptedTask) sendInFlight.set(false);
+        long now = SystemClock.elapsedRealtime();
+        if (activeTrip) {
+            SmoothLocationEngine.Fix fix = smoothLocation.offer(location);
+            if (fix == null || !fix.upload) return;
+            guardian.onLocation(this, fix.location);
+            upload(fix.location, false, now);
+            return;
         }
+
+        float movement = standbyAnchor == null ? Float.POSITIVE_INFINITY : standbyAnchor.distanceTo(location);
+        float threshold = Math.max(IDLE_MOVE_METERS, location.hasAccuracy() ? location.getAccuracy() : 0f);
+        boolean moved = movement >= threshold;
+        if (!gps && moved && standbyAnchor != null && threshold > IDLE_MOVE_METERS) {
+            startIdleProbe();
+            if (gpsRequested) return;
+        }
+        boolean heartbeat = !moved && lastSyncedAt > 0 && now - lastSyncedAt >= IDLE_HEARTBEAT
+                && location.hasAccuracy() && location.getAccuracy() > 0 && location.getAccuracy() <= 100f;
+        if (moved || heartbeat) upload(location, heartbeat, now);
+        if (gps && gpsRequested && standbyAnchor != null && !moved && now - lastSyncedAt < IDLE_HEARTBEAT
+                && location.hasAccuracy() && location.getAccuracy() <= 45f) stopGps();
     }
 
-    private void send(Location location) {
+    private void upload(Location location, boolean heartbeat, long now) {
+        if ((lastAttempt > 0 && now - lastAttempt < ACTIVE_INTERVAL) || !sendInFlight.compareAndSet(false, true)) return;
+        lastAttempt = now;
+        String orderId = session.get("current_order_id");
+        String orderSource = session.get("current_order_source");
+        Location fix = new Location(location);
+        int generation = modeGeneration;
+        if (!heartbeat) {
+            session.saveLastLocation(String.valueOf(fix.getLatitude()), String.valueOf(fix.getLongitude()));
+        }
+        boolean accepted = DriverNetworkExecutor.execute(() -> {
+            try { send(fix, heartbeat, orderId, orderSource, generation); }
+            finally { sendInFlight.set(false); }
+        });
+        if (!accepted) sendInFlight.set(false);
+    }
+
+    private void send(Location location, boolean heartbeat, String orderId, String orderSource, int generation) {
         try {
             JSONObject body = new JSONObject();
             body.put("latitude", location.getLatitude());
@@ -229,18 +285,30 @@ public class LocationService extends Service {
             body.put("bearing",
                     location.hasBearing() ? location.getBearing() : JSONObject.NULL);
             body.put("location_time", location.getTime());
-            body.put("order_id", session.get("current_order_id"));
+            body.put("order_id", orderId);
+            body.put("order_source", orderSource.isEmpty() ? "orders" : orderSource);
+            if (heartbeat) body.put("standby_heartbeat", true);
 
             DriverApiClient.Result result =
                     api.post("driver_update_location_native.php", body);
 
             if (!result.body.optBoolean("driver_online", true)) {
                 session.put("driver_server_online", "0");
-                stopTracking();
+                guardianHandler.post(this::stopTracking);
             } else {
                 session.put("last_location_sync_at",
                         String.valueOf(System.currentTimeMillis()));
-                // Sukses tidak perlu memperbarui notifikasi setiap 5-12 detik.
+                boolean unchanged = result.body.optBoolean("standby_heartbeat", false);
+                guardianHandler.post(() -> {
+                    if (!tracking || activeTrip || generation != modeGeneration) return;
+                    lastSyncedAt = SystemClock.elapsedRealtime();
+                    if (!unchanged) {
+                        standbyAnchor = location;
+                        if (heartbeat) session.saveLastLocation(String.valueOf(location.getLatitude()),
+                                String.valueOf(location.getLongitude()));
+                    }
+                    if (gpsRequested && location.hasAccuracy() && location.getAccuracy() <= 45f) stopGps();
+                });
             }
         } catch (DriverApiClient.ApiException e) {
             Log.e(TAG, e.code + ": " + e.getMessage(), e);
@@ -248,13 +316,13 @@ public class LocationService extends Service {
                     || "TOKEN_EXPIRED".equalsIgnoreCase(e.code)
                     || "TOKEN_REVOKED".equalsIgnoreCase(e.code)) {
                 session.forceLogout("session_expired");
-                stopTracking();
+                guardianHandler.post(this::stopTracking);
             } else if ("DRIVER_OFFLINE".equalsIgnoreCase(e.code)) {
                 // 403 DRIVER_OFFLINE adalah state operasional, bukan sesi invalid.
                 // Jangan logout driver hanya karena status server berubah offline.
                 session.put("driver_server_online", "0");
                 session.put("driver_is_online", "0");
-                stopTracking();
+                guardianHandler.post(this::stopTracking);
             } else {
                 Log.w(TAG, "Lokasi belum tersinkron: " + e.code);
             }
@@ -296,9 +364,12 @@ public class LocationService extends Service {
     }
 
     private void stopTracking() {
+        tracking = false;
+        guardianHandler.removeCallbacks(idleProbe);
         guardianHandler.removeCallbacks(guardianPoll);
         DriverGuardianManager.invalidate(this);
         try {
+            stopGps();
             if (locationManager != null) locationManager.removeUpdates(listener);
         } catch (Exception error) {
             Log.w(TAG, "Gagal melepas listener lokasi", error);
@@ -325,7 +396,7 @@ public class LocationService extends Service {
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle("Transiva Driver")
-                .setContentText("Online • lokasi aktif")
+                .setContentText(text)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setSilent(true)
@@ -376,8 +447,11 @@ public class LocationService extends Service {
     }
 
     @Override public void onDestroy() {
+        tracking = false;
+        session.stopObserving(sessionChanges);
         guardianHandler.removeCallbacksAndMessages(null);guardian.close(this);
         try {
+            stopGps();
             if (locationManager != null) locationManager.removeUpdates(listener);
         } catch (Exception error) {
             Log.w(TAG, "Gagal melepas listener saat destroy", error);

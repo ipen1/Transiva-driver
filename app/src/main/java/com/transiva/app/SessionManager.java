@@ -497,6 +497,14 @@ public class SessionManager {
         return prefs.getString("driver_photo", "");
     }
 
+    void observe(SharedPreferences.OnSharedPreferenceChangeListener listener) {
+        prefs.registerOnSharedPreferenceChangeListener(listener);
+    }
+
+    void stopObserving(SharedPreferences.OnSharedPreferenceChangeListener listener) {
+        prefs.unregisterOnSharedPreferenceChangeListener(listener);
+    }
+
     public void put(String key, String value) {
         if (key == null || key.trim().isEmpty()) {
             return;
