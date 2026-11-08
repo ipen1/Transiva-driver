@@ -98,7 +98,7 @@ public final class DriverDashboardPresenter {
                 });
     }
 
-    public boolean acceptOrder(String orderId, String source, String offerToken) {
+    public boolean acceptOrder(String orderId, String source, String offerToken, long remaining) {
         if (owner != null && !owner.current()) return false;
         String gateKey = "accept:" + source + ":" + orderId;
         if (!DriverRequestGate.enter(gateKey)) return false;
@@ -108,6 +108,11 @@ public final class DriverDashboardPresenter {
         String action = gateKey;
         if (view != null) view.showActionLoading(action, true);
 
+        android.content.Context context = view instanceof android.content.Context
+                ? ((android.content.Context)view).getApplicationContext() : null;
+        long tapped = android.os.SystemClock.elapsedRealtime();
+        if (context != null) com.transiva.app.DriverOrderTelemetry.offer(context, source, orderId,
+                offerToken, "accept_tap", -1, remaining);
         repository.acceptOrder(
                 orderId,
                 source,
@@ -115,12 +120,18 @@ public final class DriverDashboardPresenter {
                 new DriverDashboardRepository.ActionCallback() {
                     @Override public void onSuccess(String message, DriverOrder order) {
                         DriverRequestGate.leave(gateKey);
-                        finishAction(action, message, true, order);
+                        finishAction(action, message, true, order, () -> {
+                            if (context != null) com.transiva.app.DriverOrderTelemetry.offer(context, source, orderId,
+                                    offerToken, "accept_ui", android.os.SystemClock.elapsedRealtime() - tapped, -1);
+                        });
                     }
 
                     @Override public void onError(int httpCode, String code, String message) {
                         DriverRequestGate.leave(gateKey);
                         failAction(action, httpCode, code, message);
+                        if (context != null) postIfCurrent(() -> com.transiva.app.DriverOrderTelemetry.offer(
+                                context, source, orderId, offerToken, "accept_error",
+                                android.os.SystemClock.elapsedRealtime() - tapped, -1));
                     }
                 }
         );
@@ -168,11 +179,17 @@ public final class DriverDashboardPresenter {
             boolean openTrip,
             DriverOrder order
     ) {
+        finishAction(action, message, openTrip, order, null);
+    }
+
+    private void finishAction(String action, String message, boolean openTrip,
+                              DriverOrder order, Runnable confirmation) {
         postIfCurrent(() -> {
             actionRunning.set(false);
             if (view == null) return;
             view.showActionLoading(action, false);
             view.showMessage(message);
+            if (confirmation != null) confirmation.run();
             if (openTrip && order != null) {
                 freshOrdersPending = true;
                 view.openTrip(order);
