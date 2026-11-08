@@ -3,6 +3,7 @@ package com.transiva.app.driver.data;
 import com.transiva.app.SessionManager;
 import com.transiva.app.DriverNetworkExecutor;
 import com.transiva.app.DriverOrderActions;
+import com.transiva.app.DriverOrderTelemetry;
 import com.transiva.app.driver.domain.DriverDashboardRepository;
 import com.transiva.app.driver.domain.DriverDashboardState;
 import com.transiva.app.driver.domain.DriverOrder;
@@ -114,10 +115,14 @@ public final class DriverDashboardRepositoryImpl implements DriverDashboardRepos
     @Override
     public void cancelOrder(String orderId, String source, String assignmentVersion,
                             String reason, ActionCallback callback) {
+        long started = android.os.SystemClock.elapsedRealtime();
+        long tappedAt = System.currentTimeMillis();
+        String tapContext = DriverOrderTelemetry.deviceContext(session.getContext());
+        DriverOrderTelemetry.local(session.getContext(), "cancel_tap · #" + orderId + " · " + tapContext);
         if (!DriverNetworkExecutor.executeOrderAction(() -> {
             try {
                 String message = DriverOrderActions.cancel(orderApi, session, orderId, source,
-                        assignmentVersion, reason);
+                        assignmentVersion, reason, started, tappedAt, tapContext);
                 callback.onSuccess(message, null);
             } catch (Exception error) {
                 handle(error, callback, "Status pembatalan belum terkonfirmasi. Periksa pesanan aktif.");
