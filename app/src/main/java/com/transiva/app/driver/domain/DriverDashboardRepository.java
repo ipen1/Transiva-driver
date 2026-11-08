@@ -12,13 +12,14 @@ public interface DriverDashboardRepository {
         void onError(int httpCode, String code, String message);
     }
 
-    void loadDashboard(DashboardCallback callback);
+    default void loadDashboard(DashboardCallback callback) { loadDashboard(false, callback); }
+    void loadDashboard(boolean freshOrders, DashboardCallback callback);
     void setOnline(boolean online, String driverType, ActionCallback callback);
-    void acceptOrder(String orderId, String source, String idempotencyKey, ActionCallback callback);
+    void acceptOrder(String orderId, String source, String offerToken, ActionCallback callback);
     void cancelOrder(
             String orderId,
             String source,
-            String currentStatus,
+            String assignmentVersion,
             String reason,
             ActionCallback callback
     );
