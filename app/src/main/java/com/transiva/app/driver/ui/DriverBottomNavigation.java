@@ -153,15 +153,7 @@ public final class DriverBottomNavigation {
 
         if (!active) {
             root.setOnClickListener(view -> {
-                if (DevicePerformanceProfile.get(activity).reduceMapMotion) {
-                    DriverPageTransition.open(activity, target, pageIndex(activeItem), pageIndex(item));
-                    return;
-                }
-                view.animate().scaleX(0.90f).scaleY(0.90f).setDuration(70L)
-                        .withEndAction(() -> view.animate().scaleX(1f).scaleY(1f).setDuration(110L)
-                                .setInterpolator(new DecelerateInterpolator(1.7f))
-                                .withEndAction(() -> DriverPageTransition.open(activity, target, pageIndex(activeItem), pageIndex(item)))
-                                .start()).start();
+                DriverPageTransition.open(activity, target, pageIndex(activeItem), pageIndex(item));
             });
         }
 
