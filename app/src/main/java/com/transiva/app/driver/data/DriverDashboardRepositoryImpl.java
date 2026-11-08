@@ -1,6 +1,8 @@
 package com.transiva.app.driver.data;
 
 import com.transiva.app.SessionManager;
+import com.transiva.app.DriverNetworkExecutor;
+import com.transiva.app.DriverOrderActions;
 import com.transiva.app.driver.domain.DriverDashboardRepository;
 import com.transiva.app.driver.domain.DriverDashboardState;
 import com.transiva.app.driver.domain.DriverOrder;
@@ -10,33 +12,37 @@ import org.json.JSONObject;
 public final class DriverDashboardRepositoryImpl implements DriverDashboardRepository {
 
     private final DriverApiClient api;
+    private final DriverApiClient orderApi;
     private final SessionManager session;
 
     public DriverDashboardRepositoryImpl(SessionManager session) {
         this.session = session;
         api = new DriverApiClient(session);
+        orderApi = new DriverApiClient(session, true);
     }
 
     @Override
-    public void loadDashboard(DashboardCallback callback) {
-        api.executor().execute(() -> {
+    public void loadDashboard(boolean freshOrders, DashboardCallback callback) {
+        if (!DriverNetworkExecutor.execute(() -> {
             try {
-                DriverApiClient.Result result = api.get(
-                        "driver_dashboard_native.php"
-                );
+                DriverApiClient.Result result = freshOrders
+                        ? api.getOnce("driver_dashboard_native.php?fresh_orders=1")
+                        : api.get("driver_dashboard_native.php");
                 JSONObject driver = result.body.optJSONObject("driver");
                 if (driver != null) api.applyIfCurrent(()->session.updateDriverRuntime(driver));
                 DriverDashboardState state = DriverDashboardMapper.map(result.body);
                 callback.onSuccess(state);
             } catch (DriverApiClient.ApiException error) {
                 callback.onError(error.status, error.code, error.getMessage());
+            } catch (RuntimeException error) {
+                callback.onError(0, "PAYLOAD_ERROR", "Data Beranda belum dapat ditampilkan.");
             }
-        });
+        })) callback.onError(0, "QUEUE_BUSY", "Antrean jaringan penuh. Coba lagi sebentar.");
     }
 
     @Override
     public void setOnline(boolean online, String driverType, ActionCallback callback) {
-        api.executor().execute(() -> {
+        if (!DriverNetworkExecutor.execute(() -> {
             try {
                 JSONObject body = new JSONObject();
                 // driver_type tidak dikirim lagi. Backend mengambil tipe driver
@@ -90,70 +96,33 @@ public final class DriverDashboardRepositoryImpl implements DriverDashboardRepos
             } catch (Exception error) {
                 handle(error, callback, "Payload status tidak valid.");
             }
-        });
+        })) callback.onError(0, "QUEUE_BUSY", "Antrean jaringan penuh. Coba lagi sebentar.");
     }
 
     @Override
-    public void acceptOrder(
-            String orderId,
-            String source,
-            String idempotencyKey,
-            ActionCallback callback
-    ) {
-        api.executor().execute(() -> {
+    public void acceptOrder(String orderId, String source, String offerToken, ActionCallback callback) {
+        if (!DriverNetworkExecutor.executeOrderAction(() -> {
             try {
-                JSONObject body = new JSONObject();
-                body.put("order_id", orderId);
-                body.put("source", source);
-                body.put("idempotency_key", idempotencyKey);
-
-                DriverApiClient.Result result =
-                        api.post("driver_accept_order_native.php", body);
-
-                DriverOrder order = DriverDashboardMapper.mapOrder(
-                        result.body.optJSONObject("order")
-                );
-
-                callback.onSuccess(
-                        result.body.optString("message", "Order berhasil diambil."),
-                        order
-                );
+                DriverOrder order = DriverOrderActions.accept(orderApi, orderId, source, offerToken);
+                callback.onSuccess("Pesanan berhasil diterima.", order);
             } catch (Exception error) {
-                handle(error, callback, "Payload order tidak valid.");
+                handle(error, callback, "Status penerimaan belum terkonfirmasi. Periksa pesanan aktif.");
             }
-        });
+        })) callback.onError(0, "QUEUE_BUSY", "Antrean aksi penuh. Coba lagi sebentar.");
     }
 
     @Override
-    public void cancelOrder(
-            String orderId,
-            String source,
-            String currentStatus,
-            String reason,
-            ActionCallback callback
-    ) {
-        api.executor().execute(() -> {
+    public void cancelOrder(String orderId, String source, String assignmentVersion,
+                            String reason, ActionCallback callback) {
+        if (!DriverNetworkExecutor.executeOrderAction(() -> {
             try {
-                JSONObject body = new JSONObject();
-                body.put("order_id", orderId);
-                body.put("source", source);
-                body.put("current_status", currentStatus);
-                body.put("reason", reason);
-
-                DriverApiClient.Result result =
-                        api.post("driver_cancel_order_native.php", body);
-
-                callback.onSuccess(
-                        result.body.optString(
-                                "message",
-                                "Order berhasil dibatalkan."
-                        ),
-                        null
-                );
+                String message = DriverOrderActions.cancel(orderApi, session, orderId, source,
+                        assignmentVersion, reason);
+                callback.onSuccess(message, null);
             } catch (Exception error) {
-                handle(error, callback, "Data pembatalan order tidak valid.");
+                handle(error, callback, "Status pembatalan belum terkonfirmasi. Periksa pesanan aktif.");
             }
-        });
+        })) callback.onError(0, "QUEUE_BUSY", "Antrean aksi penuh. Coba lagi sebentar.");
     }
 
     private void handle(
@@ -177,5 +146,6 @@ public final class DriverDashboardRepositoryImpl implements DriverDashboardRepos
     @Override
     public void destroy() {
         api.shutdown();
+        orderApi.shutdown();
     }
 }

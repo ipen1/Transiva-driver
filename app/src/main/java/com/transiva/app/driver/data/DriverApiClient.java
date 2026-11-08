@@ -50,13 +50,24 @@ public final class DriverApiClient {
     private final com.transiva.app.DriverSessionOwner owner;
     private final Context appContext;
 
+    private final boolean fastOrderRequest;
+
     public DriverApiClient(SessionManager session) {
+        this(session, false);
+    }
+
+    public DriverApiClient(SessionManager session, boolean fastOrderRequest) {
+        this.fastOrderRequest = fastOrderRequest;
         this.session = session;
         this.owner = com.transiva.app.DriverSessionOwner.capture(session.getContext());
         this.appContext = session.getContext().getApplicationContext();
     }
 
     public ExecutorService executor() { return DriverNetworkExecutor.executor(); }
+    public Result getOnce(String endpoint) throws ApiException {
+        return requestWithRetry("GET", endpoint, null, false);
+    }
+
     public Result get(String endpoint) throws ApiException { return requestWithRetry("GET", endpoint, null, true); }
     public Result post(String endpoint, JSONObject payload) throws ApiException { return requestWithRetry("POST", endpoint, payload, false); }
 
@@ -71,7 +82,7 @@ public final class DriverApiClient {
 
     private Result requestWithRetry(String method, String endpoint, JSONObject payload, boolean retrySafe) throws ApiException {
         requireOwner();
-        if (!DriverCircuitBreaker.allowRequest()) {
+        if (!fastOrderRequest && !DriverCircuitBreaker.allowRequest()) {
             throw new ApiException(503, "CIRCUIT_OPEN",
                     "Server sedang dalam masa pemulihan. Coba lagi beberapa detik.", null);
         }
@@ -82,12 +93,12 @@ public final class DriverApiClient {
                 requireOwner();
                 Result result = requestOnce(method, endpoint, payload);
                 requireOwner();
-                DriverCircuitBreaker.onSuccess();
+                if (!fastOrderRequest) DriverCircuitBreaker.onSuccess();
                 return result;
             } catch (ApiException error) {
                 last = error;
                 if(!owner.current()||"SESSION_CHANGED".equals(error.code))throw error;
-                DriverCircuitBreaker.onFailure(error.status);
+                if (!fastOrderRequest) DriverCircuitBreaker.onFailure(error.status);
 
                 int retryAfter = error.status == 429 ? parseRetryAfter(error.getMessage()) : 0;
                 long delay = DriverRetryPolicy.delayFor(error.status, retryAfter, attempt);
@@ -115,8 +126,8 @@ public final class DriverApiClient {
         try {
             connection = DriverHttpTransport.open(BASE_URL + endpoint);
             connection.setRequestMethod(method);
-            connection.setConnectTimeout(15000);
-            connection.setReadTimeout(20000);
+            connection.setConnectTimeout(fastOrderRequest ? 3500 : 15000);
+            connection.setReadTimeout(fastOrderRequest ? 5000 : 20000);
             connection.setUseCaches(false);
             connection.setDoInput(true);
             connection.setRequestProperty("Accept", "application/json");
