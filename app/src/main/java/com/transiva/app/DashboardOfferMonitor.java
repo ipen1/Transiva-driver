@@ -31,6 +31,7 @@ final class DashboardOfferMonitor {
         @Override public void onAvailable(Network ignored) {
             main.post(() -> {
                 if (!active) return;
+                DriverOrderTelemetry.local(session.getContext(), "jaringan tersedia · " + DriverOrderTelemetry.deviceContext(session.getContext()));
                 host.refreshOrders();
                 main.removeCallbacks(tick);
                 main.post(tick);

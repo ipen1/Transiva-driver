@@ -223,6 +223,18 @@ public class DriverSettingsActivity extends Activity {
         accountCard.setBackground(round("#FFFFFF", 20));
         accountCard.setElevation(dp(2));
 
+        accountCard.addView(actionRow("Diagnostik tawaran order", "Cek notifikasi, jaringan, dan sisa waktu Terima", () -> {
+            android.widget.ScrollView history = new android.widget.ScrollView(this);
+            TextView events = text("", 13, "#334155", false);
+            int padding = dp(18);
+            events.setPadding(padding, padding, padding, padding);
+            events.setTextIsSelectable(true);
+            String recent = DriverOrderTelemetry.recent(this);
+            events.setText(recent.isEmpty() ? "Belum ada pengukuran di perangkat ini." : recent);
+            history.addView(events);
+            PremiumDialogs.builder(this).setTitle("Diagnostik tawaran order").setView(history)
+                    .setPositiveButton("Tutup", null).show();
+        }));
         accountCard.addView(actionRow("Ubah Username", "Ganti username akun Driver", () -> {
             Intent i = new Intent(this, DriverAccountSecurityActivity.class);
             i.putExtra(DriverAccountSecurityActivity.EXTRA_MODE, DriverAccountSecurityActivity.MODE_USERNAME);

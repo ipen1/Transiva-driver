@@ -523,6 +523,6 @@ abstract class DriverDashboardActivityLayer1 extends Activity
     protected abstract String joinServices(java.util.LinkedHashSet<String> services);
     protected abstract String serviceIcon(String service);
     protected abstract String serviceSubtitle(String service);
-    protected abstract View orderCard(DriverOrder order, boolean active);
+    protected abstract View orderCard(DriverOrder order);
 
 }

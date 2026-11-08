@@ -21,5 +21,9 @@ final class NavigationGuidanceHealth {
         if(now<changed||now-changed>(state==State.PENDING?5000:6000))state=State.FAILED;
         return state;
     }
+    static synchronized boolean guiding(String session, String orderId, String source, long now) {
+        return !orderId.isEmpty() && key.startsWith(orderId + "|" + source + "|")
+                && status(token, session, key, now) == State.READY;
+    }
     static synchronized void clear(String session){if(owner.equals(session)){token="";owner="";key="";state=State.FAILED;}}
 }

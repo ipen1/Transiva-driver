@@ -217,22 +217,28 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         activeBox.removeAllViews();
         if (state.activeOrders == null || state.activeOrders.isEmpty()) {
             session.remove("current_order_id");
+            session.remove("current_order_source");
             // Tidak tampilkan placeholder di panel prioritas. Bila ada tawaran,
             // tawaran langsung menjadi kartu pertama yang terlihat.
         } else {
-            session.put("current_order_source", state.activeOrders.get(0).source);
-            session.put("current_order_id", state.activeOrders.get(0).id);
-            int slot = 0;
-            for (DriverOrder activeOrder : state.activeOrders) {
-                slot++;
-                if (activeOrder.raw != null) {
-                    try {
-                        activeOrder.raw.put("concurrent_slot", slot);
-                        activeOrder.raw.put("active_count", state.activeOrders.size());
-                        activeOrder.raw.put("max_active_orders", 2);
-                    } catch (Exception ignored) { }
+            java.util.List<DriverOrder> activeOrders = new java.util.ArrayList<>(state.activeOrders);
+            DriverOrder guided = DriverActiveOrderSummary.guided(this, activeOrders);
+            if (guided != null) {
+                activeOrders.remove(guided);
+                activeOrders.add(0, guided);
+            }
+            DriverOrder selected = activeOrders.get(0);
+            if (guided == null) {
+                for (DriverOrder order : activeOrders) {
+                    if (order.id.equals(session.get("current_order_id"))
+                            && order.source.equals(session.get("current_order_source"))) selected = order;
                 }
-                activeBox.addView(orderCard(activeOrder, true));
+            }
+            session.put("current_order_source", selected.source);
+            session.put("current_order_id", selected.id);
+            for (int i = 0; i < activeOrders.size(); i++) {
+                DriverOrder order = activeOrders.get(i);
+                activeBox.addView(activeOrderCard(order, order == guided, i + 1, activeOrders.size()));
             }
         }
 
@@ -254,7 +260,9 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
                 String key = offerCountdownController.key(offer);
                 activeOfferKeys.add(key);
                 offerCountdownController.syncDeadline(offer);
-                offerBox.addView(orderCard(offer, false));
+                View card = orderCard(offer);
+                offerBox.addView(card);
+                DriverOrderTelemetry.watchVisibility(card, offer, () -> offerCountdownController.remainingMillis(key));
             }
             offerCountdownController.retain(activeOfferKeys);
             offerCountdownController.tick();
@@ -531,12 +539,11 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         row.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle(label).setMessage(address).setPositiveButton("Tutup",null).show());
         add(card,row,0,dp(7),0,0);
     }
-    protected View orderCard(DriverOrder order, boolean active) {
+    protected View orderCard(DriverOrder order) {
         LinearLayout card = card();
-        boolean queued = !active && order.raw != null && order.raw.optBoolean("queued", false);
+        boolean queued = order.raw != null && order.raw.optBoolean("queued", false);
         int queuePosition = order.raw == null ? 0 : order.raw.optInt("queue_position", 0);
-        int concurrentSlot = order.raw == null ? 0 : order.raw.optInt("concurrent_slot", 0);
-        String cardTitle = active ? (concurrentSlot > 0 ? "Order Aktif " + concurrentSlot + "/2" : "Order Aktif") : (queued ? "Order Antrean" : "Tawaran");
+        String cardTitle = queued ? "Order Antrean" : "Tawaran";
         String serviceLabel = aiServiceLabel(order);
         card.addView(DriverKdiUi.header(this,serviceIcon(serviceLabel)+"  "+serviceLabel,cardTitle+" #"+order.id));
         if (queued) {
@@ -607,7 +614,7 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
             }
         }
 
-        if (!active && order.remainingSeconds >= 0) {
+        if (order.remainingSeconds >= 0) {
             String key = offerCountdownController.key(order);
             TextView countdown = text("Menghitung…", 14, "#16A34A", true);
             countdown.setGravity(Gravity.CENTER);
@@ -621,25 +628,10 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
             offerCountdownController.bindCountdown(key, countdown);
         }
 
-        boolean capacityReached = !active
-                && !queued
-                && currentState != null
-                && currentState.activeOrders != null
-                && currentState.activeOrders.size() >= 2;
-
-        Button action = primaryButton(active ? "Lanjutkan Perjalanan" : (queued ? "Menunggu Order Aktif Selesai" : "Ambil Order"));
-
-        if (active) {
-            action.setOnClickListener(v -> openTrip(order));
-            add(card, action, 0, dp(12), 0, 0);
-
-            if (canDriverCancel(order.status)) {
-                Button cancel = dangerOutlineButton("Batalkan Order");
-                cancel.setTag("cancel:" + clean(order.source) + ":" + order.id);
-                cancel.setOnClickListener(v -> { if (cancellationController != null) cancellationController.show(order); });
-                add(card, cancel, 0, dp(9), 0, 0);
-            }
-        } else if (queued) {
+        boolean capacityReached = !queued && currentState != null
+                && currentState.activeOrders != null && currentState.activeOrders.size() >= 2;
+        Button action = primaryButton(queued ? "Menunggu Order Aktif Selesai" : "Ambil Order");
+        if (queued) {
             action.setEnabled(false);
             add(card, action, 0, dp(12), 0, 0);
         } else if (capacityReached) {
@@ -654,22 +646,49 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
             String key = offerCountdownController.key(order);
             offerCountdownController.bindButton(key, action);
             action.setOnClickListener(v -> {
-                if (offerCountdownController.remainingMillis(key) <= 0L) {
+                long remaining = offerCountdownController.remainingMillis(key);
+                if (remaining <= 0L) {
                     action.setEnabled(false);
                     action.setText("Tawaran berakhir");
                     showMessage("Tawaran order sudah berakhir.");
                     return;
                 }
-                if (presenter.acceptOrder(order.id, clean(order.source), order.raw.optString("offer_action_token"))) {
+                if (presenter.acceptOrder(order.id, clean(order.source), order.raw.optString("offer_action_token"), remaining)) {
                     offerCountdownController.setProcessingKey(key);
                 }
             });
             add(card, action, 0, dp(12), 0, 0);
         }
 
+        return orderCardLayout(card);
+    }
+
+    private View activeOrderCard(DriverOrder order, boolean guided, int position, int total) {
+        LinearLayout card = card();
+        String label = guided ? "Panduan aktif" : total > 1 ? "Order aktif " + position + "/" + total : "Order aktif";
+        String service = aiServiceLabel(order);
+        card.addView(DriverKdiUi.header(this, serviceIcon(service) + "  " + service, label + " #" + order.id));
+        DriverActiveOrderSummary summary = DriverActiveOrderSummary.from(order);
+        add(card, text(summary.action, 18, "#0B3A78", true), 0, dp(12), 0, dp(5));
+        addOrderPoint(card, summary.target, summary.address, "#128568");
+
+        Button resume = primaryButton("Lanjutkan Perjalanan");
+        resume.setOnClickListener(v -> openTrip(order));
+        add(card, resume, 0, dp(10), 0, 0);
+        if (canDriverCancel(order.status)) {
+            Button cancel = dangerOutlineButton("Batalkan Order");
+            cancel.setTag("cancel:" + clean(order.source) + ":" + order.id);
+            cancel.setOnClickListener(v -> { if (cancellationController != null) cancellationController.show(order); });
+            add(card, cancel, 0, dp(7), 0, 0);
+        }
+        return orderCardLayout(card);
+    }
+
+    private View orderCardLayout(LinearLayout card) {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.setMargins(0, dp(7), 0, dp(12));
         card.setLayoutParams(lp);
         return card;
     }
+
 }

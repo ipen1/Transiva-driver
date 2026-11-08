@@ -93,11 +93,15 @@ public final class TripCancellationController {
         host.tripCancelRunning = true;
         host.tripSetLoading(true);
         if (cancelButton != null) cancelButton.setEnabled(false);
+        long started = android.os.SystemClock.elapsedRealtime();
+        long tappedAt = System.currentTimeMillis();
+        String tapContext = DriverOrderTelemetry.deviceContext(host);
+        DriverOrderTelemetry.local(host, "cancel_tap · #" + id + " · " + tapContext);
         if (!DriverNetworkExecutor.executeOrderAction(() -> {
             String message = null;
             String error = null;
             try {
-                message = DriverOrderActions.cancel(client, session, id, source, version, reason);
+                message = DriverOrderActions.cancel(client, session, id, source, version, reason, started, tappedAt, tapContext);
             } catch (Exception failed) {
                 error = failed.getMessage();
             }

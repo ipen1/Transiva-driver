@@ -39,7 +39,8 @@ public final class DriverOrderActions {
     }
 
     public static String cancel(DriverApiClient api, SessionManager session, String id,
-                                String source, String assignmentVersion, String reason) throws Exception {
+                                String source, String assignmentVersion, String reason,
+                                long started, long tappedAt, String tapContext) throws Exception {
         SharedPreferences pending = session.getContext().getSharedPreferences("driver_order_operations", 0);
         String key = session.getId() + "|" + session.getUserId() + "|" + source + "|" + id + "|" + assignmentVersion;
         String previous = pending.getString(key, "");
@@ -54,6 +55,8 @@ public final class DriverOrderActions {
             JSONObject result = api.post("driver_cancel_order_native.php", request).body;
             requireCancellationReceipt(result);
             pending.edit().remove(key).apply();
+            DriverOrderTelemetry.cancellation(session.getContext(),source,id,operation,
+                    android.os.SystemClock.elapsedRealtime()-started,tapContext,tappedAt);
             return result.optString("message");
         } catch (DriverApiClient.ApiException error) {
             if (!uncertain(error) && error.status != 409) {
@@ -73,6 +76,8 @@ public final class DriverOrderActions {
                 JSONObject result = api.post("driver_cancel_order_native.php", request).body;
                 requireCancellationReceipt(result);
                 pending.edit().remove(key).apply();
+                DriverOrderTelemetry.cancellation(session.getContext(),source,id,operation,
+                        android.os.SystemClock.elapsedRealtime()-started,tapContext,tappedAt);
                 return result.optString("message");
             } catch (DriverApiClient.ApiException error) {
                 if (!uncertain(error) && !"CANCEL_RESULT_UNKNOWN".equals(error.code)) throw error;

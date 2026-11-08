@@ -80,6 +80,8 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
             return;
         }
 
+        String pushType = data == null ? "" : first(data.get("type"), data.get("notif_type"), "");
+        if (isNewIncomingOrder(pushType, data)) DriverOrderTelemetry.push(this, data, "push_received");
         if (PushExpiryPolicy.expiredOrder(data,System.currentTimeMillis())) return;
 
         if (data == null || data.isEmpty()) {
@@ -455,12 +457,24 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
                                 Manifest.permission.POST_NOTIFICATIONS
                         ) != PackageManager.PERMISSION_GRANTED
         ) {
+            if (newIncomingOrder) DriverOrderTelemetry.push(this, data, "notification_blocked");
             return;
         }
 
+        if (newIncomingOrder) {
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            if (!NotificationManagerCompat.from(this).areNotificationsEnabled()
+                    || (Build.VERSION.SDK_INT >= 26 && manager != null
+                    && manager.getNotificationChannel(channelId) != null
+                    && manager.getNotificationChannel(channelId).getImportance() == NotificationManager.IMPORTANCE_NONE)) {
+                DriverOrderTelemetry.push(this, data, "notification_blocked");
+                return;
+            }
+        }
         if(newIncomingOrder&&PushExpiryPolicy.remainingMillis(data,System.currentTimeMillis(),false)<=0)return;
         try {
             NotificationManagerCompat.from(this).notify(requestCode,builder.build());
+            if(newIncomingOrder)DriverOrderTelemetry.push(this,data,"notification_posted");
         } catch (RuntimeException notificationError) {
             TransivaDiagnostics.error(this,"notification","NOTIFICATION_FAILED",notificationError);
             try {
@@ -470,6 +484,7 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
                     .setPriority(NotificationCompat.PRIORITY_HIGH).setAutoCancel(true);
                 if(newIncomingOrder)fallback.setTimeoutAfter(Math.max(1,PushExpiryPolicy.remainingMillis(data,System.currentTimeMillis(),false)));
                 NotificationManagerCompat.from(this).notify(requestCode,fallback.build());
+                if(newIncomingOrder)DriverOrderTelemetry.push(this,data,"notification_posted");
             }catch(RuntimeException failed){TransivaDiagnostics.error(this,"notification","NOTIFICATION_FALLBACK_FAILED",failed);}
         }
 
