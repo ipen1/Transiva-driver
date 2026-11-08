@@ -78,48 +78,69 @@ public final class TripCancellationController {
     }
 
     private void perform(String reason) {
-        final String gate = "cancel:" + host.tripInternalId();
+        final JSONObject order = host.order;
+        if (order == null || !host.tripStateReady() || !DriverOrderCancellationPolicy.canCancel(host.tripStatus())) {
+            host.tripInfo("Sinkronisasi perjalanan", "Tunggu status terbaru sebelum membatalkan pesanan.");
+            return;
+        }
+        final String id = host.tripInternalId();
+        final String source = host.tripIsPickupOrder() ? "pickup_orders" : "orders";
+        final String version = order.optString("assignment_version");
+        final String gate = "cancel:" + source + ":" + id;
         if (!DriverRequestGate.enter(gate)) return;
+        DriverApiClient client = new DriverApiClient(session, true);
         host.tripMutationStarted();
+        host.tripCancelRunning = true;
         host.tripSetLoading(true);
         if (cancelButton != null) cancelButton.setEnabled(false);
-        DriverNetworkExecutor.execute(() -> {
+        if (!DriverNetworkExecutor.executeOrderAction(() -> {
+            String message = null;
+            String error = null;
             try {
-                JSONObject body = new JSONObject();
-                body.put("order_id", host.tripInternalId());
-                body.put("source", host.tripIsPickupOrder() ? "pickup_orders" : "orders");
-                body.put("current_status", host.tripStatus());
-                body.put("reason", reason);
-                DriverApiClient.Result result = new DriverApiClient(session).post("driver_cancel_order_native.php", body);
-                String message = result.body.optString("message", "Order berhasil dibatalkan.").trim();
-                if (message.isEmpty()) message = "Order berhasil dibatalkan.";
-                final String finalMessage = message;
-                host.runOnUiThread(() -> {
-                    DriverRequestGate.leave(gate);
-                    host.tripSetLoading(false);
-                    DriverMessageUnreadRepository.clearOrder(host, host.tripOrderId());
-                    try{host.order.put("status","cancelled");}catch(org.json.JSONException ignored){}
-                    host.tripNeedsSync();
-                    host.tripClearActiveOrder();
-                    PremiumDialogs.builder(host)
-                            .setTitle("Order Dibatalkan")
-                            .setMessage(finalMessage)
-                            .setCancelable(false)
-                            .setPositiveButton("Kembali ke Beranda", (x, y) -> host.finish())
-                            .show();
-                });
-            } catch (Exception e) {
-                TransivaDiagnostics.error(host, "order", "TRIP_CANCEL_ORDER_FAILED", e);
-                host.runOnUiThread(() -> {
-                    DriverRequestGate.leave(gate);
-                    host.tripSetLoading(false);
-                    if (cancelButton != null) cancelButton.setEnabled(true);
-                    String detail = e instanceof DriverApiClient.ApiException
-                            ? ((DriverApiClient.ApiException) e).getMessage()
-                            : "Koneksi tidak dapat dipastikan. Periksa status order sebelum mencoba lagi.";
-                    host.tripInfo("Gagal Membatalkan", detail);
-                });
+                message = DriverOrderActions.cancel(client, session, id, source, version, reason);
+            } catch (Exception failed) {
+                error = failed.getMessage();
             }
-        });
+            final String receiptMessage = message;
+            final String failureMessage = error;
+            host.runOnUiThread(() -> {
+                DriverRequestGate.leave(gate);
+                try {
+                    client.applyIfCurrent(() -> {
+                        if (host.isFinishing() || host.isDestroyed()) return;
+                        host.tripCancelRunning = false;
+                        host.tripSetLoading(false);
+                        if (host.order != order) return;
+                        host.tripNeedsSync();
+                        if (receiptMessage == null) {
+                            host.tripInfo("Pembatalan Pesanan", failureMessage == null
+                                    ? "Status pembatalan belum terkonfirmasi." : failureMessage);
+                            return;
+                        }
+                        DriverMessageUnreadRepository.clearOrder(host, host.tripOrderId());
+                        try { order.put("status", "cancelled"); }
+                        catch (org.json.JSONException ignored) {}
+                        NavigationGuidanceService.stopFor(host, order);
+                        host.saveActiveOrder();
+                        host.tripNeedsSync();
+                        PremiumDialogs.builder(host)
+                                .setTitle("Order Dibatalkan")
+                                .setMessage(receiptMessage)
+                                .setCancelable(false)
+                                .setPositiveButton("Kembali", (dialog, button) -> host.finish())
+                                .show();
+                    });
+                } finally {
+                    client.shutdown();
+                }
+            });
+        })) {
+            DriverRequestGate.leave(gate);
+            client.shutdown();
+            host.tripCancelRunning = false;
+            host.tripSetLoading(false);
+            host.tripNeedsSync();
+            host.tripInfo("Pembatalan Pesanan", "Antrean aksi penuh. Coba lagi sebentar.");
+        }
     }
 }

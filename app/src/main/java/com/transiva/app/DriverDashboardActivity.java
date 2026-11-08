@@ -56,6 +56,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
+    private DashboardOfferMonitor offerMonitor;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -68,7 +69,7 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         if (!validSession()) return;
         dashboardScope=new DriverUiScope(this);
         offerCountdownController = new DashboardOfferCountdownController(this, () -> {
-            if (presenter != null) handler.postDelayed(() -> presenter.load(false), 350L);
+            if (presenter != null) handler.postDelayed(() -> presenter.refreshOrders(), 250L);
         });
         cancellationController = new DashboardCancellationController(this, new DashboardCancellationController.Listener() {
             @Override public void onCancelConfirmed(DriverOrder order, String reason) {
@@ -76,7 +77,7 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
                 // cancellation fails, a later FCM message can mark it unread again.
                 // Keep unread markers until the server confirms cancellation.
                 DriverBottomNavigation.refreshUnread(DriverDashboardActivity.this, bottomNavigationView);
-                if (presenter != null) presenter.cancelOrder(order.id, clean(order.source), clean(order.status), reason);
+                if (presenter != null) presenter.cancelOrder(order.id, clean(order.source), order.raw.optString("assignment_version"), reason);
             }
             @Override public void onMessage(String message) { showMessage(message); }
         });
@@ -95,9 +96,14 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
                 this
         );
 
+        offerMonitor = new DashboardOfferMonitor(this, session, new DashboardOfferMonitor.Host() {
+            @Override public DriverDashboardState state() { return currentState; }
+            @Override public void refreshOrders() { presenter.refreshOrders(); }
+        });
         setContentView(buildScreen());
         DriverAppSettings.apply(this);
-        presenter.load(true);
+        if (getIntent().getBooleanExtra("from_fcm", false)) presenter.refreshOrders();
+        else presenter.load(true);
         showOpportunityPromptIfNeeded(getIntent());
     }
 
@@ -175,6 +181,7 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         if (!validSession()) return;
         if (refreshController != null) refreshController.start();
         if (presenter != null) presenter.load(false);
+        if (offerMonitor != null) offerMonitor.start();
 
         // Kembali dari halaman pengaturan GPS tanpa perlu menutup/membuka ulang APK.
         if (pendingOnlineAfterGps && hasLocationPermission() && hasBackgroundLocationPermission() && isLocationProviderEnabled()) {
@@ -193,7 +200,14 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         }
     }
 
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (presenter != null && intent.getBooleanExtra("from_fcm", false)) presenter.refreshOrders();
+    }
+
     @Override protected void onPause() {
+        if (offerMonitor != null) offerMonitor.stop();
         if (refreshController != null) refreshController.stop();
         super.onPause();
     }
@@ -649,7 +663,16 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
             clusterGrid.addView(box, lp);
         }
     }
-    @Override public void onOrderCancelled(String id){
+    @Override public void onOrderCancelled(String id, String source) {
+        if (currentState != null) {
+            for (DriverOrder order : currentState.activeOrders) {
+                if (id.equals(order.id) && source.equals(order.source)) {
+                    NavigationGuidanceService.stopFor(this, order.raw);
+                    new TripOrderSnapshotStore(this).clearFor(order.raw);
+                    break;
+                }
+            }
+        }
         DriverMessageUnreadRepository.clearOrder(this,id);
         DriverBottomNavigation.refreshUnread(this,bottomNavigationView);
     }

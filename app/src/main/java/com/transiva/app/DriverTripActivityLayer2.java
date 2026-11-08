@@ -288,6 +288,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         return order==null?"":order.optString("order_id",order.optString("id"))+"|"+order.optString("source",orderKind)+"|"+status()+"|"+coord("pickup_lat","user_lat")+"|"+coord("pickup_lng","user_lng")+"|"+coord("delivery_lat","destination_lat")+"|"+coord("delivery_lng","destination_lng")+"|"+DriverEcosystemFeatures.from(order).waypoints.toString();
     }
     protected void requestStableRoute(boolean force){
+        if (NavigationTargetPolicy.terminal(order)) return;
         if(tripLiveRoutes!=null)tripLiveRoutes.request(force);
     }
 
@@ -398,7 +399,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         distanceInfo.setText("ℹ Status perjalanan: " + statusLabel(st));
         distanceHint.setText("Status server belum dikenali penuh. Gunakan kontrol geser tiba penjemputan bila order memang sedang menuju penjemputan.");
             }finally{
-                if(!tripStateReady()&&dockHint!=null&&!NavigationTargetPolicy.terminal(order))dockHint.setText("Menyinkronkan status perjalanan…");
+                if(!tripStateReady()&&dockHint!=null&&!NavigationTargetPolicy.terminal(order))dockHint.setText(tripConnectionLost ? "Menghubungkan ulang…" : "Menyinkronkan status perjalanan…");
                 endActionUpdate();
             }
     }

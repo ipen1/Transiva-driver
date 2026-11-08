@@ -117,6 +117,8 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected String orderKind = "order";
     protected boolean waypointArrivalBusy;
     protected boolean tripStateFresh;
+    protected boolean tripConnectionLost;
+    boolean tripCancelRunning;
     protected long tripLastSync=-1,tripMutationVersion;
     protected boolean tripStateReady(){return tripStateFresh&&tripLastSync>=0&&android.os.SystemClock.elapsedRealtime()-tripLastSync<=15000L;}
     protected void tripMutationStarted(){tripMutationVersion++;}
@@ -274,7 +276,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
         if(b == null) return;
         if(collectingActions){desiredActions.put(b,enabled);return;}
         if(b.getVisibility()!=View.VISIBLE)b.setVisibility(View.VISIBLE);
-        boolean desired=enabled&&!updatingStatus&&!waypointArrivalBusy&&tripStateReady();if(b.isEnabled()!=desired)b.setEnabled(desired);
+        boolean desired=enabled&&!updatingStatus&&!waypointArrivalBusy&&tripStateReady()&&!tripCancelRunning;if(b.isEnabled()!=desired)b.setEnabled(desired);
         float alpha=desired?1f:0.48f;if(b.getAlpha()!=alpha)b.setAlpha(alpha);
     }
 
@@ -306,7 +308,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
 
     protected void confirm(String msg, String next){ if(updatingStatus)return; PremiumDialogs.builder(this).setTitle("Konfirmasi").setMessage(msg).setNegativeButton("Batal",null).setPositiveButton("Ya",(d,w)->updateStatus(next)).show(); }
     protected void updateStatus(String next){
-        if (updatingStatus||waypointArrivalBusy) return;
+        if (tripCancelRunning||updatingStatus||waypointArrivalBusy) return;
         if(!tripStateReady()){info("Sinkronisasi perjalanan","Menunggu status terbaru dari server. Coba lagi sebentar.");return;}
         if(("arrived_delivery".equals(next)||"finished".equals(next)||"completed".equals(next))&&!isPickupOrder()
                 && DriverEcosystemFeatures.from(order).nextPendingWaypoint()!=null){
@@ -517,8 +519,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
 
     protected void saveActiveOrder(){ if(tripSnapshotStore!=null) tripSnapshotStore.save(order, orderKind, resolveDriverTypeFromOrder()); }
     protected void clearActiveOrder(){
-        if(session!=null&&order!=null){String id=session.get("current_order_id");if(id.equals(order.optString("order_id"))||id.equals(order.optString("id")))session.remove("current_order_id");}
-        if(tripSnapshotStore!=null) tripSnapshotStore.clear();
+        if(tripSnapshotStore!=null&&order!=null) tripSnapshotStore.clearFor(order);
     }
     protected String orderId(){ return first(order.optString("order_id"), order.optString("id"), "-"); } protected String internalId(){ return first(order.optString("id"), order.optString("order_id"), ""); } protected String status(){ return normalizeStatus(first(order.optString("status"), "taken")); }
     protected String normalizeStatus(String raw){ return DriverOrderStateMachine.normalize(raw); }

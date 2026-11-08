@@ -69,6 +69,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     private long realtimeGeneration;
     private DriverApiClient realtimeClient;
     private String realtimeSignature="";
+    private DriverOrderSyncSignal orderSignal;
     private final Runnable realtimeTripPoll=new Runnable(){ public void run(){ if(!realtimeTripRunning||order==null||session==null)return; refreshButtons();refreshTripRealtime(); if(tripRecovery.due(android.os.SystemClock.elapsedRealtime()))requestStableRoute(true); mainHandler.postDelayed(this,3000L); } };
 
 
@@ -95,6 +96,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         });
         loadSession();
         tripSnapshotStore = new TripOrderSnapshotStore(this);
+        orderSignal = new DriverOrderSyncSignal(this, () -> order, this::refreshTripRealtime);
         loadOrder();
         if(order!=null)try{order.put("source",isPickupOrder()?"pickup_orders":"orders");if(!NavigationTargetPolicy.terminal(order)){session.put("current_order_source",isPickupOrder()?"pickup_orders":"orders");session.put("current_order_id",orderId());}}catch(org.json.JSONException e){NavigationDiagnostics.error(this,"TRIP_SOURCE_FAILED",e);}
         buildBase();
@@ -113,8 +115,8 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     }
     @Override protected void onStart(){super.onStart();try{if(mapView!=null)mapView.onStart();}catch(RuntimeException e){NavigationDiagnostics.error(this,"TRIP_MAP_START_FAILED",e);}}
     @Override protected void onStop(){try{if(mapView!=null)mapView.onStop();}catch(RuntimeException e){NavigationDiagnostics.error(this,"TRIP_MAP_STOP_FAILED",e);}super.onStop();}
-    @Override protected void onResume(){ super.onResume(); NavigationDisplayPolicy.prefer(this,NavigationCompatibilityProfile.resolve(this,"auto").visualFrameMs); if(frameTelemetry==null)frameTelemetry=new NavigationFrameTelemetry(this,"trip");frameTelemetry.start(); if(tripLiveRoutes!=null)tripLiveRoutes.active(true); if(tripVehicleMotion!=null)tripVehicleMotion.active(true); realtimeTripRunning=true;tripStateFresh=false;realtimeSignature="";refreshButtons(); mainHandler.removeCallbacks(realtimeTripPoll); mainHandler.post(realtimeTripPoll); try{ if(mapView!=null) mapView.onResume(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_RESUME_FAILED",e); } if(order != null) startLocationWatch(); if(communicationController!=null) communicationController.onStart(); }
-    @Override protected void onPause(){ if(frameTelemetry!=null)frameTelemetry.close(); if(tripLiveRoutes!=null)tripLiveRoutes.active(false); if(tripVehicleMotion!=null)tripVehicleMotion.active(false); tripStateFresh=false;tripSliding=false;tripTouchingMap=false;realtimeGeneration++;realtimeBusy=false;if(realtimeClient!=null)realtimeClient.shutdown(); destinationExtension.close(); realtimeTripRunning=false; mainHandler.removeCallbacks(realtimeTripPoll); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView!=null) mapView.onPause(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_PAUSE_FAILED",e); } super.onPause(); }
+    @Override protected void onResume(){ super.onResume(); NavigationDisplayPolicy.prefer(this,NavigationCompatibilityProfile.resolve(this,"auto").visualFrameMs); if(frameTelemetry==null)frameTelemetry=new NavigationFrameTelemetry(this,"trip");frameTelemetry.start(); if(tripLiveRoutes!=null)tripLiveRoutes.active(true); if(tripVehicleMotion!=null)tripVehicleMotion.active(true); realtimeTripRunning=true;if(orderSignal!=null)orderSignal.active(true);tripStateFresh=false;realtimeSignature="";refreshButtons(); mainHandler.removeCallbacks(realtimeTripPoll); mainHandler.post(realtimeTripPoll); try{ if(mapView!=null) mapView.onResume(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_RESUME_FAILED",e); } if(order != null) startLocationWatch(); if(communicationController!=null) communicationController.onStart(); }
+    @Override protected void onPause(){ if(orderSignal!=null)orderSignal.active(false); if(frameTelemetry!=null)frameTelemetry.close(); if(tripLiveRoutes!=null)tripLiveRoutes.active(false); if(tripVehicleMotion!=null)tripVehicleMotion.active(false); tripStateFresh=false;tripSliding=false;tripTouchingMap=false;realtimeGeneration++;realtimeBusy=false;if(realtimeClient!=null)realtimeClient.shutdown(); destinationExtension.close(); realtimeTripRunning=false; mainHandler.removeCallbacks(realtimeTripPoll); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView!=null) mapView.onPause(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_PAUSE_FAILED",e); } super.onPause(); }
     @Override protected void onDestroy(){ if(tripVehicleMotion!=null)tripVehicleMotion.close(); if(tripLiveRoutes!=null)tripLiveRoutes.close(); realtimeGeneration++;if(realtimeClient!=null)realtimeClient.shutdown(); tripRouteGeneration++; if(tripRequestOwner!=null)tripRequestOwner.close();if(tripRouteScope!=null)tripRouteScope.close(); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView != null) mapView.onDestroy(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_DESTROY_FAILED",e); } super.onDestroy(); }
     @Override public void onLowMemory(){ super.onLowMemory(); try{ if(mapView!=null) mapView.onLowMemory(); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } }
 
@@ -124,25 +126,31 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         return active==null?"":active.optString("id")+"|"+active.optString("point_key");
     }
     private void refreshTripRealtime(){
-        if(realtimeBusy||updatingStatus||waypointArrivalBusy||!realtimeTripRunning||tripRouteScope==null||!tripRouteScope.alive())return;
+        if(NavigationTargetPolicy.terminal(order)||tripCancelRunning||realtimeBusy||updatingStatus||waypointArrivalBusy||!realtimeTripRunning||tripRouteScope==null||!tripRouteScope.alive())return;
+        final long dbId=order.optLong("id",0);
         final String key=orderId(),before=status();final boolean pickup=isPickupOrder();final long mutation=tripMutationVersion;
-        final long generation=++realtimeGeneration;final DriverApiClient client=new DriverApiClient(session);realtimeClient=client;realtimeBusy=true;
+        final long generation=++realtimeGeneration;final DriverApiClient client=new DriverApiClient(session,true);realtimeClient=client;realtimeBusy=true;
         boolean queued=tripRouteScope.execute(()->{
             try{
-                JSONObject query=new JSONObject().put("order_id",key);if(pickup)query.put("source","pickup_orders");
+                JSONObject query=new JSONObject().put("order_id",key).put("order_db_id",dbId);if(pickup)query.put("source","pickup_orders");
                 DriverApiClient.Result result=client.post(pickup?"smart_waiting.php":"driver_trip_realtime.php",query);
                 final JSONObject state=result.body.optJSONObject("smart_waiting"),fresh=result.body.optJSONObject("order");
                 tripRouteScope.post(()->{
-                    if(mutation!=tripMutationVersion||updatingStatus||waypointArrivalBusy||generation!=realtimeGeneration||!realtimeTripRunning||!key.equals(orderId())||pickup!=isPickupOrder()||!before.equals(status()))return;
+                    if(mutation!=tripMutationVersion||tripCancelRunning||updatingStatus||waypointArrivalBusy||generation!=realtimeGeneration||!realtimeTripRunning||!key.equals(orderId())||pickup!=isPickupOrder()||!before.equals(status()))return;
                     try{
                         if(fresh==null)return;
                         String freshId=first(fresh.optString("order_id"),fresh.optString("id"));
                         if(!key.equals(freshId)&&!internalId().equals(fresh.optString("id")))return;
+                        tripConnectionLost=false;
+                        if(NavigationTargetPolicy.terminal(fresh) && !DriverOrderStateMachine.normalize(fresh.optString("status")).equals("finished")){
+                            showTripEnded(fresh.optString("status"));
+                            return;
+                        }
                         tripStateFresh=true;tripLastSync=android.os.SystemClock.elapsedRealtime();
                         if(pickup){
                             order.put("smart_waiting",state);if(waitingView!=null)waitingView.bind(state);
                             if(fresh!=null){
-                                String signature=fresh.optString("status")+"|"+fresh.optString("pickup_lat")+"|"+fresh.optString("pickup_lng")+"|"+fresh.optString("delivery_lat")+"|"+fresh.optString("delivery_lng")+"|"+fresh.optString("destination_lat")+"|"+fresh.optString("destination_lng");
+                                String signature=fresh.optString("status")+"|"+fresh.optString("assignment_version")+"|"+fresh.optString("pickup_lat")+"|"+fresh.optString("pickup_lng")+"|"+fresh.optString("delivery_lat")+"|"+fresh.optString("delivery_lng")+"|"+fresh.optString("destination_lat")+"|"+fresh.optString("destination_lng");
                                 if(!signature.equals(realtimeSignature)){realtimeSignature=signature;java.util.Iterator<String> fields=fresh.keys();while(fields.hasNext()){String field=fields.next();order.put(field,fresh.opt(field));}saveActiveOrder();renderOrder();refreshButtons();requestStableRoute(false);}
                                 if(NavigationTargetPolicy.terminal(order)){NavigationSessionStore.clear(this);NavigationGuidanceService.stop(this);DriverGuardianManager.invalidate(this);}
                             }
@@ -150,7 +158,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
                         else if(fresh!=null){
                             String incoming=first(fresh.optString("order_id"),fresh.optString("id"));if(!key.equals(incoming)&&!internalId().equals(fresh.optString("id")))return;
                             JSONObject routeSnapshot=fresh.optJSONObject("server_route");
-                            String signature=fresh.optString("status")+"|"+fresh.optString("customer_received")+"|"+fresh.optString("price")+"|"+fresh.optString("delivery_lat")+"|"+fresh.optString("delivery_lng")+"|"+String.valueOf(fresh.optJSONObject("ecosystem"))+"|"+String.valueOf(fresh.optJSONObject("destination_extension"))+"|"+String.valueOf(fresh.optJSONObject("extra_fare_request"))+"|"+fresh.optString("price_change_status")+"|"+waitingActionKey(fresh)+"|"+(routeSnapshot==null?"":routeSnapshot.optString("route_hash")+":"+routeSnapshot.optLong("version"));
+                            String signature=fresh.optString("status")+"|"+fresh.optString("assignment_version")+"|"+fresh.optString("customer_received")+"|"+fresh.optString("price")+"|"+fresh.optString("delivery_lat")+"|"+fresh.optString("delivery_lng")+"|"+String.valueOf(fresh.optJSONObject("ecosystem"))+"|"+String.valueOf(fresh.optJSONObject("destination_extension"))+"|"+String.valueOf(fresh.optJSONObject("extra_fare_request"))+"|"+fresh.optString("price_change_status")+"|"+waitingActionKey(fresh)+"|"+(routeSnapshot==null?"":routeSnapshot.optString("route_hash")+":"+routeSnapshot.optLong("version"));
                             JSONObject waiting=fresh.optJSONObject("smart_waiting");order.put("smart_waiting",waiting);if(waitingView!=null)waitingView.bind(waiting);
                             if(signature.equals(realtimeSignature)){refreshButtons();return;}realtimeSignature=signature;
                             order=fresh;saveActiveOrder();renderOrder();refreshButtons();requestStableRoute(false);
@@ -159,10 +167,40 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
                         refreshButtons();
                     }catch(Exception error){TransivaDiagnostics.error(this,"navigation","TRIP_REFRESH_APPLY_FAILED",error);}
                 });
-            }catch(Exception error){TransivaDiagnostics.error(this,"navigation","TRIP_REFRESH_FAILED",error);}
+            }catch(Exception error){
+                tripRouteScope.post(() -> {
+                    if(generation!=realtimeGeneration||mutation!=tripMutationVersion||!realtimeTripRunning||tripCancelRunning
+                            ||!key.equals(orderId())||pickup!=isPickupOrder())return;
+                    if(DriverOrderSyncSignal.assignmentEnded(error)) showTripEnded("assignment_ended");
+                    else {
+                        tripConnectionLost=true;
+                        tripNeedsSync();
+                    }
+                });
+            }
             finally{client.shutdown();tripRouteScope.post(()->{if(generation==realtimeGeneration)realtimeBusy=false;});}
         });
         if(!queued){realtimeBusy=false;client.shutdown();}
+    }
+
+    private void showTripEnded(String status) {
+        if (order == null || NavigationTargetPolicy.terminal(order)) return;
+        try { order.put("status", status); }
+        catch (org.json.JSONException invalid) { return; }
+        realtimeTripRunning = false;
+        mainHandler.removeCallbacks(realtimeTripPoll);
+        tripMutationStarted();
+        if (tripLiveRoutes != null) tripLiveRoutes.active(false);
+        if (tripVehicleMotion != null) tripVehicleMotion.active(false);
+        stopLocationWatch();
+        NavigationGuidanceService.stopFor(this, order);
+        tripSnapshotStore.clearFor(order);
+        DriverMessageUnreadRepository.clearOrder(this, tripOrderId());
+        renderEmpty();
+        tripNeedsSync();
+        String message = status.contains("cancel") ? "Pesanan dibatalkan." : "Penugasan pesanan ini telah berakhir.";
+        PremiumDialogs.builder(this).setTitle("Perjalanan Berakhir").setMessage(message)
+                .setCancelable(false).setPositiveButton("Kembali", (dialog, button) -> finish()).show();
     }
 
     protected void loadSession(){
@@ -246,7 +284,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     protected void renderEmpty(){
         root.removeAllViews(); top("Driver Trip", "");
         LinearLayout c = card(); c.setPadding(dp(18), dp(16), dp(18), dp(16));
-        c.addView(text("Order tidak ditemukan.", 16, "#64748B", false));
+        c.addView(text(order == null ? "Order tidak ditemukan." : "Perjalanan telah berakhir.", 16, "#64748B", false));
         Button back = outline("Kembali ke Dashboard"); back.setOnClickListener(v -> finish()); c.addView(back, btnLp(14)); add(c,0,dp(8),0,0);
     }
     protected void renderOrder(){

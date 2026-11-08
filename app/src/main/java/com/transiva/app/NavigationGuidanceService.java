@@ -33,6 +33,23 @@ public final class NavigationGuidanceService extends Service implements Location
         try{ContextCompat.startForegroundService(a,new Intent(a,NavigationGuidanceService.class).putExtra("route_key",routeKey).putExtra("guidance_ticket",ticket));return true;}
         catch(RuntimeException e){NavigationGuidanceHealth.failed(ticket);NavigationDiagnostics.error(a,"NAV_GUIDANCE_SERVICE_START_FAILED",e);return false;}
     }
+    static void stopFor(Context c, JSONObject order) {
+        JSONObject checkpoint = NavigationSessionStore.read(c);
+        if (checkpoint == null) return;
+        try {
+            JSONObject navigating = new JSONObject(checkpoint.optString("order"));
+            if (!NavigationTargetPolicy.source(order).equals(NavigationTargetPolicy.source(navigating))) return;
+            String internal = order.optString("id");
+            if (NavigationTargetPolicy.same(order, navigating)
+                    || (!internal.isEmpty() && internal.equals(navigating.optString("id")))) {
+                NavigationSessionStore.clear(c);
+                stop(c);
+            }
+        } catch (JSONException e) {
+            TransivaDiagnostics.error(c, "navigation", "CHECKPOINT_ORDER_INVALID", e);
+        }
+    }
+
     static void stop(Context c){NavigationGuidanceHealth.clear(NavigationSessionStore.identity(c));c.stopService(new Intent(c,NavigationGuidanceService.class));}
     @Override public void onCreate(){
         super.onCreate();owner=DriverSessionOwner.capture(this);locations=(LocationManager)getSystemService(LOCATION_SERVICE);
@@ -59,7 +76,10 @@ public final class NavigationGuidanceService extends Service implements Location
         if(closed||NavigationSessionStore.foreground||snapshot==null)return;
         try{
             JSONObject old=new JSONObject(snapshot.optString("order"));if(!NavigationTargetPolicy.same(old,fresh))return;
-            if(NavigationTargetPolicy.terminal(fresh)){NavigationSessionStore.clear(this);stopSelf();return;}
+            if(NavigationTargetPolicy.terminal(fresh)){
+                new TripOrderSnapshotStore(this).clearFor(fresh);
+                NavigationSessionStore.clear(this);stopSelf();return;
+            }
             java.util.Iterator<String> names=fresh.keys();while(names.hasNext()){String field=names.next();old.put(field,fresh.opt(field));}
             NavigationTargetPolicy.Target target=NavigationTargetPolicy.resolve(old,snapshot.optString("mode"),snapshot.optDouble("lat"),snapshot.optDouble("lng"));
             String base=NavigationTargetPolicy.id(old)+"|"+NavigationTargetPolicy.source(old)+"|"+target.mode+"|"+target.lat+"|"+target.lng;

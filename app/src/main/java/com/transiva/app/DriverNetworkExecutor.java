@@ -33,7 +33,24 @@ public final class DriverNetworkExecutor {
             new ThreadPoolExecutor.AbortPolicy()
     );
 
-    static { EXECUTOR.allowCoreThreadTimeOut(true); }
+    private static final ThreadPoolExecutor ORDER_ACTIONS = new ThreadPoolExecutor(
+            2, 2, 20L, TimeUnit.SECONDS, new ArrayBlockingQueue<>(8),
+            FACTORY, new ThreadPoolExecutor.AbortPolicy());
+
+    static {
+        EXECUTOR.allowCoreThreadTimeOut(true);
+        ORDER_ACTIONS.allowCoreThreadTimeOut(true);
+    }
+
+    public static boolean executeOrderAction(Runnable work) {
+        try {
+            ORDER_ACTIONS.execute(work);
+            return true;
+        } catch (RejectedExecutionException rejected) {
+            Log.w(TAG, "Order action queue saturated");
+            return false;
+        }
+    }
     private DriverNetworkExecutor() {}
 
     public static ExecutorService executor() { return EXECUTOR; }

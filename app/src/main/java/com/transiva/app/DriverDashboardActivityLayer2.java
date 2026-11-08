@@ -304,7 +304,17 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
     }
 
     @Override public void showActionLoading(String action, boolean visible) {
-        showLoading(visible);
+        showLoading(visible && !action.startsWith("accept:") && !action.startsWith("cancel:"));
+        if (offerCountdownController != null && action.startsWith("accept:") && !visible) {
+            offerCountdownController.setProcessingKey("");
+        }
+        if (activeBox != null && action.startsWith("cancel:")) {
+            Button cancel = activeBox.findViewWithTag(action);
+            if (cancel != null) {
+                cancel.setEnabled(!visible);
+                cancel.setText(visible ? "Memastikan pembatalan…" : "Batalkan Order");
+            }
+        }
         onlineSwitch.setEnabled(!visible);
     }
 
@@ -617,7 +627,7 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
                 && currentState.activeOrders != null
                 && currentState.activeOrders.size() >= 2;
 
-        Button action = primaryButton(active ? "Lanjutkan Trip" : (queued ? "Menunggu Order Aktif Selesai" : "Ambil Order"));
+        Button action = primaryButton(active ? "Lanjutkan Perjalanan" : (queued ? "Menunggu Order Aktif Selesai" : "Ambil Order"));
 
         if (active) {
             action.setOnClickListener(v -> openTrip(order));
@@ -625,6 +635,7 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
 
             if (canDriverCancel(order.status)) {
                 Button cancel = dangerOutlineButton("Batalkan Order");
+                cancel.setTag("cancel:" + clean(order.source) + ":" + order.id);
                 cancel.setOnClickListener(v -> { if (cancellationController != null) cancellationController.show(order); });
                 add(card, cancel, 0, dp(9), 0, 0);
             }
@@ -649,7 +660,9 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
                     showMessage("Tawaran order sudah berakhir.");
                     return;
                 }
-                presenter.acceptOrder(order.id, clean(order.source));
+                if (presenter.acceptOrder(order.id, clean(order.source), order.raw.optString("offer_action_token"))) {
+                    offerCountdownController.setProcessingKey(key);
+                }
             });
             add(card, action, 0, dp(12), 0, 0);
         }

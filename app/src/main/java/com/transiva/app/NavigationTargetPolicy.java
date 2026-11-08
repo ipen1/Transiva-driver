@@ -13,13 +13,18 @@ final class NavigationTargetPolicy {
     static String id(JSONObject o){return o==null?"":first(o.optString("order_id"),o.optString("id"));}
     static String source(JSONObject o){String s=o==null?"":first(o.optString("source"),o.optString("source_table"),o.optString("order_kind"));return s.toLowerCase(Locale.US).contains("pickup")?"pickup_orders":"orders";}
     static String identity(JSONObject o){return source(o)+"|"+id(o);}
-    static boolean same(JSONObject a,JSONObject b){return !id(a).isEmpty()&&identity(a).equals(identity(b));}
+    static boolean same(JSONObject a,JSONObject b){
+        if(a==null||b==null||!source(a).equals(source(b)))return false;
+        String internal=first(a.optString("id"));
+        return (!id(a).isEmpty()&&id(a).equals(id(b)))
+                || (!internal.isEmpty()&&internal.equals(first(b.optString("id"))));
+    }
     static String revision(JSONObject o){
         if(o==null)return "";StringBuilder s=new StringBuilder(identity(o));
         for(String key:new String[]{"status","pickup_lat","pickup_lng","user_lat","user_lng","delivery_lat","delivery_lng","destination_lat","destination_lng"})s.append('|').append(o.optString(key));
         JSONObject eco=o.optJSONObject("ecosystem");JSONArray stops=eco==null?o.optJSONArray("waypoints"):eco.optJSONArray("waypoints");return s.append('|').append(stops==null?"":stops.toString()).toString();
     }
-    static boolean terminal(JSONObject o){String s=o==null?"":o.optString("status").trim().toLowerCase(Locale.US);return s.equals("finished")||s.equals("completed")||s.contains("cancel")||s.equals("rejected");}
+    static boolean terminal(JSONObject o){String s=o==null?"":o.optString("status").trim().toLowerCase(Locale.US);return s.equals("finished")||s.equals("completed")||s.contains("cancel")||s.equals("rejected")||s.equals("assignment_ended");}
     static boolean delivery(JSONObject o){String s=o==null?"":o.optString("status").trim().toLowerCase(Locale.US);return s.equals("arrived_pickup")||s.equals("on_delivery")||s.equals("arrived_delivery");}
     static Target resolve(JSONObject o,String preferred,double fallbackLat,double fallbackLng){
         boolean toDelivery=delivery(o)||"delivery".equals(preferred)||(preferred!=null&&preferred.startsWith("waypoint_"));

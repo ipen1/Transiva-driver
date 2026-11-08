@@ -122,8 +122,12 @@ abstract class DriverDashboardActivityLayer1 extends Activity
     protected final BroadcastReceiver realtimeReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
             if (presenter == null) return;
-            presenter.load(false);
-            if (refreshController != null) refreshController.scheduleSoon(350L);
+            String type = intent.getStringExtra("type");
+            if (type != null && (type.contains("order") || type.contains("offer") || type.contains("trip"))) {
+                presenter.refreshOrders();
+            } else {
+                presenter.load(false);
+            }
         }
     };
 

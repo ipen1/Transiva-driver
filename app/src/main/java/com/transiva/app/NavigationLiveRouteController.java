@@ -234,7 +234,16 @@ final class NavigationLiveRouteController implements AutoCloseable {
     }
     private void applyOrderState(org.json.JSONObject fresh,boolean notify){
         if(closed||!coordinator.valid()||!NavigationTargetPolicy.same(host.order,fresh))return;
-        if(NavigationTargetPolicy.terminal(fresh)){coordinator.invalidate();NavigationSessionStore.clear(host);NavigationGuidanceService.stop(host);host.finish();return;}
+        if(NavigationTargetPolicy.terminal(fresh)){
+            coordinator.invalidate();
+            new TripOrderSnapshotStore(host).clearFor(fresh);
+            NavigationSessionStore.clear(host);
+            NavigationGuidanceService.stop(host);
+            if("assignment_ended".equals(fresh.optString("status"))){
+                android.widget.Toast.makeText(host,"Penugasan pesanan telah berakhir.",android.widget.Toast.LENGTH_LONG).show();
+            }
+            host.finish();return;
+        }
         String before=key();
         try{org.json.JSONObject merged=new org.json.JSONObject(host.order.toString());java.util.Iterator<String> fields=fresh.keys();while(fields.hasNext()){String field=fields.next();merged.put(field,fresh.opt(field));}host.order=merged;}
         catch(org.json.JSONException e){NavigationDiagnostics.error(host,"NAV_ORDER_APPLY_FAILED",e);return;}

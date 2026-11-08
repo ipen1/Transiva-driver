@@ -35,18 +35,33 @@ public final class TripOrderSnapshotStore {
                 .apply();
     }
 
-    private void clearFor(JSONObject order){
+    void clearFor(JSONObject order){
         SessionManager session=new SessionManager(context);String current=session.get("current_order_id");
-        if(current.equals(order.optString("order_id"))||current.equals(order.optString("id")))session.remove("current_order_id");
+        String source=NavigationTargetPolicy.source(order);
+        String currentSource=session.get("current_order_source");
+        if(!current.isEmpty()&&(currentSource.isEmpty()||source.equals(currentSource))
+                && (current.equals(order.optString("order_id"))||current.equals(order.optString("id")))){
+            session.remove("current_order_id");
+            session.remove("current_order_source");
+        }
         DriverGuardianManager.invalidate(context);
         String saved=prefs.getString("driver_active_order_id","");
-        if(saved.equals(order.optString("order_id"))||saved.equals(order.optString("id")))clear();
+        String savedKind=prefs.getString("driver_active_order_kind","");
+        String savedSource=savedKind.contains("pickup")?"pickup_orders":"orders";
+        if(!saved.isEmpty()&&(savedKind.isEmpty()||source.equals(savedSource))
+                && (saved.equals(order.optString("order_id"))||saved.equals(order.optString("id")))){
+            clearSavedSnapshot();
+        }
     }
     public void clear() {
         String saved=prefs.getString("driver_active_order_id","");
         SessionManager session=new SessionManager(context);
         if(!saved.isEmpty()&&saved.equals(session.get("current_order_id")))session.remove("current_order_id");
         DriverGuardianManager.invalidate(context);
+        clearSavedSnapshot();
+    }
+
+    private void clearSavedSnapshot() {
         prefs.edit()
                 .remove("active_order_json")
                 .remove("activeOrder")

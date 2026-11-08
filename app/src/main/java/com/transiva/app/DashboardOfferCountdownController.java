@@ -30,6 +30,7 @@ public final class DashboardOfferCountdownController {
     private final Map<String, TextView> views = new HashMap<>();
     private final Map<String, Button> buttons = new HashMap<>();
     private final Map<String, Integer> lastVibratedSecond = new HashMap<>();
+    private String processingKey = "";
     private final Set<String> expiredRefreshRequested = new HashSet<>();
 
     public DashboardOfferCountdownController(Context context, Listener listener) {
@@ -94,6 +95,11 @@ public final class DashboardOfferCountdownController {
             int seconds = remainingMs <= 0L ? 0 : (int)Math.ceil(remainingMs / 1000.0);
             render(view, seconds);
             Button button = buttons.get(key);
+            if (button != null && key.equals(processingKey)) {
+                button.setEnabled(false);
+                button.setText("Memastikan pesanan…");
+                continue;
+            }
             if (seconds <= 0) {
                 if (button != null) { button.setEnabled(false); button.setText("Tawaran berakhir"); }
                 if (expiredRefreshRequested.add(key) && listener != null) listener.onOfferExpired();
@@ -102,6 +108,11 @@ public final class DashboardOfferCountdownController {
                 maybeVibrate(key, seconds);
             }
         }
+    }
+
+    public void setProcessingKey(String key) {
+        processingKey = key;
+        tick();
     }
 
     private void render(TextView view, int seconds) {
