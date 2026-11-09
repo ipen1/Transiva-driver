@@ -26,7 +26,7 @@ final class DashboardOfferMonitor {
     private boolean active;
     private boolean registered;
     private DriverApiClient inFlight;
-    private long lastMismatchRefresh;
+    private long lastMismatchRefresh, nextFoodRecovery;
     private final ConnectivityManager.NetworkCallback network = new ConnectivityManager.NetworkCallback() {
         @Override public void onAvailable(Network ignored) {
             main.post(() -> {
@@ -77,11 +77,15 @@ final class DashboardOfferMonitor {
         main.postDelayed(tick, WaveLoadGuard.jitter(4500L));
         DriverDashboardState state = host.state();
         if (inFlight != null || state == null || !state.online) return;
+        long now = android.os.SystemClock.elapsedRealtime();
+        boolean recoverFood = state.offers.isEmpty() && now >= nextFoodRecovery;
+        if (recoverFood) nextFoodRecovery = now + 15_000L;
+        String endpoint = recoverFood ? "driver_order_signal.php?recover_food=1" : "driver_order_signal.php";
         DriverApiClient client = new DriverApiClient(session, true);
         inFlight = client;
         if (!DriverNetworkExecutor.execute(() -> {
             try {
-                JSONArray cycles = client.getOnce("driver_order_signal.php").body.optJSONArray("offer_cycles");
+                JSONArray cycles = client.getOnce(endpoint).body.optJSONArray("offer_cycles");
                 if (cycles != null) {
                     Set<String> live = new HashSet<>();
                     for (int i = 0; i < cycles.length(); i++) live.add(cycles.optString(i));
