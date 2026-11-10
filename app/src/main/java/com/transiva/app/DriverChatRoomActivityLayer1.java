@@ -512,9 +512,18 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
                 .show();
     }
 
+    private final android.content.BroadcastReceiver chatPushRefresh = new android.content.BroadcastReceiver() {
+        @Override public void onReceive(android.content.Context context, android.content.Intent intent) {
+            if (FreshChatPush.sameRoom(roomId, intent.getStringExtra("room_id"))) loadMessages(false);
+        }
+    };
+
     @Override
     protected void onResume() {
         super.onResume();
+        androidx.core.content.ContextCompat.registerReceiver(this, chatPushRefresh,
+                new android.content.IntentFilter(FreshChatPush.ACTION_ROOM_CHANGED),
+                androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED);
         if(chatScope==null||!chatScope.alive())return;
         DriverMessageUnreadRepository.markRead(this, orderId, roomId);
         chatVisible = true;
@@ -534,6 +543,7 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
 
     @Override
     protected void onPause() {
+        unregisterReceiver(chatPushRefresh);
         if (stickerDialog != null) { stickerDialog.dismiss(); stickerDialog = null; }
         chatVisible = false;
         readVisibilityGeneration++;

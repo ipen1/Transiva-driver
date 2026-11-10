@@ -273,7 +273,15 @@ public class TransivaCallUiActivity extends Activity {
         int top=pip?0:dp(compact?6:12),bottom=pip?0:dp(compact?6:16);
         if(p.topMargin!=top||p.bottomMargin!=bottom){p.setMargins(0,top,0,bottom);stage.setLayoutParams(p);}
     }
-    private void openChat(){WebRtcSessionEngine e=WebRtcCallForegroundService.current();String order=e!=null?e.orderId:getIntent().getStringExtra("order_id");if(order==null||order.isEmpty())return;Intent i=new Intent();i.setClass(this,DriverChatRoomActivity.class);i.putExtra("order_id",order).putExtra("order_source",e!=null?e.source:getIntent().getStringExtra("source")).putExtra("source",e!=null?e.source:getIntent().getStringExtra("source")).putExtra("participant_name",e!=null?e.peer:getIntent().getStringExtra("peer_name"));i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP);startActivity(i);}
+    private void openChat(){WebRtcSessionEngine e=WebRtcCallForegroundService.current();String order=e!=null?e.orderId:getIntent().getStringExtra("order_id");if(order==null||order.isEmpty())return;String callerRole=e!=null?e.callerRole:getIntent().getStringExtra("caller_role");
+        if("merchant".equals(callerRole)){
+            startActivity(new Intent(this,DriverMerchantChatActivity.class)
+                    .putExtra("order_id",order)
+                    .putExtra("merchant_name",e!=null?e.peer:getIntent().getStringExtra("caller_name"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP));
+            return;
+        }
+        Intent i=new Intent();i.setClass(this,DriverChatRoomActivity.class);i.putExtra("order_id",order).putExtra("order_source",e!=null?e.source:getIntent().getStringExtra("source")).putExtra("source",e!=null?e.source:getIntent().getStringExtra("source")).putExtra("participant_name",e!=null?e.peer:getIntent().getStringExtra("peer_name"));i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP);startActivity(i);}
     @Override protected void onResume(){super.onResume();resumed=true;
         if(settingsOpen){settingsOpen=false;startPending=permission();if(!startPending){permissionRetry("Izin belum diberikan. Anda dapat membukanya lagi melalui Setelan.");}}
         WebRtcSessionEngine e=WebRtcCallForegroundService.current();if(e!=null)e.setVisible(true);render();

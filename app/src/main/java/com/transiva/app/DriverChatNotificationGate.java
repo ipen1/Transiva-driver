@@ -12,28 +12,36 @@ import java.io.ByteArrayOutputStream;
 import java.util.Map;
 import org.json.JSONObject;
 
-/** Small bounded check on Firebase's message thread, before badges, bubbles or sound. */
+/** Reuse fresh server checks. Older pushes are authenticated and checked again. */
 final class DriverChatNotificationGate {
     private DriverChatNotificationGate() {}
     static boolean mayPost(Context c){return Build.VERSION.SDK_INT<33||ContextCompat.checkSelfPermission(c,Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED;}
     static boolean dispatch(Context c,Map<String,String> data,Runnable verified) {
         DriverSessionOwner owner=DriverSessionOwner.capture(c);
         try {
-            if(!owner.current()||!mayPost(c))return false;
+            if(!owner.current())return false;
             String target=value(data,"target_user_id"),scope=value(data,"target_app_scope");
             if((!target.isEmpty()&&!target.equals(owner.userId()))||(!scope.isEmpty()&&!"driver".equalsIgnoreCase(scope)))return false;
             long id;try{id=Long.parseLong(value(data,"chat_id").isEmpty()?value(data,"message_id"):value(data,"chat_id"));}catch(NumberFormatException e){return false;}
             if(id<=0)return false;
-            String url=DriverApiConfig.endpoint("driver_chat_notification_status.php")+"?chat_id="+id;
-            for(String key:new String[]{"room_id","order_id","order_db_id","order_source"}) {
-                String v=value(data,key);if("order_source".equals(key)&&v.isEmpty())v=value(data,"source");
-                url+="&"+key+"="+URLEncoder.encode(v,"UTF-8");
+            String room=value(data,"room_id");
+            String sessionHash=FcmTokenCoordinator.hash(new SessionManager(c).getToken());
+            String targetSession=value(data,"target_session_hash");
+            if(!targetSession.isEmpty()&&!targetSession.equals(sessionHash))return false;
+            if(!FreshChatPush.verified(data,owner.userId(),"driver",sessionHash)) {
+                String url=DriverApiConfig.endpoint("driver_chat_notification_status.php")+"?chat_id="+id;
+                for(String key:new String[]{"room_id","order_id","order_db_id","order_source"}) {
+                    String v=value(data,key);if("order_source".equals(key)&&v.isEmpty())v=value(data,"source");
+                    url+="&"+key+"="+URLEncoder.encode(v,"UTF-8");
+                }
+                JSONObject result=check(owner,url);
+                if(!result.optBoolean("success")||!result.optBoolean("eligible")||result.optLong("chat_id")!=id)return false;
             }
-            JSONObject result=check(owner,url);
-            if(!result.optBoolean("success")||!result.optBoolean("eligible")||result.optLong("chat_id")!=id)return false;
             final long messageId=id;final boolean[] accepted={false};
             owner.runIfCurrent(()->{
-                if(!DriverChatNotificationPoller.isRoomOpen(value(data,"room_id"))&&DriverChatNotificationState.claim(c,owner,messageId)) {
+                FreshChatPush.refreshRoom(c,room);
+                boolean open=DriverChatNotificationPoller.isRoomOpen(room);
+                if((open||mayPost(c))&&DriverChatNotificationState.claim(c,owner,messageId)&&!open) {
                     verified.run();accepted[0]=true;
                 }
             });

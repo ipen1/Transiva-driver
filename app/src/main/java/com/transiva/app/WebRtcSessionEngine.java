@@ -25,7 +25,7 @@ final class WebRtcSessionEngine {
     private boolean candidateBusy,peerRestart,negotiatingRestart;
     private String appliedRemoteSdp="";
     private static final class CandidateSend {final IceCandidate value;int attempts;long due;CandidateSend(IceCandidate c){value=c;}}
-    final String role,orderId,source;
+    final String role,orderId,source,callerRole;
     volatile String peer,peerPhoto="";
     final boolean video,incoming;
     final String operationId;
@@ -59,6 +59,7 @@ final class WebRtcSessionEngine {
         context=c.getApplicationContext();session=new SessionManager(context);callOwner=CallSignalSession.capture(context);stopped=stop;
         role=context.getPackageName().endsWith(".driver")?"driver":"customer";
         orderId=clean(i.getStringExtra("order_id"));source=first(i.getStringExtra("source"),"orders");peer=first(i.getStringExtra("peer_name"),i.getStringExtra("caller_name"),"Transiva");
+        callerRole=clean(i.getStringExtra("caller_role"));
         peerPhoto=CallPeerIdentity.first(i.getStringExtra("peer_photo"),i.getStringExtra("caller_photo"));
         operationId=first(i.getStringExtra("operation_id"),java.util.UUID.randomUUID().toString());
         video="video".equals(i.getStringExtra("call_type"));incoming=i.getBooleanExtra("incoming",false);callId=clean(i.getStringExtra("call_id"));
