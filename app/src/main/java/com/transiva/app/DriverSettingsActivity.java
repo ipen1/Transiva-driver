@@ -104,7 +104,7 @@ public class DriverSettingsActivity extends Activity {
             String[] modes = {"system", "light", "dark"};
             String current = DriverAppSettings.themeMode(this);
             int selected = "dark".equals(current) ? 2 : "light".equals(current) ? 1 : 0;
-            new AlertDialog.Builder(this).setTitle("Tema aplikasi")
+            PremiumDialogs.builder(this).setTitle("Tema aplikasi")
                     .setSingleChoiceItems(new String[]{"Ikuti tema HP (disarankan)", "Terang", "Gelap"}, selected,
                             (dialog, which) -> {
                                 dialog.dismiss();

@@ -126,7 +126,7 @@ public final class PremiumDialogs {
         private CharSequence premiumTitle;
 
         PremiumBuilder(Context context) {
-            super(new ContextThemeWrapper(context, themeFor(context)));
+            super(context, themeFor(context));
             this.baseContext = context;
         }
 
@@ -226,6 +226,13 @@ public final class PremiumDialogs {
 
     private static void styleCustomInputs(Context context, View view) {
         if (view == null) return;
+        if (view instanceof TextView && !(view instanceof Button)) {
+            TextView label = (TextView)view;
+            int surface = color(context,R.color.transiva_dialog_surface);
+            int foreground = androidx.core.graphics.ColorUtils.compositeColors(label.getCurrentTextColor(),surface);
+            if (androidx.core.graphics.ColorUtils.calculateContrast(foreground,surface)<4.5)
+                label.setTextColor(color(context,R.color.transiva_dialog_title));
+        }
         if (view instanceof EditText) {
             EditText input = (EditText) view;
             boolean dark = isNight(context);

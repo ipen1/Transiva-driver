@@ -126,7 +126,7 @@ public final class DriverOrderCompletionDialog {
                 StringBuilder details=new StringBuilder();org.json.JSONArray sessions=finalWaiting.optJSONArray("sessions");
                 if(sessions!=null)for(int i=0;i<sessions.length();i++){JSONObject entry=sessions.optJSONObject(i);if(entry!=null&&entry.optDouble("fee")>0){if(details.length()>0)details.append("\n");details.append(entry.optString("label","Titik tunggu")).append(": ").append(entry.optInt("paid_minutes")).append(" menit berbayar · ").append(rupiah(entry.optDouble("fee")));}}
                 if(details.length()==0)details.append("Biaya tunggu mengikuti perhitungan server.");
-                new android.app.AlertDialog.Builder(activity).setTitle("Rincian waktu tunggu").setMessage(details.toString()).setPositiveButton("Tutup",null).show();
+                PremiumDialogs.builder(activity).setTitle("Rincian waktu tunggu").setMessage(details.toString()).setPositiveButton("Tutup",null).show();
             });card.addView(waitingDetails);
         }
 

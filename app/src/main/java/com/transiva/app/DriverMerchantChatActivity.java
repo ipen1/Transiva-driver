@@ -37,6 +37,13 @@ public class DriverMerchantChatActivity extends Activity {
     private LinearLayout messages;
     private ScrollView scroll;
     private EditText input;
+    private final OrderChatStyle chatStyle=new OrderChatStyle(this);
+    private final android.util.SparseArray<TextView> receiptViews=new android.util.SparseArray<>();
+    private long focusedSince, latestShownAt;
+    private int readThrough;
+    private final Runnable reportVisibleRead=()->{
+        if(canRead()&&this.lastId>readThrough)load(false);
+    };
     private Button send, call, quick;
     private TextView title;
     private boolean chatOpen;
@@ -70,6 +77,7 @@ public class DriverMerchantChatActivity extends Activity {
     @Override protected void onResume(){
         super.onResume();
         stopped=false;
+        if(hasWindowFocus()){focusedSince=android.os.SystemClock.elapsedRealtime();main.postDelayed(reportVisibleRead,1250);}
         ContextCompat.registerReceiver(this,chatPush,new IntentFilter(TransivaFirebaseService.ACTION_DRIVER_DATA_CHANGED),
                 ContextCompat.RECEIVER_NOT_EXPORTED);
         if(!orderId.isEmpty()||!orderDbId.isEmpty()) load(false);
@@ -77,7 +85,7 @@ public class DriverMerchantChatActivity extends Activity {
         main.postDelayed(refresh,WaveLoadGuard.jitter(DriverPollingCoordinator.interval(this, REFRESH_MS)));
     }
     @Override protected void onPause(){
-        stopped=true;
+        stopped=true;focusedSince=0;main.removeCallbacks(reportVisibleRead);
         main.removeCallbacks(refresh);
         unregisterReceiver(chatPush);
         super.onPause();
@@ -88,6 +96,7 @@ public class DriverMerchantChatActivity extends Activity {
         page.setOrientation(LinearLayout.VERTICAL);
         page.setPadding(dp(12),dp(8),dp(12),dp(8));
         page.setBackgroundColor(DriverThemeTokens.color(this,"#F4F8FD"));
+        chatStyle.backdrop(page);
         setContentView(page);
         DriverAppSettings.apply(this);
 
@@ -101,6 +110,7 @@ public class DriverMerchantChatActivity extends Activity {
         back.setOnClickListener(v->finish());
         head.addView(back,new LinearLayout.LayoutParams(dp(48),dp(48)));
 
+        chatStyle.addAvatar(head,merchantName,getIntent().getStringExtra("participant_photo"));
         LinearLayout info=new LinearLayout(this);
         info.setOrientation(LinearLayout.VERTICAL);
         title=text(merchantName,16,"#0B3A78",true);
@@ -122,7 +132,7 @@ public class DriverMerchantChatActivity extends Activity {
         quick=button("Pesan cepat  ▾",false);
         quick.setBackgroundColor(Color.TRANSPARENT);
         quick.setEnabled(false);
-        quick.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Pesan cepat")
+        quick.setOnClickListener(v->PremiumDialogs.builder(this).setTitle("Pesan cepat")
                 .setItems(templates,(dialog,which)->sendText(templates[which]))
                 .setNegativeButton("Tutup",null).show());
         page.addView(quick,new LinearLayout.LayoutParams(dp(118),dp(48)));
@@ -133,6 +143,13 @@ public class DriverMerchantChatActivity extends Activity {
         messages.setOrientation(LinearLayout.VERTICAL);
         messages.setPadding(dp(2),0,dp(2),dp(6));
         scroll.addView(messages,new ScrollView.LayoutParams(-1,-2));
+        scroll.setOnScrollChangeListener((v,x,y,oldX,oldY)->{
+            if(canRead()&&lastId>readThrough){
+                main.removeCallbacks(reportVisibleRead);
+                main.postDelayed(reportVisibleRead,1250);
+            }
+        });
+        chatStyle.overflow(head,null,query->DriverMessageApi.get(session,chatEndpoint()+query),messages);
         page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
 
         LinearLayout composer=new LinearLayout(this);
@@ -162,7 +179,7 @@ public class DriverMerchantChatActivity extends Activity {
 
     private void chooseCall(){
         if(!chatOpen)return;
-        new AlertDialog.Builder(this).setTitle("Panggil Merchant")
+        PremiumDialogs.builder(this).setTitle("Panggil Merchant")
                 .setItems(new String[]{"Panggilan suara","Panggilan video"},(dialog,which)->{
                     if(!chatOpen)return;
                     Intent intent=new Intent(this,WebRtcCallActivity.class)
@@ -177,11 +194,38 @@ public class DriverMerchantChatActivity extends Activity {
                 .setNegativeButton("Tutup",null).show();
     }
 
+    @Override public void onWindowFocusChanged(boolean focused){
+        super.onWindowFocusChanged(focused);
+        focusedSince=focused?android.os.SystemClock.elapsedRealtime():0;
+        main.removeCallbacks(reportVisibleRead);
+        if(focused&&lastId>readThrough)main.postDelayed(reportVisibleRead,1250);
+    }
+
+    private boolean nearBottom(){
+        return scroll!=null&&messages!=null&&messages.getHeight()-scroll.getScrollY()-scroll.getHeight()<dp(80);
+    }
+    private boolean canRead(){
+        android.os.PowerManager power=(android.os.PowerManager)getSystemService(POWER_SERVICE);
+        return !stopped&&hasWindowFocus()&&nearBottom()&&power!=null&&power.isInteractive();
+    }
+
+    private String chatEndpoint(){
+        return BASE+"getMerchantDriverChat.php?chat_ui=1&order_id="+enc(orderId)+"&order_db_id="+enc(orderDbId);
+    }
+
+    private String readParams(int through,long visible){
+        return through<=0?"":"&mark_read=1&read_through_id="+through+"&visible_ms="+visible;
+    }
+
     private void load(boolean initial){
         if(loading)return;loading=true;
+        int cursor=lastId;
+        String receiptIds=OrderChatStyle.receiptIds(receiptViews);
+        long visible=focusedSince==0?0:android.os.SystemClock.elapsedRealtime()-Math.max(focusedSince,latestShownAt);
+        int mark=canRead()&&visible>=1200&&cursor>readThrough?cursor:0;
         boolean queued=DriverNetworkExecutor.execute(()->{try{
-            String url=BASE+"getMerchantDriverChat.php?order_id="+enc(orderId)+"&order_db_id="+enc(orderDbId)+"&last_id="+lastId+"&_="+System.currentTimeMillis();
-            JSONObject r=DriverMessageApi.get(session,url);runOnUiThread(()->apply(r,initial));
+            String url=chatEndpoint()+"&last_id="+cursor+"&receipt_ids="+receiptIds+readParams(mark,visible);
+            JSONObject r=DriverMessageApi.get(session,url);runOnUiThread(()->{if(r.optBoolean("success"))readThrough=Math.max(readThrough,mark);apply(r,initial);});
         }catch(Exception e){if(initial)runOnUiThread(()->status.setText("Menghubungkan ulang…"));}
         finally{main.post(()->loading=false);}});
         if(!queued)loading=false;
@@ -194,14 +238,47 @@ public class DriverMerchantChatActivity extends Activity {
         if(!available){status.setText(r.optString("message","Chat belum tersedia"));return;}
         String rn=r.optString("restaurant_name","");if(!rn.isEmpty()){merchantName=rn;title.setText(rn);}
         status.setText(chatOpen?"Pesanan #"+first(orderId,orderDbId):"Riwayat pesanan");
+        boolean wasAtBottom=nearBottom();
+        int priorId=lastId;
         JSONArray a=r.optJSONArray("messages");if(a!=null)for(int i=0;i<a.length();i++){JSONObject m=a.optJSONObject(i);if(m==null||m.optInt("id",0)<=lastId)continue;addMessage(m);lastId=Math.max(lastId,m.optInt("id",0));}
+        JSONArray receipts=r.optJSONArray("receipt_updates");
+        if(receipts!=null)for(int i=0;i<receipts.length();i++){
+            JSONObject update=receipts.optJSONObject(i);
+            TextView receipt=update==null?null:receiptViews.get(update.optInt("id"));
+            if(receipt!=null)chatStyle.receipt(receipt,update,true);
+        }
+        chatStyle.profile(r,merchantName,getIntent().getStringExtra("participant_photo"));
+        boolean addedCall=chatStyle.mergeCalls(messages,r);
+        if(lastId>priorId)latestShownAt=android.os.SystemClock.elapsedRealtime();
+        if(!stopped&&hasWindowFocus()&&lastId>readThrough){
+            main.removeCallbacks(reportVisibleRead);
+            main.postDelayed(reportVisibleRead,1250);
+        }
         if(initial&&messages.getChildCount()==0){TextView e=text("Belum ada pesan. Gunakan Quick Chat atau ketik pesan ke merchant.",12,"#64748B",false);e.setGravity(Gravity.CENTER);e.setPadding(dp(20),dp(40),dp(20),dp(20));messages.addView(e);}
-        if(r.optBoolean("ended",false)){input.setEnabled(false);send.setEnabled(false);}scroll.post(()->scroll.fullScroll(View.FOCUS_DOWN));
+        if(r.optBoolean("ended",false)){input.setEnabled(false);send.setEnabled(false);}if(initial||(wasAtBottom&&(lastId>priorId||addedCall)))scroll.post(()->scroll.fullScroll(View.FOCUS_DOWN));
     }
-    private void addMessage(JSONObject m){
-        if(messages.getChildCount()==1&&messages.getChildAt(0) instanceof TextView&&((TextView)messages.getChildAt(0)).getText().toString().startsWith("Belum ada pesan"))messages.removeAllViews();
-        boolean mine="driver".equalsIgnoreCase(m.optString("sender_type",""));LinearLayout line=new LinearLayout(this);line.setGravity(mine?Gravity.END:Gravity.START);TextView bubble=text(m.optString("message",""),14,mine?"#FFFFFF":"#0F172A",false);if(mine)bubble.setTextColor(DriverThemeTokens.onAccent(this));bubble.setPadding(dp(10),dp(7),dp(10),dp(7));bubble.setBackground(round(mine?"#0B7CFF":"#FFFFFF",16));bubble.setMaxWidth(Math.min(dp(340),Math.round(DriverResponsiveUi.availableWidth(this)*.76f)));line.addView(bubble);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.setMargins(0,dp(3),0,dp(3));messages.addView(line,lp);
+    private void addMessage(JSONObject message){
+        if(messages.getChildCount()==1&&messages.getChildAt(0) instanceof TextView
+                &&((TextView)messages.getChildAt(0)).getText().toString().startsWith("Belum ada pesan"))
+            messages.removeAllViews();
+        boolean mine="driver".equalsIgnoreCase(message.optString("sender_type",""));
+        LinearLayout wrapper=new LinearLayout(this);
+        wrapper.setOrientation(LinearLayout.VERTICAL);
+        wrapper.setGravity(mine?Gravity.END:Gravity.START);
+        TextView bubble=text(message.optString("message",""),14,mine?"#FFFFFF":"#0F172A",false);
+        if(mine)bubble.setTextColor(Color.WHITE);
+        bubble.setMaxWidth(Math.min(dp(420),Math.round(getResources().getDisplayMetrics().widthPixels*.74f)));
+        wrapper.addView(bubble);
+        TextView timestamp=text("",10,"#64748B",false);
+        chatStyle.receipt(timestamp,message,mine);
+        chatStyle.appendMeta(wrapper,timestamp);
+        if(mine)receiptViews.put(message.optInt("id",0),timestamp);
+        chatStyle.decorate(wrapper,message,mine);
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);
+        lp.setMargins(0,dp(2),0,dp(2));
+        messages.addView(wrapper,lp);
     }
+
     private void sendText(String raw){
         String msg=safe(raw).trim();if(msg.isEmpty()||sending||!chatOpen)return;if(msg.length()>500){toast("Pesan maksimal 500 karakter.");return;}sending=true;send.setEnabled(false);
         boolean queued=DriverNetworkExecutor.execute(()->{try{JSONObject p=new JSONObject();p.put("order_id",orderId);p.put("order_db_id",orderDbId);p.put("message",msg);JSONObject r=DriverMessageApi.post(session,BASE+"sendMerchantDriverChat.php",p);runOnUiThread(()->{if(r.optBoolean("success",false)){input.setText("");load(false);}else toast(r.optString("message","Pesan gagal dikirim"));});}catch(Exception e){runOnUiThread(()->toast("Koneksi gagal. Pesan belum dikirim."));}finally{main.post(()->{sending=false;send.setEnabled(chatOpen);});}});

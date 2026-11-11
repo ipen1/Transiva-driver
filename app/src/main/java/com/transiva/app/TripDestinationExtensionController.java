@@ -56,7 +56,7 @@ final class TripDestinationExtensionController {
         address.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(255)});body.addView(address);
         ScrollView scroll=new ScrollView(host);scroll.setFillViewport(true);scroll.addView(body);
         TextView title=new TextView(host);title.setText("Tujuan baru / Pulang (PP)");title.setTextSize(18);title.setTextColor(DriverThemeTokens.textPrimary(host));title.setPadding(host.dp(16),host.dp(16),host.dp(16),host.dp(8));title.setBackgroundColor(DriverThemeTokens.surface(host));
-        picker=new AlertDialog.Builder(host).setCustomTitle(title).setView(scroll).setNegativeButton("Batal",null).setPositiveButton("Hitung ongkir",null).create();
+        picker=PremiumDialogs.builder(host).setCustomTitle(title).setView(scroll).setNegativeButton("Batal",null).setPositiveButton("Hitung ongkir",null).create();
         picker.setOnDismissListener(v->{generation++;quotePending=false;host.setLoading(false);host.mainHandler.removeCallbacks(lookup);map.onPause();map.onStop();map.onDestroy();picker=null;});
         picker.setOnShowListener(v->{
             picker.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(DriverThemeTokens.accent(host));

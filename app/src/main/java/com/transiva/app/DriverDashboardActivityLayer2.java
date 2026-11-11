@@ -536,7 +536,7 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.VERTICAL);
         row.addView(text(label,10,color,true));TextView value=text(address,13,"#334155",false);
         value.setMaxLines(2);value.setEllipsize(android.text.TextUtils.TruncateAt.END);row.addView(value);
-        row.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle(label).setMessage(address).setPositiveButton("Tutup",null).show());
+        row.setOnClickListener(v -> PremiumDialogs.builder(this).setTitle(label).setMessage(address).setPositiveButton("Tutup",null).show());
         add(card,row,0,dp(7),0,0);
     }
     protected View orderCard(DriverOrder order) {

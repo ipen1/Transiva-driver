@@ -129,6 +129,7 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
         call.putExtra("order_id", orderId);
         call.putExtra("source", orderSource);
         call.putExtra("peer_name", participantName);
+        call.putExtra("peer_photo",participantPhoto);
         call.putExtra("incoming", false);
         call.putExtra("call_type",video?"video":"audio");
         startActivity(call);
@@ -136,7 +137,7 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
 
     protected View buildScreen() {
         FrameLayout page = new FrameLayout(this);
-        page.setBackgroundColor(Color.parseColor("#F4F8FD"));
+        chatStyle.backdrop(page);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -145,7 +146,7 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(10), dp(9), dp(10), dp(9));
+        header.setPadding(dp(5), dp(6), dp(5), dp(6));
         header.setBackground(roundStroke(
                 "#FFFFFF", "#DCE8F6", 18, 1));
 
@@ -155,11 +156,14 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
         back.setPadding(0, 0, 0, dp(1));
         back.setBackground(round("#EAF4FF", 15));
         back.setOnClickListener(v -> finish());
-        header.addView(back, new LinearLayout.LayoutParams(dp(46), dp(46)));
+        header.addView(back, new LinearLayout.LayoutParams(dp(40), dp(48)));
 
+        participantPhoto=CallPeerIdentity.first(participantPhoto,getIntent().getStringExtra("participant_photo"),
+                getIntent().getStringExtra("customer_photo"),getIntent().getStringExtra("profile_photo"));
+        chatStyle.addAvatar(header,participantName,participantPhoto);
         LinearLayout titleBox = new LinearLayout(this);
         titleBox.setOrientation(LinearLayout.VERTICAL);
-        titleBox.setPadding(dp(10), 0, 0, 0);
+        titleBox.setPadding(dp(6), 0, 0, 0);
 
         participantText = text(
                 participantName, 16, "#0B3A78", true);
@@ -174,12 +178,6 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
         titleBox.addView(statusText);
         header.addView(titleBox, new LinearLayout.LayoutParams(0, -2, 1));
 
-        TextView service = text(
-                serviceName(orderType), 10, "#0B7CFF", true);
-        service.setPadding(dp(9), dp(5), dp(9), dp(5));
-        service.setBackground(round("#EAF4FF", 12));
-        header.addView(service);
-
         if (!readOnly) {
             TextView callButton = text("☎", 22, "#0B7CFF", true);
             callButton.setGravity(Gravity.CENTER);
@@ -187,10 +185,10 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
             callButton.setBackground(round("#EAF4FF", 15));
             LinearLayout.LayoutParams callLp =
                     new LinearLayout.LayoutParams(dp(46), dp(46));
-            callLp.setMargins(dp(7), 0, 0, 0);
+            callLp.setMargins(dp(2), 0, 0, 0);
             header.addView(callButton, callLp);
             callButton.setOnClickListener(v -> callCustomer());
-            TextView videoButton=text("📹",22,"#0B7CFF",true);videoButton.setGravity(Gravity.CENTER);videoButton.setContentDescription("Video Call");videoButton.setBackground(round("#EAF4FF",15));LinearLayout.LayoutParams videoLp=new LinearLayout.LayoutParams(dp(42),dp(42));videoLp.setMargins(dp(6),0,0,0);header.addView(videoButton,videoLp);videoButton.setOnClickListener(v->openRoomCall(true));
+            TextView videoButton=text("📹",22,"#0B7CFF",true);videoButton.setGravity(Gravity.CENTER);videoButton.setContentDescription("Video Call");videoButton.setBackground(round("#EAF4FF",15));LinearLayout.LayoutParams videoLp=new LinearLayout.LayoutParams(dp(42),dp(42));videoLp.setMargins(dp(2),0,0,0);header.addView(videoButton,videoLp);videoButton.setOnClickListener(v->openRoomCall(true));
         }
 
         root.addView(header);
@@ -205,6 +203,7 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
 
         messagesBox = new LinearLayout(this);
         messagesBox.setOrientation(LinearLayout.VERTICAL);
+        chatStyle.overflow(header,null,query->DriverMessageApi.get(session,chatEndpoint()+query,chatScope.owner),messagesBox);
         messagesBox.setPadding(dp(2), dp(8), dp(2), dp(8));
         messagesScroll.addView(
                 messagesBox,

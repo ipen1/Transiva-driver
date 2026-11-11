@@ -79,6 +79,13 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
     protected final Handler main = new Handler(Looper.getMainLooper());
 
     protected LinearLayout messagesBox;
+    protected final OrderChatStyle chatStyle = new OrderChatStyle(this);
+    protected String participantPhoto = "";
+    protected String chatEndpoint() throws Exception {
+        return GET_CHAT_URL+"?chat_ui=1&order_id="+URLEncoder.encode(orderId,"UTF-8")
+                +"&order_db_id="+URLEncoder.encode(orderDbId,"UTF-8")
+                +"&source="+URLEncoder.encode(orderSource,"UTF-8")+"&room_id="+URLEncoder.encode(roomId,"UTF-8");
+    }
     protected ScrollView messagesScroll;
     protected TextView participantText;
     protected TextView statusText;

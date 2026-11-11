@@ -474,6 +474,7 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
         if(newIncomingOrder&&PushExpiryPolicy.remainingMillis(data,System.currentTimeMillis(),false)<=0)return;
         try {
             NotificationManagerCompat.from(this).notify(requestCode,builder.build());
+            ChatNotificationAck.posted(this,data,channelId);
             if(newIncomingOrder)DriverOrderTelemetry.push(this,data,"notification_posted");
         } catch (RuntimeException notificationError) {
             TransivaDiagnostics.error(this,"notification","NOTIFICATION_FAILED",notificationError);
@@ -484,6 +485,7 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
                     .setPriority(NotificationCompat.PRIORITY_HIGH).setAutoCancel(true);
                 if(newIncomingOrder)fallback.setTimeoutAfter(Math.max(1,PushExpiryPolicy.remainingMillis(data,System.currentTimeMillis(),false)));
                 NotificationManagerCompat.from(this).notify(requestCode,fallback.build());
+                ChatNotificationAck.posted(this,data,channelId);
                 if(newIncomingOrder)DriverOrderTelemetry.push(this,data,"notification_posted");
             }catch(RuntimeException failed){TransivaDiagnostics.error(this,"notification","NOTIFICATION_FALLBACK_FAILED",failed);}
         }

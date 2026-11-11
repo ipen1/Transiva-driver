@@ -152,34 +152,12 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
 
         loading = true;
         if (showLoading) progress.setVisibility(View.VISIBLE);
-        int requestedLastId = 0;
+        int requestedLastId = lastId;
+        String requestedReceipts = OrderChatStyle.receiptIds(receiptViews);
 
         chatScope.execute(() -> {
             try {
-                String endpoint = GET_CHAT_URL
-                        + "?order_id="
-                        + URLEncoder.encode(
-                        orderId,
-                        StandardCharsets.UTF_8.name()
-                )
-                        + "&order_db_id="
-                        + URLEncoder.encode(orderDbId, StandardCharsets.UTF_8.name())
-                        + "&source="
-                        + URLEncoder.encode(
-                        orderSource,
-                        StandardCharsets.UTF_8.name()
-                )
-                        + "&room_id="
-                        + URLEncoder.encode(
-                        roomId,
-                        StandardCharsets.UTF_8.name()
-                )
-;
-
-                if (requestedLastId > 0) {
-                    endpoint += "&last_id=" + requestedLastId;
-                }
-
+                String endpoint=chatEndpoint()+"&last_id="+requestedLastId+"&receipt_ids="+requestedReceipts;
                 JSONObject response =
                         DriverMessageApi.get(session,endpoint,chatScope.owner);
 
@@ -246,9 +224,17 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
 
         if (reset) {
             messagesBox.removeAllViews();
+            chatStyle.reset();
             receiptViews.clear();
         }
 
+        JSONObject peer=response.optJSONObject("peer_profile");
+        if(peer!=null){
+            participantName=CallPeerIdentity.first(peer.optString("name"),participantName);
+            participantPhoto=CallPeerIdentity.first(peer.optString("photo"),participantPhoto);
+            participantText.setText(participantName);
+        }
+        chatStyle.profile(response,participantName,participantPhoto);
         boolean added = false;
 
         for (int i = 0; i < array.length(); i++) {
@@ -266,7 +252,12 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
             added = true;
         }
 
-        if (reset && array.length() == 0) {
+        JSONArray receipts=response.optJSONArray("receipt_updates");
+        if(receipts!=null)for(int i=0;i<receipts.length();i++){
+            JSONObject update=receipts.optJSONObject(i);if(update!=null)updateReceipt(update);
+        }
+        added=chatStyle.mergeCalls(messagesBox,response)||added;
+        if (reset && messagesBox.getChildCount() == 0) {
             addSystemMessage("Belum ada pesan pada percakapan ini.");
         }
 
@@ -437,33 +428,19 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
                     13,
                     mine ? "#FFFFFF" : "#0F172A",
                     false);
-            bubble.setPadding(dp(13), dp(9), dp(13), dp(9));
+            bubble.setTextSize(14);
             bubble.setMaxWidth(Math.min(dp(520), (int)(DriverResponsiveUi.availableWidth(this) * 0.75)));
             bubble.setTag("transiva_chat_bubble");
-            bubble.setBackground(
-                    mine
-                            ? gradient("#086BFF", "#2EA2FF", 17)
-                            : roundStroke(
-                            "#FFFFFF", "#D7E6F8", 17, 1));
             wrapper.addView(
                     bubble,
                     new LinearLayout.LayoutParams(-2, -2));
         }
 
-        String time = formatTime(
-                message.optString("created_at", ""));
-        if (!time.isEmpty()) {
-            String receiptText = mine
-                    ? (message.optInt("is_read", message.optString("read_at", "").trim().isEmpty() ? 0 : 1) == 0
-                    ? "  ✓ Terkirim" : "  ✓✓ Dibaca")
-                    : "";
-            TextView view = text(time + receiptText, 9, "#94A3B8", false);
-            view.setPadding(dp(7), dp(3), dp(7), 0);
-            wrapper.addView(
-                    view,
-                    new LinearLayout.LayoutParams(-2, -2));
-            if (mine) receiptViews.put(message.optInt("id", 0), view);
-        }
+        TextView timestamp=text("",10,"#64748B",false);
+        chatStyle.receipt(timestamp,message,mine);
+        chatStyle.appendMeta(wrapper,timestamp);
+        if(mine)receiptViews.put(message.optInt("id",0),timestamp);
+        chatStyle.decorate(wrapper,message,mine);
 
         if (animate) animateMessage(wrapper, mine);
     }
@@ -476,13 +453,6 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
         String sender = DriverMessageStatus.normalize(message.optString("sender_type", ""));
         if (!"driver".equals(sender)) return;
 
-        String time = formatTime(message.optString("created_at", ""));
-        boolean read = message.optInt("is_read", message.optString("read_at", "").trim().isEmpty() ? 0 : 1) == 1;
-        String next = time + (read ? "  ✓✓ Dibaca" : "  ✓ Terkirim");
-        if (!next.contentEquals(receipt.getText())) {
-            receipt.setText(next);
-            receipt.setAlpha(0.35f);
-            receipt.animate().alpha(1f).setDuration(220).start();
-        }
+        chatStyle.receipt(receipt,message,true);
     }
 }

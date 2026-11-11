@@ -234,7 +234,7 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
         performanceNormalButton.setOnClickListener(v -> selectPerformanceMode(DevicePerformanceProfile.UserMode.NORMAL));
         performanceHighButton.setOnClickListener(v -> selectPerformanceMode(DevicePerformanceProfile.UserMode.HIGH));
         Button frameReport=performanceButton("Hasil pengukuran navigasi");
-        frameReport.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Frame time perangkat ini").setMessage(NavigationFrameTelemetry.report(this)).setNeutralButton("Salin hasil",(d,w)->{android.content.ClipboardManager clipboard=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);if(clipboard!=null)clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Frame time Transiva",NavigationFrameTelemetry.report(this)));}).setPositiveButton("Tutup",null).show());
+        frameReport.setOnClickListener(v->PremiumDialogs.builder(this).setTitle("Frame time perangkat ini").setMessage(NavigationFrameTelemetry.report(this)).setNeutralButton("Salin hasil",(d,w)->{android.content.ClipboardManager clipboard=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);if(clipboard!=null)clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Frame time Transiva",NavigationFrameTelemetry.report(this)));}).setPositiveButton("Tutup",null).show());
         performanceOptions.addView(frameReport,new LinearLayout.LayoutParams(-1,dp(48)));
         updatePerformanceCard();
         return card;

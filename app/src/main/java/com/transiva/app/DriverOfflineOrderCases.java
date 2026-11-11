@@ -35,7 +35,7 @@ final class DriverOfflineOrderCases {
                 labels[i] = item.optString("service_type") + " · " + item.optString("order_code")
                         + "\n" + label(item.optString("state")) + " · Kasus #" + item.optLong("id");
             }
-            new AlertDialog.Builder(activity).setTitle("Peninjauan Perjalanan")
+            PremiumDialogs.builder(activity).setTitle("Peninjauan Perjalanan")
                     .setItems(labels, (dialog, index) -> details(activity, cases.optJSONObject(index)))
                     .setNegativeButton("Tutup", null).show();
         });
@@ -54,7 +54,7 @@ final class DriverOfflineOrderCases {
             message += "\n\nSanggahan Anda: " + item.optString("appeal_note");
             message += "\n" + (item.isNull("appeal_result") ? "Menunggu tanggapan admin." : item.optString("appeal_result"));
         }
-        AlertDialog.Builder dialog = new AlertDialog.Builder(activity).setTitle(item.optString("order_code"))
+        AlertDialog.Builder dialog = PremiumDialogs.builder(activity).setTitle(item.optString("order_code"))
                 .setMessage(message).setNegativeButton("Tutup", null);
         if (proposed && item.isNull("notice_seen_at")) {
             dialog.setPositiveButton("Sudah saya baca", (d, w) -> send(activity, item, "seen", ""));
@@ -67,7 +67,7 @@ final class DriverOfflineOrderCases {
         EditText note = new EditText(activity);
         note.setHint("Jelaskan apa yang terjadi");
         note.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(160)});
-        new AlertDialog.Builder(activity).setTitle("Sanggah keputusan")
+        PremiumDialogs.builder(activity).setTitle("Sanggah keputusan")
                 .setView(note).setNegativeButton("Kembali", null)
                 .setPositiveButton("Kirim", (d, w) -> {
                     String value = note.getText().toString().trim();
@@ -125,7 +125,7 @@ final class DriverOfflineOrderCases {
 
     private static void show(Activity activity, String message) {
         if (activity.isFinishing() || activity.isDestroyed()) return;
-        new AlertDialog.Builder(activity).setTitle("Peninjauan Perjalanan").setMessage(message)
+        PremiumDialogs.builder(activity).setTitle("Peninjauan Perjalanan").setMessage(message)
                 .setPositiveButton("Tutup", null).show();
     }
 }
