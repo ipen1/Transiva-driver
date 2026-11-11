@@ -59,6 +59,33 @@ final class CallVisuals {
         @Override public void draw(Canvas c){int save=c.save();c.translate(getBounds().left,getBounds().top);c.scale(getBounds().width()/24f,getBounds().height()/24f);
             p.setColor(Color.WHITE);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(1.8f);p.setStrokeCap(Paint.Cap.ROUND);p.setStrokeJoin(Paint.Join.ROUND);Path path=new Path();
             switch(kind){
+                case "back":
+                    path.moveTo(14, 5); path.lineTo(7, 12); path.lineTo(14, 19);
+                    c.drawPath(path, p); break;
+                case "more":
+                    p.setStyle(Paint.Style.FILL);
+                    c.drawCircle(12, 5, 1.5f, p);
+                    c.drawCircle(12, 12, 1.5f, p);
+                    c.drawCircle(12, 19, 1.5f, p); break;
+                case "plus":
+                    c.drawLine(12, 5, 12, 19, p); c.drawLine(5, 12, 19, 12, p); break;
+                case "send":
+                    p.setStyle(Paint.Style.FILL);
+                    path.moveTo(3, 4); path.lineTo(22, 12); path.lineTo(3, 20);
+                    path.lineTo(5, 13); path.lineTo(14, 12); path.lineTo(5, 11);
+                    path.close(); c.drawPath(path, p); break;
+                case "record":
+                    p.setStyle(Paint.Style.FILL); c.drawCircle(12, 12, 6, p); break;
+                case "close":
+                    c.drawLine(6, 6, 18, 18, p); c.drawLine(18, 6, 6, 18, p); break;
+                case "call_out":
+                    path.moveTo(5, 19); path.lineTo(19, 5);
+                    path.moveTo(9, 5); path.lineTo(19, 5); path.lineTo(19, 15);
+                    c.drawPath(path, p); break;
+                case "call_in":
+                    path.moveTo(19, 5); path.lineTo(5, 19);
+                    path.moveTo(5, 9); path.lineTo(5, 19); path.lineTo(15, 19);
+                    c.drawPath(path, p); break;
                 case "mic":c.drawRoundRect(9,3,15,15,3,3,p);path.moveTo(6,11);path.cubicTo(6,21,18,21,18,11);c.drawPath(path,p);c.drawLine(12,19,12,22,p);c.drawLine(9,22,15,22,p);break;
                 case "speaker":path.moveTo(3,9);path.lineTo(7,9);path.lineTo(12,5);path.lineTo(12,19);path.lineTo(7,15);path.lineTo(3,15);path.close();c.drawPath(path,p);c.drawArc(10,6,22,18,-55,110,false,p);break;
                 case "video":c.drawRoundRect(3,6,15,18,3,3,p);path.moveTo(15,10);path.lineTo(21,7);path.lineTo(21,17);path.lineTo(15,14);c.drawPath(path,p);break;

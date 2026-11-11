@@ -110,26 +110,59 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
 
     protected void setupVoiceRecorder() {
         ChatVoiceNote.attachRecorder(this, voiceButton, REQUEST_AUDIO_PERMISSION, new ChatVoiceNote.Listener() {
-            @Override public void onState(String text, boolean recording, boolean cancelArmed) { statusText.setText(text); voiceButton.setText(cancelArmed ? "✕" : (recording ? "●" : "🎙")); }
+            @Override public void onState(String text, boolean recording, boolean cancelArmed) { statusText.setText(text); chatChrome.setRecording(recording, cancelArmed); }
             @Override public void onReady(File file, long durationMs) { uploadVoiceNote(file, durationMs); }
-            @Override public void onError(String message) { toast(message); voiceButton.setText("🎙"); }
+            @Override public void onError(String message) { toast(message); chatChrome.setRecording(false, false); }
         });
     }
 
     protected void uploadVoiceNote(File file, long durationMs) {
-        if (readOnly || uploading || file == null) return;
-        uploading = true; voiceButton.setEnabled(false);
-        chatScope.execute(() -> {
+        if (file == null) return;
+        if (readOnly || uploading || sending) {
+            file.delete();
+            return;
+        }
+        uploading = true;
+        chatChrome.setComposerAvailable(false);
+        boolean queued = chatScope.execute(() -> {
             try {
-                JSONObject upload = DriverMessageApi.uploadVoice(session,UPLOAD_VOICE_URL,orderId,orderSource,roomId,file,durationMs,chatScope.owner);
-                if (!upload.optBoolean("success", false)) throw new IllegalStateException(upload.optString("message", "Upload voice note gagal"));
+                JSONObject upload = DriverMessageApi.uploadVoice(session, UPLOAD_VOICE_URL, orderId,
+                        orderSource, roomId, file, durationMs, chatScope.owner);
+                if (!upload.optBoolean("success", false)) {
+                    throw new IllegalStateException(upload.optString("message", "Upload voice note gagal"));
+                }
                 String audioUrl = upload.optString("url", upload.optString("audio_url", ""));
-                JSONObject body = new JSONObject(); body.put("order_id", orderId); body.put("order_db_id", orderDbId); body.put("source", orderSource); body.put("room_id", roomId); body.put("sender_type", "driver"); body.put("message", ChatVoiceNote.encode(audioUrl, durationMs));
-                JSONObject sent = DriverMessageApi.post(session,SEND_CHAT_URL,body,chatScope.owner);
-                postUi(() -> { uploading=false; voiceButton.setEnabled(!readOnly); voiceButton.setText("🎙"); if (sent.optBoolean("success", false)) loadMessages(false); else toast(sent.optString("message", "Voice note gagal dikirim")); });
-            } catch (Exception e) { postUi(() -> { uploading=false; voiceButton.setEnabled(!readOnly); voiceButton.setText("🎙"); statusText.setText("Voice note pending • jaringan"); toast(first(e.getMessage(), "Voice note gagal dikirim")); }); }
-            finally { file.delete(); }
+                JSONObject body = new JSONObject();
+                body.put("order_id", orderId);
+                body.put("order_db_id", orderDbId);
+                body.put("source", orderSource);
+                body.put("room_id", roomId);
+                body.put("sender_type", "driver");
+                body.put("message", ChatVoiceNote.encode(audioUrl, durationMs));
+                JSONObject sent = DriverMessageApi.post(session, SEND_CHAT_URL, body, chatScope.owner);
+                postUi(() -> {
+                    uploading = false;
+                    setSendingEnabled(true);
+                    if (sent.optBoolean("success", false)) loadMessages(false);
+                    else toast(sent.optString("message", "Voice note gagal dikirim"));
+                });
+            } catch (Exception error) {
+                postUi(() -> {
+                    uploading = false;
+                    setSendingEnabled(true);
+                    statusText.setText("Voice note pending • jaringan");
+                    toast(first(error.getMessage(), "Voice note gagal dikirim"));
+                });
+            } finally {
+                file.delete();
+            }
         });
+        if (!queued) {
+            uploading = false;
+            setSendingEnabled(true);
+            file.delete();
+            toast("Antrean penuh. Coba rekam kembali.");
+        }
     }
 
     protected String absoluteVoiceContent(String content) {
@@ -196,8 +229,8 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
             applyReadOnlyState();
             main.removeCallbacks(refreshRunnable);
         } else {
-            statusText.setText(DriverMessageStatus.orderLabel(
-                    orderStatus, orderType));
+            statusText.setText(serviceName(orderType) + " · "
+                    + DriverMessageStatus.orderLabel(orderStatus, orderType));
         }
 
         JSONObject customer = response.optJSONObject("customer");
@@ -438,6 +471,7 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
                     mine ? "#FFFFFF" : "#0F172A",
                     false);
             bubble.setTextSize(14);
+            bubble.setTextColor(mine ? Color.WHITE : chatChrome.textColor());
             bubble.setMaxWidth(Math.min(dp(520), (int)(DriverResponsiveUi.availableWidth(this) * 0.75)));
             bubble.setTag("transiva_chat_bubble");
             wrapper.addView(

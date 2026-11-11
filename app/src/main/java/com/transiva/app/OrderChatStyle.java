@@ -43,8 +43,8 @@ final class OrderChatStyle {
     private int dp(int n) { return Math.round(n * activity.getResources().getDisplayMetrics().density); }
 
     void backdrop(View view) {
-        view.setBackground(gradient(dark() ? 0xff0a1425 : 0xffeaf3ff,
-                dark() ? 0xff192337 : 0xfff3f5fa, 0));
+        view.setBackground(gradient(dark() ? 0xff0a1427 : 0xffedf5ff,
+                dark() ? 0xff14243d : 0xfff5f8fc, 0));
     }
 
     void addAvatar(LinearLayout header, String name, String initialPhoto) {
@@ -84,13 +84,13 @@ final class OrderChatStyle {
         String marks = !mine ? "" : delivered ? "  ✓✓" : "  ✓";
         SpannableString text = new SpannableString(time + marks);
         if (mine && !marks.isEmpty()) {
-            text.setSpan(new ForegroundColorSpan(read ? 0xff9cf3ff : 0xffdae4f0),
+            text.setSpan(new ForegroundColorSpan(read ? 0xff62eeff : 0xffdae4f0),
                     time.length(), text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
         view.setTextColor(mine ? 0xffe1ebfa : dark() ? 0xffbbc6d4 : 0xff516078);
         view.setText(text);
         view.setTag(read);
-        view.setContentDescription(time + (!mine ? "" : read ? " Dibaca" : delivered ? " Notifikasi diterima" : " Terkirim"));
+        view.setContentDescription(time + (!mine ? "" : read ? " Dibaca" : delivered ? " Diterima" : " Terkirim"));
     }
 
     void decorate(LinearLayout wrapper, JSONObject item, boolean mine) {
@@ -167,12 +167,9 @@ final class OrderChatStyle {
     }
 
     private GradientDrawable bubbleFill(boolean mine) {
-        GradientDrawable fill = mine ? gradient(0xff1754b9, 0xff124384, 0)
-                : gradient(dark() ? 0xff2e3948 : 0xfff6f7fa, dark() ? 0xff222c39 : 0xffe1e6ed, 0);
-        float r = dp(15), tail = dp(4);
-        fill.setCornerRadii(mine ? new float[]{r,r,tail,tail,r,r,r,r}
-                : new float[]{tail,tail,r,r,r,r,r,r});
-        return fill;
+        return mine ? gradient(0xff125ac8, 0xff0e438c, 15)
+                : gradient(dark() ? 0xff2a394c : 0xfff6f8fc,
+                        dark() ? 0xff202c3d : 0xffe4ebf4, 15);
     }
 
     private View callCard(LinearLayout box, JSONObject call) {
@@ -201,16 +198,14 @@ final class OrderChatStyle {
         int accent = unanswered ? (mine || dark() ? 0xffffb9b0 : 0xff922d28)
                 : (mine || dark() ? 0xffbddeff : 0xff214d83);
         int secondary = mine ? 0xffe0edff : dark() ? 0xffd0dbe8 : 0xff3f5268;
-        TextView badge = label(mine ? "↗" : "↙", 12, true, true);
+        LinearLayout badge = new LinearLayout(activity);
+        badge.setOrientation(LinearLayout.VERTICAL);
         badge.setGravity(Gravity.CENTER);
-        badge.setTextColor(accent);
         badge.setBackground(gradient(mine || dark() ? 0xff193452 : 0xffdceaff,
                 mine || dark() ? 0xff11243b : 0xffc9dcf3, 21));
-        CallVisuals.Icon icon = new CallVisuals.Icon(video ? "video" : "end", false);
-        icon.setBounds(0, 0, dp(14), dp(14));
-        icon.setColorFilter(accent, android.graphics.PorterDuff.Mode.SRC_IN);
-        badge.setCompoundDrawables(null, icon, null, null);
-        badge.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        badge.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        addCallGlyph(badge, video ? "video" : "phone", accent, 18);
+        addCallGlyph(badge, mine ? "call_out" : "call_in", accent, 12);
         card.addView(badge, new LinearLayout.LayoutParams(dp(40), dp(40)));
 
         LinearLayout info = new LinearLayout(activity);
@@ -220,12 +215,21 @@ final class OrderChatStyle {
         card.addView(info, infoParams);
         info.addView(label(callTitle(call), 14, mine, true));
         TextView detail = label(callDetail(call), 12, mine, false);
-        detail.setTextColor(secondary);
+        detail.setTextColor(unanswered ? accent : secondary);
         info.addView(detail);
         TextView timestamp = label(time(call.optString("created_at")), 10, mine, false);
         timestamp.setTextColor(secondary);
         appendMeta(info, timestamp);
         return row;
+    }
+
+    private void addCallGlyph(LinearLayout badge, String kind, int color, int size) {
+        CallVisuals.Icon icon = new CallVisuals.Icon(kind, false);
+        icon.setColorFilter(color, android.graphics.PorterDuff.Mode.SRC_IN);
+        android.widget.ImageView glyph = new android.widget.ImageView(activity);
+        glyph.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        glyph.setImageDrawable(icon);
+        badge.addView(glyph, new LinearLayout.LayoutParams(dp(size), dp(size)));
     }
 
     private String callTitle(JSONObject call) {
@@ -246,6 +250,10 @@ final class OrderChatStyle {
         more.setGravity(Gravity.CENTER);
         more.setContentDescription("Opsi percakapan");
         header.addView(more, new LinearLayout.LayoutParams(dp(42), dp(48)));
+        overflow(more, search, fetch, messages);
+    }
+
+    void overflow(View more, Runnable search, Fetch fetch, LinearLayout messages) {
         more.setOnClickListener(v -> {
             PopupMenu menu = new PopupMenu(activity, more);
             menu.getMenu().add("Cari pesan").setOnMenuItemClickListener(item -> {

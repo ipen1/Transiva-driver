@@ -28,7 +28,6 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.Window;
 import android.view.inputmethod.EditorInfo;
-import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -121,6 +120,7 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
 
     protected void callCustomer() {openRoomCall(false);}
     private void openRoomCall(boolean video) {
+        if (readOnly) return;
         if (orderId == null || orderId.trim().isEmpty()) {
             Toast.makeText(this, "Order tidak valid", Toast.LENGTH_SHORT).show();
             return;
@@ -138,6 +138,7 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
     protected View buildScreen() {
         FrameLayout page = new FrameLayout(this);
         chatStyle.backdrop(page);
+        chatChrome = new ChatRoomChrome(this, DriverAppSettings.isDarkMode(this));
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -145,50 +146,30 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
         page.addView(root, new FrameLayout.LayoutParams(-1, -1));
 
         LinearLayout header = new LinearLayout(this);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(5), dp(6), dp(5), dp(6));
-        header.setBackground(roundStroke(
-                "#FFFFFF", "#DCE8F6", 18, 1));
+        chatChrome.styleBar(header);
+        chatChrome.addHeaderAction(header, "back", "Kembali").setOnClickListener(v -> finish());
 
-        TextView back = text("←", 24, "#0B7CFF", true);
-        back.setGravity(Gravity.CENTER);
-        back.setIncludeFontPadding(false);
-        back.setPadding(0, 0, 0, dp(1));
-        back.setBackground(round("#EAF4FF", 15));
-        back.setOnClickListener(v -> finish());
-        header.addView(back, new LinearLayout.LayoutParams(dp(40), dp(48)));
-
-        participantPhoto=CallPeerIdentity.first(participantPhoto,getIntent().getStringExtra("participant_photo"),
-                getIntent().getStringExtra("customer_photo"),getIntent().getStringExtra("profile_photo"));
+        participantPhoto = CallPeerIdentity.first(participantPhoto, getIntent().getStringExtra("participant_photo"),
+                getIntent().getStringExtra("customer_photo"), getIntent().getStringExtra("profile_photo"));
         chatStyle.addAvatar(header,participantName,participantPhoto);
         LinearLayout titleBox = new LinearLayout(this);
         titleBox.setOrientation(LinearLayout.VERTICAL);
-        titleBox.setPadding(dp(6), 0, 0, 0);
-
-        participantText = text(
-                participantName, 16, "#0B3A78", true);
+        titleBox.setPaddingRelative(dp(8), 0, dp(2), 0);
+        participantText = text(participantName, 16, "#0F172A", true);
+        participantText.setTextColor(chatChrome.textColor());
         participantText.setSingleLine(true);
+        participantText.setEllipsize(android.text.TextUtils.TruncateAt.END);
         titleBox.addView(participantText);
 
-        statusText = text(
-                readOnly ? "Riwayat percakapan" : "Menghubungkan chat...",
-                10,
-                readOnly ? "#8495A8" : "#0B7CFF",
-                true);
+        statusText = text(readOnly ? "Riwayat percakapan" : "Menghubungkan chat…", 11, "#64748B", false);
+        statusText.setTextColor(chatChrome.secondaryColor());
+        statusText.setMaxLines(2);
+        statusText.setEllipsize(android.text.TextUtils.TruncateAt.END);
         titleBox.addView(statusText);
-        header.addView(titleBox, new LinearLayout.LayoutParams(0, -2, 1));
+        header.addView(titleBox, new LinearLayout.LayoutParams(0, -2, 1f));
 
         if (!readOnly) {
-            TextView callButton = text("☎", 22, "#0B7CFF", true);
-            callButton.setGravity(Gravity.CENTER);
-            callButton.setContentDescription("Telepon customer");
-            callButton.setBackground(round("#EAF4FF", 15));
-            LinearLayout.LayoutParams callLp =
-                    new LinearLayout.LayoutParams(dp(46), dp(46));
-            callLp.setMargins(dp(2), 0, 0, 0);
-            header.addView(callButton, callLp);
-            callButton.setOnClickListener(v -> callCustomer());
-            TextView videoButton=text("📹",22,"#0B7CFF",true);videoButton.setGravity(Gravity.CENTER);videoButton.setContentDescription("Video Call");videoButton.setBackground(round("#EAF4FF",15));LinearLayout.LayoutParams videoLp=new LinearLayout.LayoutParams(dp(42),dp(42));videoLp.setMargins(dp(2),0,0,0);header.addView(videoButton,videoLp);videoButton.setOnClickListener(v->openRoomCall(true));
+            chatChrome.addCallActions(header, this::callCustomer, () -> openRoomCall(true));
         }
 
         root.addView(header);
@@ -203,72 +184,32 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
 
         messagesBox = new LinearLayout(this);
         messagesBox.setOrientation(LinearLayout.VERTICAL);
-        chatStyle.overflow(header,null,query->DriverMessageApi.get(session,chatEndpoint()+query,chatScope.owner),messagesBox);
+        chatStyle.overflow(chatChrome.addHeaderAction(header, "more", "Opsi percakapan"),null,query->DriverMessageApi.get(session,chatEndpoint()+query,chatScope.owner),messagesBox);
         messagesBox.setPadding(dp(2), dp(8), dp(2), dp(8));
         messagesScroll.addView(
                 messagesBox,
                 new ScrollView.LayoutParams(-1, -2));
 
-        root.addView(TraviSivaStickers.launcher(this, () -> {
-            if (readOnly || sending || uploading) return;
-            android.view.inputmethod.InputMethodManager keyboard = (android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
-            if (keyboard != null) keyboard.hideSoftInputFromWindow(input.getWindowToken(), 0);
-            stickerDialog = TraviSivaStickers.show(this, this::sendSticker);
-        }), new LinearLayout.LayoutParams(-1, dp(46)));
-
         inputCard = new LinearLayout(this);
-        inputCard.setGravity(Gravity.CENTER_VERTICAL);
-        inputCard.setPadding(dp(9), dp(7), dp(9), dp(7));
-        inputCard.setBackground(roundStroke(
-                "#FFFFFF", "#D7E6F8", 20, 1));
-
-        attachButton = new Button(this);
-        attachButton.setText("+");
-        attachButton.setAllCaps(false);
-        attachButton.setTextSize(22);
-        attachButton.setTextColor(Color.parseColor("#0B7CFF"));
-        attachButton.setBackground(round("#EAF4FF", 15));
-        attachButton.setOnClickListener(v -> showAttachmentMenu());
-        inputCard.addView(
-                attachButton,
-                new LinearLayout.LayoutParams(dp(44), -1));
+        chatChrome.styleComposer(inputCard);
+        chatChrome.addAttachment(inputCard).setOnClickListener(v -> showAttachmentMenu());
 
         input = new EditText(this);
-        input.setSingleLine(false);
+        input.setInputType(InputType.TYPE_CLASS_TEXT
+                | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
         input.setMaxLines(3);
-        input.setTextSize(13);
-        input.setTextColor(Color.parseColor("#0F172A"));
-        input.setHintTextColor(Color.parseColor("#94A3B8"));
-        input.setHint("Ketik pesan...");
-        input.setInputType(
-                InputType.TYPE_CLASS_TEXT
-                        | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-                        | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
         input.setImeOptions(EditorInfo.IME_ACTION_SEND);
-        input.setPadding(dp(13), 0, dp(13), 0);
-        input.setBackground(roundStroke(
-                "#F8FBFF", "#D8E4F2", 16, 1));
-
-        LinearLayout.LayoutParams inputLp =
-                new LinearLayout.LayoutParams(0, -1, 1);
-        inputLp.setMargins(dp(7), 0, 0, 0);
-        inputCard.addView(input, inputLp);
-
-        sendButton = primaryButton("Kirim");
-        LinearLayout.LayoutParams sendLp =
-                new LinearLayout.LayoutParams(dp(74), -1);
-        sendLp.setMargins(dp(7), 0, 0, 0);
-        inputCard.addView(sendButton, sendLp);
-
-        voiceButton = new Button(this);
-        voiceButton.setText("🎙"); voiceButton.setTextSize(18); voiceButton.setAllCaps(false);
-        voiceButton.setPadding(0, 0, 0, 0); voiceButton.setTextColor(Color.parseColor("#0B7CFF"));
-        voiceButton.setBackground(round("#EAF4FF", 15));
-        LinearLayout.LayoutParams voiceLp = new LinearLayout.LayoutParams(dp(48), -1);
-        voiceLp.setMargins(dp(7), 0, 0, 0); inputCard.addView(voiceButton, voiceLp);
+        input.setHint("Ketik pesan…");
+        chatChrome.addDraft(inputCard, input);
+        chatChrome.addDraftActions(inputCard);
+        voiceButton = chatChrome.voiceButton();
         setupVoiceRecorder();
+        chatChrome.setComposerAvailable(!readOnly);
 
-        sendButton.setOnClickListener(v -> { v.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY); sendMessage(); });
+        chatChrome.sendButton().setOnClickListener(v -> {
+            v.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY);
+            sendMessage();
+        });
         input.setOnEditorActionListener((v, actionId, event) -> {
             boolean enter = event != null
                     && event.getKeyCode() == KeyEvent.KEYCODE_ENTER
@@ -281,7 +222,7 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
             return false;
         });
 
-        root.addView(inputCard, new LinearLayout.LayoutParams(-1, dp(62)));
+        root.addView(inputCard, new LinearLayout.LayoutParams(-1, -2));
 
         progress = new ProgressBar(this);
         progress.setVisibility(View.GONE);
@@ -292,17 +233,26 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
     }
 
     protected void showAttachmentMenu() {
-        if (readOnly || uploading) return;
+        if (readOnly || uploading || sending || chatChrome.isRecording()) return;
 
         PremiumDialogs.builder(this)
-                .setTitle("Kirim Foto")
+                .setTitle("Lampiran")
                 .setItems(
-                        new String[]{"Ambil Foto", "Pilih dari Galeri"},
+                        new String[]{"Ambil foto", "Pilih dari galeri", "Stiker Travi & Siva"},
                         (dialog, which) -> {
                             if (which == 0) openCamera();
-                            else openGallery();
+                            else if (which == 1) openGallery();
+                            else openStickerPicker();
                         })
                 .show();
+    }
+
+    private void openStickerPicker() {
+        if (readOnly || sending || uploading || chatChrome.isRecording()) return;
+        android.view.inputmethod.InputMethodManager keyboard =
+                (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (keyboard != null) keyboard.hideSoftInputFromWindow(input.getWindowToken(), 0);
+        stickerDialog = TraviSivaStickers.show(this, this::sendSticker);
     }
 
     protected void openCamera() {

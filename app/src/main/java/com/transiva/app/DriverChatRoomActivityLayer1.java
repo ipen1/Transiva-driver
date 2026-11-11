@@ -90,8 +90,7 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
     protected TextView participantText;
     protected TextView statusText;
     protected EditText input;
-    protected Button sendButton;
-    protected Button attachButton;
+    protected ChatRoomChrome chatChrome;
     protected Button voiceButton;
     protected ProgressBar progress;
     protected LinearLayout inputCard;
@@ -193,7 +192,7 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
 
         LinearLayout.LayoutParams lp =
                 new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, dp(4), 0, dp(4));
+        lp.setMargins(0, dp(3), 0, dp(3));
         messagesBox.addView(wrapper, lp);
         return wrapper;
     }
@@ -273,7 +272,7 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
     protected void sendMessage() { sendChatContent(input.getText().toString().trim(), true); }
     protected void sendSticker(String wire) { sendChatContent(wire, false); }
     private void sendChatContent(String message, boolean clearDraft) {
-        if (readOnly || sending || uploading) return;
+        if (readOnly || sending || uploading || chatChrome.isRecording()) return;
 
         if (message.isEmpty()) return;
 
@@ -344,19 +343,13 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
 
         input.setEnabled(false);
         input.setHint("Percakapan ini hanya dapat dibaca");
-        attachButton.setEnabled(false);
-        attachButton.setAlpha(0.45f);
-        if (voiceButton != null) { voiceButton.setEnabled(false); voiceButton.setAlpha(0.45f); }
-        sendButton.setEnabled(false);
-        sendButton.setText("Selesai");
-        sendButton.setAlpha(0.55f);
+        chatChrome.setComposerAvailable(false);
+        chatChrome.hideCallActions();
         statusText.setText("Order selesai • riwayat hanya baca");
     }
 
     protected void setSendingEnabled(boolean enabled) {
-        attachButton.setEnabled(enabled && !readOnly);
-        sendButton.setEnabled(enabled && !readOnly);
-        if (voiceButton != null) voiceButton.setEnabled(enabled && !readOnly);
+        chatChrome.setComposerAvailable(enabled && !readOnly && !sending && !uploading);
         input.setEnabled(enabled && !readOnly);
     }
 
