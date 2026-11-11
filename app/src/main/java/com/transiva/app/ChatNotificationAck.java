@@ -1,8 +1,8 @@
 package com.transiva.app;
 
 import android.content.Context;
+import com.transiva.app.driver.data.DriverConnectionRepository;
 import java.net.HttpURLConnection;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Map;
@@ -63,7 +63,7 @@ final class ChatNotificationAck {
     private static int send(Context context,String token,byte[] body){
         HttpURLConnection connection=null;
         try{
-            connection=(HttpURLConnection)new URL("https://transiva.my.id/server/chat_notification_ack.php").openConnection();
+            connection=DriverConnectionRepository.open(DriverApiConfig.endpoint("chat_notification_ack.php"));
             connection.setInstanceFollowRedirects(false);
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(3000);connection.setReadTimeout(4000);
