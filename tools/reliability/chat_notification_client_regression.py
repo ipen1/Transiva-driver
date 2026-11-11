@@ -8,6 +8,7 @@ from pathlib import Path
 root=Path(__file__).resolve().parents[2];app=root/'app/src/main/java/com/transiva/app'
 jar=os.environ['JSON_JAR'];javac=os.environ.get('JAVAC_BIN','javac')
 files={
+'com/transiva/app/ChatNotificationAck.java':'package com.transiva.app;final class ChatNotificationAck{static void postedFromPoll(android.content.Context c,org.json.JSONObject m,String channel){}}',
 'android/Manifest.java':'package android;public class Manifest{public static class permission{public static final String POST_NOTIFICATIONS="post";}}',
 'android/content/pm/PackageManager.java':'package android.content.pm;public class PackageManager{public static final int PERMISSION_GRANTED=0;}',
 'android/content/pm/ApplicationInfo.java':'package android.content.pm;public class ApplicationInfo{public int icon=1;}',
