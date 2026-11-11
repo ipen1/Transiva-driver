@@ -89,6 +89,8 @@ public class NoticeProbe{
   check("🐻 Customer mengirim stiker Travi & Siva".equals(androidx.core.app.NotificationCompat.lastText),"sticker notification is readable without loading sticker UI");
   show.invoke(null,context,new JSONObject().put("id",401).put("message","[[STICKER]]ts_v2_99"));
   check(!androidx.core.app.NotificationCompat.lastText.contains("[[STICKER]]"),"future sticker ID does not expose protocol in notification");
+  show.invoke(null,context,new JSONObject().put("id",404).put("message","[[STICKER]]sp_0123456789abcdef01234567"));
+  check("🐻 Customer mengirim stiker".equals(androidx.core.app.NotificationCompat.lastText),"store sticker uses generic notification without loading sticker UI");
   show.invoke(null,context,new JSONObject().put("id",402).put("message","[[IMAGE2]]preview|hd"));
   check("📷 Customer mengirim foto".equals(androidx.core.app.NotificationCompat.lastText),"photo notification preview preserved");
   show.invoke(null,context,new JSONObject().put("id",403).put("message","Sudah sampai kak"));
