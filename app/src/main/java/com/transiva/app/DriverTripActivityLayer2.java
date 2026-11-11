@@ -116,10 +116,11 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         r.addView(text(l, 14, "#64748B", false), new LinearLayout.LayoutParams(0,-2,1)); r.addView(text(v, 14, "#111827", true)); p.addView(r);
     }
     protected void addActions(){
-        LinearLayout c = card(); c.setPadding(dp(16), dp(16), dp(16), dp(16));
-        c.addView(text("Perjalanan", 17, "#0F172A", true));
-        TextView guide = text("Chat, navigasi, dan pilihan perjalanan", 12, "#64748B", false);
-        guide.setPadding(0, dp(4), 0, dp(4)); c.addView(guide);
+        LinearLayout c = card(); c.setPadding(dp(11), dp(5), dp(11), dp(10));
+        LinearLayout header=new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.addView(text("Perjalanan",16,"#0F172A",true),new LinearLayout.LayoutParams(0,-2,1));
+        c.addView(header);
 
         arrivedPickupBtn = slideAction("📍 Geser • Tiba di Penjemputan", () -> updateStatus("arrived_pickup")); actionDock.addView(arrivedPickupBtn, slideLp(0));
         startDeliveryBtn = slideAction(orderKind.equals("pickup") ? "📦 Geser • Paket Diambil, Mulai Antar" : vehicleEmoji() + " Geser • Mulai Perjalanan", () -> updateStatus("on_delivery")); actionDock.addView(startDeliveryBtn, slideLp(0));
@@ -131,7 +132,16 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         finishBtn = slideAction("✅ Geser • Selesaikan Order", () -> { if (isPickupOrder()) showPickupOtpDialog(); else updateStatus("finished"); }); actionDock.addView(finishBtn, slideLp(0));
         dockHint=text("Geser untuk melanjutkan perjalanan",12,"#64748B",false);actionDock.addView(dockHint);
         LinearLayout options=new LinearLayout(this);options.setOrientation(LinearLayout.VERTICAL);options.setVisibility(View.GONE);
-        Button more=outline("Opsi perjalanan  ▾");more.setOnClickListener(v->{boolean open=options.getVisibility()!=View.VISIBLE;options.setVisibility(open?View.VISIBLE:View.GONE);more.setText(open?"Opsi perjalanan  ▴":"Opsi perjalanan  ▾");});c.addView(more,btnLp(6));c.addView(options);
+        Button more=outline("Opsi  ▾");
+        more.setTextSize(12);more.setPadding(dp(7),0,dp(7),0);
+        more.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        more.setContentDescription("Opsi perjalanan");
+        more.setOnClickListener(v->{
+            boolean open=options.getVisibility()!=View.VISIBLE;
+            options.setVisibility(open?View.VISIBLE:View.GONE);
+            more.setText(open?"Opsi  ▴":"Opsi  ▾");
+        });
+        header.addView(more,new LinearLayout.LayoutParams(dp(70),dp(48)));
         updatePriceBtn = outline("💰 Update Total"); updatePriceBtn.setOnClickListener(v -> showUpdatePriceDialog()); options.addView(updatePriceBtn, btnLp(6));
         if(isDeliveryPhase(status())){ Button extraFare=outline("Ajukan ongkir tambahan"); extraFare.setOnClickListener(v->requestExtraFareForMissedDistance()); options.addView(extraFare,btnLp(6)); }
         if(canExtendDestination()){
@@ -149,20 +159,35 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
 
         if (communicationController != null) communicationController.onStop();
         LinearLayout quick = new LinearLayout(this); quick.setOrientation(LinearLayout.HORIZONTAL);
-        customerChatBtn = primary("💬 Chat");
+        customerChatBtn = primary("Pelanggan");
+        customerChatBtn.setContentDescription("Chat pelanggan");
+        compactTripAction(customerChatBtn);
         communicationController = new TripCommunicationController(this, order, driverUsername, customerChatBtn);
         communicationController.onStart();
         customerChatBtn.setOnClickListener(v -> communicationController.openCustomerChat());
-        quick.addView(customerChatBtn, new LinearLayout.LayoutParams(0, dp(50), 1));
-        Button nav = outline("➤ Navigasi"); nav.setOnClickListener(v -> communicationController.openNavigation(!isDeliveryPhase(status()), lastDriverLat, lastDriverLng));
-        LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(0, dp(50), 1); np.setMargins(dp(8),0,0,0); quick.addView(nav, np);
-        LinearLayout.LayoutParams qp = new LinearLayout.LayoutParams(-1,-2); qp.setMargins(0,dp(10),0,0); c.addView(quick, qp);
+        quick.addView(customerChatBtn, new LinearLayout.LayoutParams(0, dp(48), 1));
+        Button nav = outline("Navigasi"); compactTripAction(nav); nav.setOnClickListener(v -> communicationController.openNavigation(!isDeliveryPhase(status()), lastDriverLat, lastDriverLng));
+        LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(0, dp(48), 1); np.setMarginStart(dp(6)); quick.addView(nav, np);
+        LinearLayout.LayoutParams qp = new LinearLayout.LayoutParams(-1,-2); qp.setMargins(0,dp(1),0,0); c.addView(quick, qp);
         if (isFoodOrder()) {
-            Button merchantChat = outline("🏪 Chat Merchant");
+            Button merchantChat = outline("Merchant");
+            compactTripAction(merchantChat);
+            merchantChat.setContentDescription("Chat Merchant");
             merchantChat.setOnClickListener(v -> communicationController.openMerchantChat());
-            c.addView(merchantChat, btnLp(8));
+            LinearLayout.LayoutParams merchantParams=new LinearLayout.LayoutParams(0,dp(48),1);
+            merchantParams.setMarginStart(dp(6));
+            quick.addView(merchantChat,merchantParams);
         }
-        add(c,0,0,0,dp(12));
+        c.addView(options);
+        add(c,0,0,0,dp(10));
+    }
+    private void compactTripAction(Button button){
+        button.setTextSize(12);
+        button.setMaxLines(2);
+        button.setPadding(dp(3),0,dp(3),0);
+        button.setMinimumWidth(0);
+        button.setMinWidth(0);
+        button.setElevation(0);
     }
     protected LinearLayout.LayoutParams slideLp(int top) {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(72));

@@ -274,10 +274,12 @@ public class TransivaCallUiActivity extends Activity {
         if(p.topMargin!=top||p.bottomMargin!=bottom){p.setMargins(0,top,0,bottom);stage.setLayoutParams(p);}
     }
     private void openChat(){WebRtcSessionEngine e=WebRtcCallForegroundService.current();String order=e!=null?e.orderId:getIntent().getStringExtra("order_id");if(order==null||order.isEmpty())return;String callerRole=e!=null?e.callerRole:getIntent().getStringExtra("caller_role");
-        if("merchant".equals(callerRole)){
+        String peerRole=e!=null?e.peerRole:getIntent().getStringExtra("peer_role");
+        if("merchant".equals(callerRole)||"merchant".equals(peerRole)){
             startActivity(new Intent(this,DriverMerchantChatActivity.class)
                     .putExtra("order_id",order)
-                    .putExtra("merchant_name",e!=null?e.peer:getIntent().getStringExtra("caller_name"))
+                    .putExtra("order_db_id",e!=null?e.orderDbId:getIntent().getStringExtra("order_db_id"))
+                    .putExtra("merchant_name",e!=null?e.peer:CallPeerIdentity.first(getIntent().getStringExtra("peer_name"),getIntent().getStringExtra("caller_name")))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP));
             return;
         }

@@ -376,8 +376,8 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     }
     protected void addMapCard(){
         if(retainedMapCard!=null){retainedMapSlot=new View(this);add(retainedMapSlot,0,0,0,0);return;}
-        LinearLayout c = card();retainedMapCard=c; c.setPadding(dp(12), dp(12), dp(12), dp(12));
-        c.addView(text("🗺️ Peta Perjalanan", 16, "#0B3A78", true));
+        LinearLayout c = card();retainedMapCard=c; c.setPadding(dp(9), dp(8), dp(9), dp(9));
+        c.addView(text("Peta perjalanan", 15, "#0B3A78", true));
         
         mapView = new MapView(this);
         mapView.onCreate(null);
@@ -403,10 +403,10 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             updateMap();
             if(pendingPickupRoutePoints.isEmpty()) requestStableRoute(true);
         });
-        LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(-1, dp(250)); mp.setMargins(0,dp(8),0,0);
+        LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(-1, dp(214)); mp.setMargins(0,dp(6),0,0);
         NavigationGestureContainer mapFrame=new NavigationGestureContainer(this);mapFrame.interaction(value->tripInteraction(true,value));mapFrame.addView(mapView,new FrameLayout.LayoutParams(-1,-1));
         tripFollowButton=text("◎  Ikuti",14,"#FFFFFF",true);tripFollowButton.setGravity(Gravity.CENTER);tripFollowButton.setBackground(round("#146DE8",dp(24)));tripFollowButton.setElevation(dp(4));tripFollowButton.setContentDescription("Ikuti posisi kendaraan pada peta perjalanan");
-        FrameLayout.LayoutParams flp=new FrameLayout.LayoutParams(dp(112),dp(48),Gravity.BOTTOM|Gravity.RIGHT);flp.setMargins(dp(10),dp(10),dp(10),dp(10));mapFrame.addView(tripFollowButton,flp);tripFollowButton.setVisibility(tripCameraFollowing?View.GONE:View.VISIBLE);
+        FrameLayout.LayoutParams flp=new FrameLayout.LayoutParams(dp(86),dp(48),Gravity.BOTTOM|Gravity.RIGHT);flp.setMargins(dp(10),dp(10),dp(10),dp(10));mapFrame.addView(tripFollowButton,flp);tripFollowButton.setVisibility(tripCameraFollowing?View.GONE:View.VISIBLE);
         tripFollowButton.setOnClickListener(v->{tripCameraFollowing=true;tripCameraBrowsing=false;tripFollowButton.setVisibility(View.GONE);if(googleMap!=null)googleMap.stopAnimation();if(tripVehicleMotion!=null)tripVehicleMotion.recenter();});
         c.addView(mapFrame, mp);if(realtimeTripRunning){mapView.onStart();mapView.onResume();} add(c,0,0,0,dp(12));
     }

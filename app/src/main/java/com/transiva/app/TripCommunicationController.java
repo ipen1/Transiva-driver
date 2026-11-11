@@ -142,7 +142,8 @@ public final class TripCommunicationController {
     public void refreshUnread() {
         if (chatButton == null) return;
         int count = DriverMessageUnreadRepository.unreadCount(host, orderId(), roomId());
-        chatButton.setText(count > 0 ? "💬 Chat (" + count + ")" : "💬 Chat");
+        chatButton.setText(count > 0 ? "Pelanggan · " + (count > 99 ? "99+" : count) : "Pelanggan");
+        chatButton.setContentDescription(count > 0 ? "Chat pelanggan, " + count + " pesan baru" : "Chat pelanggan");
         if (count > 0) chatButton.setTextColor(Color.WHITE);
     }
 

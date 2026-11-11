@@ -25,7 +25,7 @@ final class WebRtcSessionEngine {
     private boolean candidateBusy,peerRestart,negotiatingRestart;
     private String appliedRemoteSdp="";
     private static final class CandidateSend {final IceCandidate value;int attempts;long due;CandidateSend(IceCandidate c){value=c;}}
-    final String role,orderId,source,callerRole;
+    final String role,orderId,orderDbId,source,callerRole,peerRole;
     volatile String peer,peerPhoto="";
     final boolean video,incoming;
     final String operationId;
@@ -60,6 +60,8 @@ final class WebRtcSessionEngine {
         role=context.getPackageName().endsWith(".driver")?"driver":"customer";
         orderId=clean(i.getStringExtra("order_id"));source=first(i.getStringExtra("source"),"orders");peer=first(i.getStringExtra("peer_name"),i.getStringExtra("caller_name"),"Transiva");
         callerRole=clean(i.getStringExtra("caller_role"));
+        peerRole=clean(i.getStringExtra("peer_role"));
+        orderDbId=clean(i.getStringExtra("order_db_id"));
         peerPhoto=CallPeerIdentity.first(i.getStringExtra("peer_photo"),i.getStringExtra("caller_photo"));
         operationId=first(i.getStringExtra("operation_id"),java.util.UUID.randomUUID().toString());
         video="video".equals(i.getStringExtra("call_type"));incoming=i.getBooleanExtra("incoming",false);callId=clean(i.getStringExtra("call_id"));
@@ -84,7 +86,7 @@ final class WebRtcSessionEngine {
     void start(){
         changed();async(()->{try{
             if(incoming){postSignal(payload("accept"));accepted=true;status="Menghubungkan";}
-            else{JSONObject p=payload("start").put("order_id",orderId).put("source",source).put("call_type",video?"video":"audio").put("operation_id",operationId);JSONObject r=startWithRetry(p);callId=r.optString("call_id");if(callId.isEmpty())throw new IllegalStateException("Server tidak memberikan ID panggilan");if(Arrays.asList("ended","rejected","missed","cancelled").contains(r.optString("status")))throw new IllegalStateException("Panggilan sebelumnya sudah berakhir. Mulai panggilan baru dari chat.");updateIdentity(r);status="Memanggil "+peer;}
+            else{JSONObject p=payload("start").put("order_id",orderId).put("source",source).put("call_type",video?"video":"audio").put("operation_id",operationId);if(!peerRole.isEmpty())p.put("peer_role",peerRole).put("order_db_id",orderDbId);JSONObject r=startWithRetry(p);callId=r.optString("call_id");if(callId.isEmpty())throw new IllegalStateException("Server tidak memberikan ID panggilan");if(Arrays.asList("ended","rejected","missed","cancelled").contains(r.optString("status")))throw new IllegalStateException("Panggilan sebelumnya sudah berakhir. Mulai panggilan baru dari chat.");updateIdentity(r);status="Memanggil "+peer;}
             main.post(()->{if(!ended){changed();main.post(poll);main.post(heartbeat);}});
         }catch(Exception e){main.post(()->fail(e.getMessage()));}});
     }
