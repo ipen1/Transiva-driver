@@ -27,8 +27,8 @@
         <item name="android:windowMinWidthMajor">88%</item>
         <item name="android:windowMinWidthMinor">88%</item>
         <item name="android:colorAccent">@color/transiva_blue_light</item>
-        <item name="android:textColorPrimary">@color/transiva_dialog_title</item>
-        <item name="android:textColorSecondary">@color/transiva_dialog_text</item>
+        <item name="android:textColorPrimary">#F4F8FF</item>
+        <item name="android:textColorSecondary">#B8C5D6</item>
         <item name="android:fontFamily">sans</item>
         <item name="android:windowElevation">16dp</item>
     </style>
