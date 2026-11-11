@@ -13,11 +13,11 @@ import java.io.InputStream;
 
 public final class ChatImageProcessor {
 
-    private static final int PREVIEW_MAX_SIDE = 1080;
-    private static final int HD_MAX_SIDE = 3000;
+    private static final int PREVIEW_MAX_SIDE = 640;
+    private static final int HD_MAX_SIDE = 2304;
 
-    private static final int PREVIEW_QUALITY = 80;
-    private static final int HD_QUALITY = 92;
+    private static final int PREVIEW_QUALITY = 74;
+    private static final int HD_QUALITY = 85;
 
     private ChatImageProcessor() {
     }
@@ -41,10 +41,11 @@ public final class ChatImageProcessor {
         }
     }
 
-    public static ImagePayload fromUri(
-            ContentResolver resolver,
-            Uri uri
-    ) throws Exception {
+    public static ImagePayload fromUri(ContentResolver resolver, Uri uri) throws Exception {
+        return fromUri(resolver, uri, null);
+    }
+
+    static ImagePayload fromUri(ContentResolver resolver, Uri uri, Preview ready) throws Exception {
         if (resolver == null || uri == null) {
             throw new IllegalArgumentException(
                     "Foto tidak ditemukan"
@@ -73,12 +74,14 @@ public final class ChatImageProcessor {
                 orientation
         );
 
-        return createPayload(oriented);
+        return createPayload(oriented, ready);
     }
 
-    public static ImagePayload fromFile(
-            java.io.File file
-    ) throws Exception {
+    public static ImagePayload fromFile(java.io.File file) throws Exception {
+        return fromFile(file, null);
+    }
+
+    static ImagePayload fromFile(java.io.File file, Preview ready) throws Exception {
         if (
                 file == null
                         || !file.exists()
@@ -149,7 +152,7 @@ public final class ChatImageProcessor {
                         orientation
                 );
 
-        return createPayload(oriented);
+        return createPayload(oriented, ready);
     }
 
     public static ImagePayload fromBitmap(
@@ -161,7 +164,7 @@ public final class ChatImageProcessor {
             );
         }
 
-        return createPayload(bitmap);
+        return createPayload(bitmap, null);
     }
 
     private static int readExifOrientation(
@@ -256,9 +259,9 @@ public final class ChatImageProcessor {
         }
     }
 
-    private static ImagePayload createPayload(
-            Bitmap source
-    ) throws Exception {
+    interface Preview { void ready(Bitmap bitmap); }
+
+    private static ImagePayload createPayload(Bitmap source, Preview ready) throws Exception {
         int originalWidth = source.getWidth();
         int originalHeight = source.getHeight();
 
@@ -271,6 +274,12 @@ public final class ChatImageProcessor {
                 hd,
                 PREVIEW_MAX_SIDE
         );
+
+        if (ready != null) {
+            Bitmap thumbnail = scaleInside(preview, 360);
+            if (thumbnail == preview) thumbnail = preview.copy(Bitmap.Config.ARGB_8888, false);
+            ready.ready(thumbnail);
+        }
 
         byte[] previewBytes = compress(
                 preview,

@@ -24,10 +24,14 @@ public final class TraviSivaStickers {
         for (int i=0;i<ART.length;i++) if (id.equals(id(i))) return i;
         return -1;
     }
+    static int resource(String wire) {
+        int position = index(wire);
+        return position < 0 ? 0 : ART[position];
+    }
     private static String id(int i) { return String.format(java.util.Locale.US,"ts_v1_%02d",i+1); }
     public static String preview(String value) {
         int i=index(value);
-        return i>=0 ? "🐻 " + LABELS[i] : "🐻 Stiker Travi & Siva";
+        return i>=0 ? "🐻 " + LABELS[i] : "🐻 Stiker";
     }
     private static int dp(Activity a, int n) { return Math.round(n*a.getResources().getDisplayMetrics().density); }
     private static TextView label(Activity a,String text,int size) {
@@ -91,6 +95,9 @@ public final class TraviSivaStickers {
     }
     public static View bubble(Activity a,String wire) {
         int i=index(wire);
+        if (i < 0 && wire != null && wire.matches("\\[\\[STICKER\\]\\]sp_[a-f0-9]{24}")) {
+            return StickerPackDialog.received(a, wire.substring(PREFIX.length()));
+        }
         if(i<0)return label(a,"🐻 Stiker belum tersedia. Perbarui aplikasi ya.",12);
         StickerView v=new StickerView(a);v.setImageResource(ART[i]);v.setContentDescription("Stiker: "+LABELS[i]+". Ketuk untuk bergerak lagi");
         v.setScaleType(ImageView.ScaleType.FIT_CENTER);v.setPadding(dp(a,8),dp(a,8),dp(a,8),dp(a,8));

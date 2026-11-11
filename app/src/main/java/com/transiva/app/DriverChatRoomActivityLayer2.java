@@ -55,59 +55,6 @@ import java.util.Date;
 import java.util.Locale;
 abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1 {
 
-    protected PendingPhotoBubble addPendingPhotoBubble(
-            ChatImageProcessor.ImagePayload payload
-    ) {
-        LinearLayout wrapper = messageWrapper(true);
-
-        FrameLayout imageFrame = new FrameLayout(this);
-        imageFrame.setBackground(round("#EAF1FA", 16));
-
-        ImageView preview = new ImageView(this);
-        preview.setScaleType(ImageView.ScaleType.CENTER_CROP);
-
-        Bitmap bitmap = BitmapFactory.decodeByteArray(
-                payload.previewWebp,
-                0,
-                payload.previewWebp.length);
-        if (bitmap != null) preview.setImageBitmap(bitmap);
-
-        imageFrame.addView(
-                preview,
-                new FrameLayout.LayoutParams(-1, -1));
-
-        FrameLayout loadingLayer = new FrameLayout(this);
-        loadingLayer.setBackgroundColor(Color.argb(72, 0, 0, 0));
-
-        ProgressBar spinner = new ProgressBar(this);
-        spinner.setIndeterminate(true);
-        FrameLayout.LayoutParams spinnerLp =
-                new FrameLayout.LayoutParams(dp(42), dp(42));
-        spinnerLp.gravity = Gravity.CENTER;
-        loadingLayer.addView(spinner, spinnerLp);
-
-        imageFrame.addView(
-                loadingLayer,
-                new FrameLayout.LayoutParams(-1, -1));
-
-        wrapper.addView(
-                imageFrame,
-                new LinearLayout.LayoutParams(dp(220), dp(165)));
-
-        TextView state = text(
-                "Mengirim foto…",
-                9,
-                "#64748B",
-                true);
-        state.setGravity(Gravity.RIGHT);
-        state.setPadding(dp(7), dp(3), dp(7), 0);
-        wrapper.addView(
-                state,
-                new LinearLayout.LayoutParams(-2, -2));
-
-        return new PendingPhotoBubble(wrapper, loadingLayer, state);
-    }
-
     protected void setupVoiceRecorder() {
         ChatVoiceNote.attachRecorder(this, voiceButton, REQUEST_AUDIO_PERMISSION, new ChatVoiceNote.Listener() {
             @Override public void onState(String text, boolean recording, boolean cancelArmed) { statusText.setText(text); chatChrome.setRecording(recording, cancelArmed); }
@@ -256,7 +203,7 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
         if (array == null) return;
 
         if (reset) {
-            messagesBox.removeAllViews();
+            ChatPhotoTile.clearServerRows(messagesBox);
             chatStyle.reset();
             receiptViews.clear();
         }
@@ -276,6 +223,7 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
             if (message == null) continue;
 
             int id = message.optInt("id", 0);
+            ChatPhotoTile.reconcile(messagesBox, id);
             if (!reset && id <= lastId) {
                 updateReceipt(message);
                 continue;
@@ -442,21 +390,17 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
                 hdUrl = previewUrl;
             }
 
-            ImageView image = new ImageView(this);
-            image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            image.setBackground(roundStroke("#FFFFFF", "#D7E6F8", 16, 1));
-            image.setPadding(dp(2), dp(2), dp(2), dp(2));
-            wrapper.addView(
-                    image,
-                    new LinearLayout.LayoutParams(dp(220), dp(165)));
+            ImageView image = ChatPhotoTile.image(this);
+            wrapper.addView(image, ChatPhotoTile.imageSize(this));
 
             loadRemoteImage(image, previewUrl);
 
             TextView hint = text(
                     "Ketuk untuk lihat HD",
-                    9,
-                    "#0B7CFF",
+                    10,
+                    mine ? "#D9EBFF" : "#64748B",
                     true);
+            hint.setTextColor(mine ? 0xffd9ebff : chatChrome.secondaryColor());
             wrapper.addView(
                     hint,
                     new LinearLayout.LayoutParams(-2, -2));

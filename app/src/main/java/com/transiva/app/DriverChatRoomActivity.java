@@ -238,21 +238,21 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
         PremiumDialogs.builder(this)
                 .setTitle("Lampiran")
                 .setItems(
-                        new String[]{"Ambil foto", "Pilih dari galeri", "Stiker Travi & Siva"},
+                        new String[]{"Ambil foto", "Pilih dari galeri", "Stiker", "Toko Stiker"},
                         (dialog, which) -> {
                             if (which == 0) openCamera();
                             else if (which == 1) openGallery();
-                            else openStickerPicker();
+                            else openStickerPicker(which == 3);
                         })
                 .show();
     }
 
-    private void openStickerPicker() {
+    private void openStickerPicker(boolean store) {
         if (readOnly || sending || uploading || chatChrome.isRecording()) return;
         android.view.inputmethod.InputMethodManager keyboard =
                 (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
         if (keyboard != null) keyboard.hideSoftInputFromWindow(input.getWindowToken(), 0);
-        stickerDialog = TraviSivaStickers.show(this, this::sendSticker);
+        stickerDialog = StickerPackDialog.show(this, store, this::sendSticker);
     }
 
     protected void openCamera() {
@@ -335,115 +335,92 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
     }
 
     protected void processSelectedPhoto(Uri uri) {
-        if (uri == null || uploading) return;
-
-        uploading = true;
-        setSendingEnabled(false);
-        progress.setVisibility(View.VISIBLE);
-
-        chatScope.execute(() -> {
-            try {
-                ChatImageProcessor.ImagePayload payload =
-                        ChatImageProcessor.fromUri(
-                                getContentResolver(), uri);
-
-                postUi(() -> {
-                    uploading = false;
-                    progress.setVisibility(View.GONE);
-                    uploadPhoto(payload);
-                });
-
-            } catch (Exception error) {
-                postUi(() -> {
-                    uploading = false;
-                    progress.setVisibility(View.GONE);
-                    setSendingEnabled(true);
-                    toast(first(error.getMessage(),
-                            "Foto tidak dapat dibaca."));
-                });
-            }
-        });
+        if (uri == null) return;
+        preparePhoto(preview -> ChatImageProcessor.fromUri(getContentResolver(), uri, preview));
     }
 
     protected void processCameraFile(String path) {
-        if (clean(path).isEmpty() || uploading) return;
+        if (clean(path).isEmpty()) return;
+        File file = new File(path);
+        preparePhoto(preview -> {
+            try { return ChatImageProcessor.fromFile(file, preview); }
+            finally { file.delete(); }
+        });
+    }
 
+    private interface PhotoSource {
+        ChatImageProcessor.ImagePayload read(ChatImageProcessor.Preview preview) throws Exception;
+    }
+
+    private void preparePhoto(PhotoSource source) {
+        if (readOnly || uploading || sending || chatChrome.isRecording()) return;
+        ChatPhotoTile tile = new ChatPhotoTile(this);
+        messagesBox.addView(tile);
+        scrollBottom();
         uploading = true;
         setSendingEnabled(false);
-        progress.setVisibility(View.VISIBLE);
-
-        chatScope.execute(() -> {
-            File file = new File(path);
-
+        String operation = "dcm-" + java.util.UUID.randomUUID();
+        boolean queued = chatScope.execute(() -> {
             try {
-                ChatImageProcessor.ImagePayload payload =
-                        ChatImageProcessor.fromFile(file);
-
+                ChatImageProcessor.ImagePayload payload = source.read(bitmap -> postUi(() -> tile.thumbnail(bitmap)));
+                sendPreparedPhoto(payload, tile, operation);
+            } catch (Exception failure) {
                 postUi(() -> {
-                    uploading = false;
-                    progress.setVisibility(View.GONE);
-                    uploadPhoto(payload);
-                    try { file.delete(); } catch (Exception ignored) {}
+                    photoReady();
+                    tile.failed("Foto tidak dapat dibaca", null);
+                    toast(first(failure.getMessage(), "Foto tidak dapat dibaca."));
                 });
+            }
+        });
+        if (!queued) {
+            photoReady();
+            tile.failed("Antrean penuh · pilih foto kembali", null);
+        }
+    }
 
-            } catch (Exception error) {
-                postUi(() -> {
-                    uploading = false;
-                    progress.setVisibility(View.GONE);
-                    setSendingEnabled(true);
-                    toast("Foto kamera tidak dapat dibaca.");
-                });
+    private void sendPreparedPhoto(ChatImageProcessor.ImagePayload payload, ChatPhotoTile tile, String operation) {
+        try {
+            JSONObject response = DriverMessageApi.uploadImagePair(UPLOAD_IMAGE_URL, orderId, orderDbId,
+                    orderSource, roomId, payload, chatScope.owner, operation,
+                    percent -> postUi(() -> tile.progress(percent)));
+            if (!response.optBoolean("success") || response.optInt("id") <= 0) {
+                throw new IllegalStateException(response.optString("message", "Foto belum terkonfirmasi"));
+            }
+            postUi(() -> {
+                photoReady();
+                int id = response.optInt("id");
+                tile.confirmed(id);
+                if (id <= lastId) ChatPhotoTile.reconcile(messagesBox, id);
+                else loadMessages(false);
+            });
+        } catch (Exception failure) {
+            postUi(() -> {
+                photoReady();
+                showPhotoRetry(payload, tile, operation);
+                toast(first(failure.getMessage(), "Foto belum terkonfirmasi."));
+            });
+        }
+    }
+
+    private void showPhotoRetry(ChatImageProcessor.ImagePayload payload, ChatPhotoTile tile, String operation) {
+        if (readOnly) {
+            tile.failed("Percakapan sudah ditutup", null);
+            return;
+        }
+        tile.failed("Foto belum terkirim · ketuk untuk coba lagi", () -> {
+            if (readOnly || sending || uploading || chatChrome.isRecording()) return;
+            uploading = true;
+            setSendingEnabled(false);
+            tile.preparing();
+            if (!chatScope.execute(() -> sendPreparedPhoto(payload, tile, operation))) {
+                photoReady();
+                showPhotoRetry(payload, tile, operation);
             }
         });
     }
 
-    protected void uploadPhoto(
-            ChatImageProcessor.ImagePayload payload
-    ) {
-        if (payload == null || readOnly || uploading) return;
-
-        uploading = true;
-        setSendingEnabled(false);
-
-        final PendingPhotoBubble pendingBubble =
-                addPendingPhotoBubble(payload);
-        scrollBottom();
-
-        chatScope.execute(() -> {
-            try {
-                JSONObject response =
-                        DriverMessageApi.uploadImagePair(session,UPLOAD_IMAGE_URL,orderId,orderSource,roomId,payload,chatScope.owner);
-
-                postUi(() -> {
-                    uploading = false;
-                    setSendingEnabled(true);
-
-                    if (response.optBoolean("success", false)) {
-                        pendingBubble.markSuccess();
-                        main.postDelayed(() -> {
-                            if (pendingBubble.root.getParent() != null) {
-                                messagesBox.removeView(pendingBubble.root);
-                            }
-                            firstLoad = true;
-                            lastId = 0;
-                            loadMessages(false);
-                        }, 450L);
-                    } else {
-                        pendingBubble.markFailed(first(
-                                response.optString("message"),
-                                "Foto gagal dikirim"));
-                    }
-                });
-
-            } catch (Exception error) {
-                postUi(() -> {
-                    uploading = false;
-                    setSendingEnabled(true);
-                    pendingBubble.markFailed(first(
-                            error.getMessage(),
-                            "Foto gagal dikirim"));
-                });
-            }
-        });
+    private void photoReady() {
+        uploading = false;
+        setSendingEnabled(true);
     }
 }

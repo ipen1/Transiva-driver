@@ -57,20 +57,24 @@ public final class DriverMessageApi {
             String roomId,
             ChatImageProcessor.ImagePayload payload, DriverSessionOwner owner
     ) throws Exception {
-        if (payload == null
-                || payload.previewWebp == null
-                || payload.hdJpeg == null) {
+        return uploadImagePair(endpoint, orderId, "", orderSource, roomId, payload, owner,
+                "dcm-" + java.util.UUID.randomUUID(), null);
+    }
+
+    static JSONObject uploadImagePair(String endpoint, String orderId, String orderDbId,
+                                      String orderSource, String roomId,
+                                      ChatImageProcessor.ImagePayload payload, DriverSessionOwner owner,
+                                      String operation, ChatMediaMultipart.Progress progress) throws Exception {
+        if (payload == null || payload.previewWebp == null || payload.hdJpeg == null) {
             throw new IllegalArgumentException("Data foto tidak valid");
         }
-
-        String boundary =
-                "----TransivaDriverChat" + System.currentTimeMillis();
-
+        JSONObject fields = new JSONObject().put("order_id", orderId).put("order_db_id", orderDbId)
+                .put("source", orderSource).put("room_id", roomId).put("sender_type", "driver")
+                .put("operation_id", operation);
+        ChatMediaMultipart multipart = new ChatMediaMultipart(fields, payload.previewWebp, payload.hdJpeg);
         owner.check();
-        HttpURLConnection connection = null;
-
+        HttpURLConnection connection = com.transiva.app.driver.data.DriverConnectionRepository.open(endpoint);
         try {
-            connection = com.transiva.app.driver.data.DriverConnectionRepository.open(endpoint);
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(TIMEOUT_MS);
             connection.setReadTimeout(TIMEOUT_MS);
@@ -78,47 +82,13 @@ public final class DriverMessageApi {
             connection.setDoOutput(true);
             connection.setRequestProperty("Accept", "application/json");
             owner.pin(connection);
-            connection.setRequestProperty(
-                    "Content-Type",
-                    "multipart/form-data; boundary=" + boundary
-            );
-
-            try (OutputStream output = connection.getOutputStream()) {
-                writeField(output, boundary, "order_id", orderId);
-                writeField(output, boundary, "source", orderSource);
-                writeField(output, boundary, "room_id", roomId);
-                writeField(output, boundary, "sender_type", "driver");
-
-                writeFile(
-                        output,
-                        boundary,
-                        "preview_image",
-                        "preview.webp",
-                        "image/webp",
-                        payload.previewWebp
-                );
-
-                writeFile(
-                        output,
-                        boundary,
-                        "hd_image",
-                        "hd.jpg",
-                        "image/jpeg",
-                        payload.hdJpeg
-                );
-
-                output.write(
-                        ("--" + boundary + "--\r\n")
-                                .getBytes(StandardCharsets.UTF_8)
-                );
-                output.flush();
-            }
-
-            JSONObject result=readResponse(connection);owner.check();return result;
-
+            multipart.write(connection, progress);
+            JSONObject result = readResponse(connection);
+            owner.check();
+            return result;
         } finally {
             owner.release(connection);
-            if (connection != null) connection.disconnect();
+            connection.disconnect();
         }
     }
 

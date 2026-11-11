@@ -139,35 +139,6 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
         }
     };
 
-    protected final class PendingPhotoBubble {
-        final LinearLayout root;
-        final FrameLayout loadingLayer;
-        final TextView state;
-
-        PendingPhotoBubble(
-                LinearLayout root,
-                FrameLayout loadingLayer,
-                TextView state
-        ) {
-            this.root = root;
-            this.loadingLayer = loadingLayer;
-            this.state = state;
-        }
-
-        void markSuccess() {
-            loadingLayer.setVisibility(View.GONE);
-            state.setText("Terkirim • memuat chat…");
-            state.setTextColor(Color.parseColor("#0B7CFF"));
-        }
-
-        void markFailed(String message) {
-            loadingLayer.setVisibility(View.GONE);
-            state.setText("Gagal dikirim");
-            state.setTextColor(Color.parseColor("#DC2626"));
-            toast(first(message, "Foto gagal dikirim"));
-        }
-    }
-
     protected static final class PendingText { final LinearLayout root; final TextView state; PendingText(LinearLayout root, TextView state){this.root=root;this.state=state;} void markNetworkPending(){state.setText("Pending • jaringan");} }
 
     protected void animateMessage(View view, boolean mine) {
@@ -197,37 +168,56 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
         return wrapper;
     }
 
+    private static final java.util.concurrent.ThreadPoolExecutor CHAT_IMAGES =
+            new java.util.concurrent.ThreadPoolExecutor(2, 2, 15, java.util.concurrent.TimeUnit.SECONDS,
+                    new java.util.concurrent.ArrayBlockingQueue<>(48));
+
     protected void loadRemoteImage(ImageView view, String rawUrl) {
         String url = absoluteUrl(rawUrl);
         if (url.isEmpty()) return;
-
-        chatScope.execute(() -> {
-            HttpURLConnection connection = null;
-            InputStream inputStream = null;
-
-            try {
-                connection = com.transiva.app.driver.data.DriverConnectionRepository.open(url);
-                connection.setConnectTimeout(20000);
-                connection.setReadTimeout(20000);
-                connection.setUseCaches(true);
-                inputStream = connection.getInputStream();
-                Bitmap bitmap = BitmapFactory.decodeStream(inputStream);
-
-                if (bitmap != null) {
-                    postUi(() -> {
-                        view.setAlpha(0f);
-                        view.setImageBitmap(bitmap);
-                        view.animate().alpha(1f).setDuration(180).start();
-                    });
-                }
-            } catch (Exception ignored) {
-            } finally {
+        DriverSessionOwner owner = chatScope.owner;
+        boolean thumbnail = view.getClipToOutline();
+        try {
+            CHAT_IMAGES.execute(() -> {
+                HttpURLConnection connection = null;
                 try {
-                    if (inputStream != null) inputStream.close();
-                } catch (Exception ignored) {}
-                if (connection != null) connection.disconnect();
-            }
-        });
+                    owner.check();
+                    connection = com.transiva.app.driver.data.DriverConnectionRepository.open(url);
+                    connection.setInstanceFollowRedirects(false);
+                    if (NetworkSafetyRules.maySendCredentials(url)) owner.pin(connection);
+                    connection.setRequestProperty("Accept", "image/*");
+                    connection.setConnectTimeout(10000);
+                    connection.setReadTimeout(15000);
+                    Bitmap bitmap;
+                    try (InputStream input = connection.getInputStream()) {
+                        java.io.ByteArrayOutputStream encoded = new java.io.ByteArrayOutputStream();
+                        byte[] buffer = new byte[8192];
+                        int count;
+                        while ((count = input.read(buffer)) != -1) {
+                            owner.check();
+                            if (encoded.size() + count > 8 * 1024 * 1024) return;
+                            encoded.write(buffer, 0, count);
+                        }
+                        byte[] data = encoded.toByteArray();
+                        BitmapFactory.Options options = new BitmapFactory.Options();
+                        options.inJustDecodeBounds = true;
+                        BitmapFactory.decodeByteArray(data, 0, data.length, options);
+                        int max = Math.max(options.outWidth, options.outHeight);
+                        if (max < 1) return;
+                        options.inSampleSize = 1;
+                        while (max / options.inSampleSize > (thumbnail ? 900 : 2600)) options.inSampleSize *= 2;
+                        options.inJustDecodeBounds = false;
+                        bitmap = BitmapFactory.decodeByteArray(data, 0, data.length, options);
+                    }
+                    if (bitmap != null) postUi(() -> view.setImageBitmap(bitmap));
+                } catch (Exception unavailable) {
+                    // The bubble and its HD action stay available if the preview cannot be loaded.
+                } finally {
+                    owner.release(connection);
+                    if (connection != null) connection.disconnect();
+                }
+            });
+        } catch (java.util.concurrent.RejectedExecutionException busy) { }
     }
 
     protected void showHdImage(String rawUrl) {
@@ -576,8 +566,6 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
     protected abstract void openGallery();
     protected abstract void processSelectedPhoto(Uri uri);
     protected abstract void processCameraFile(String path);
-    protected abstract void uploadPhoto( ChatImageProcessor.ImagePayload payload );
-    protected abstract PendingPhotoBubble addPendingPhotoBubble( ChatImageProcessor.ImagePayload payload );
     protected abstract void setupVoiceRecorder();
     protected abstract void uploadVoiceNote(File file, long durationMs);
     protected abstract String absoluteVoiceContent(String content);
