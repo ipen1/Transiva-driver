@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 final class ChatNotificationAck {
@@ -35,7 +36,9 @@ final class ChatNotificationAck {
         if(!session.isLoggedIn()||token==null||token.isEmpty())return;
         String targetSession=data.get("target_session_hash");
         String targetUser=data.get("target_user_id");
-        if(targetUser!=null&&!targetUser.isEmpty()&&!targetUser.equals(session.getUserId()))return;
+        String userId = session.getId();
+        if (userId == null || userId.isEmpty()) userId = session.getUserId();
+        if(targetUser!=null&&!targetUser.isEmpty()&&!targetUser.equals(userId))return;
         IO.execute(()->{
             try {
                 if(targetSession!=null&&!targetSession.isEmpty()&&!targetSession.equals(hash(token)))return;
@@ -46,7 +49,7 @@ final class ChatNotificationAck {
                 byte[] body=payload.toString().getBytes(StandardCharsets.UTF_8);
                 for(int attempt=0;attempt<2;attempt++){
                     if(!session.isLoggedIn()||!token.equals(session.getToken()))return;
-                    int status=send(app,token,body);
+                    int status=send(app,token,body,null);
                     if(status>0&&status<500)return;
                 }
             }catch(Exception ignored){}
@@ -60,22 +63,48 @@ final class ChatNotificationAck {
         posted(context,data,channelId);
     }
 
-    private static int send(Context context,String token,byte[] body){
+    /** The chat room itself received these messages, including when Android alerts are muted. */
+    static void receivedFromRoom(Context context, DriverSessionOwner owner, String orderId,
+                                 String orderDbId, String source, String room, JSONArray ids) {
+        if (ids.length() == 0) return;
+        Context app = context.getApplicationContext();
+        IO.execute(() -> {
+            try {
+                JSONObject payload = new JSONObject().put("chat_ids", ids).put("type", "chat_message")
+                        .put("room_id", room).put("order_id", orderId).put("order_db_id", orderDbId)
+                        .put("source", source);
+                byte[] body = payload.toString().getBytes(StandardCharsets.UTF_8);
+                for (int attempt = 0; attempt < 2 && owner.current(); attempt++) {
+                    int status = send(app, null, body, owner);
+                    if (status > 0 && status < 500) return;
+                }
+            } catch (Exception ignored) {}
+        });
+    }
+
+    private static int send(Context context,String token,byte[] body,DriverSessionOwner owner){
         HttpURLConnection connection=null;
         try{
             connection=DriverConnectionRepository.open(DriverApiConfig.endpoint("chat_notification_ack.php"));
             connection.setInstanceFollowRedirects(false);
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(3000);connection.setReadTimeout(4000);
-            connection.setRequestProperty("Authorization","Bearer "+token);
-            connection.setRequestProperty("X-Device-UUID",DeviceIdentityManager.getInstallationUuid(context));
-            connection.setRequestProperty("X-App-Scope",SCOPE);
+            if (owner != null) {
+                owner.pin(connection);
+            } else {
+                connection.setRequestProperty("Authorization","Bearer "+token);
+                connection.setRequestProperty("X-Device-UUID",DeviceIdentityManager.getInstallationUuid(context));
+                connection.setRequestProperty("X-App-Scope",SCOPE);
+            }
             connection.setRequestProperty("Content-Type","application/json; charset=UTF-8");
             connection.setDoOutput(true);connection.setFixedLengthStreamingMode(body.length);
             try(java.io.OutputStream out=connection.getOutputStream()){out.write(body);}
             return connection.getResponseCode();
         }catch(java.io.IOException retry){return 0;}
-        finally{if(connection!=null)connection.disconnect();}
+        finally{
+            if(owner!=null)owner.release(connection);
+            if(connection!=null)connection.disconnect();
+        }
     }
 
     private static String hash(String value)throws Exception{

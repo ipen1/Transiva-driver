@@ -236,6 +236,7 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
         }
         chatStyle.profile(response,participantName,participantPhoto);
         boolean added = false;
+        JSONArray receivedIds = new JSONArray();
 
         for (int i = 0; i < array.length(); i++) {
             JSONObject message = array.optJSONObject(i);
@@ -249,8 +250,15 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
             if (id > lastId) lastId = id;
 
             addBubble(message, !firstLoad);
+            if (id > 0 && "customer".equalsIgnoreCase(message.optString("sender_type"))
+                    && message.optInt("is_delivered") == 0 && message.optInt("is_read") == 0) {
+                receivedIds.put(id);
+            }
             added = true;
         }
+
+        ChatNotificationAck.receivedFromRoom(this, chatScope.owner, orderId, orderDbId,
+                orderSource, roomId, receivedIds);
 
         JSONArray receipts=response.optJSONArray("receipt_updates");
         if(receipts!=null)for(int i=0;i<receipts.length();i++){
@@ -324,6 +332,7 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
 
                 String endpoint = GET_CHAT_URL
                         + "?room_id=" + URLEncoder.encode(roomId, StandardCharsets.UTF_8.name())
+                        + "&source=" + URLEncoder.encode(orderSource, StandardCharsets.UTF_8.name())
                         + "&viewer_type=driver"
                         + "&mark_read=1"
                         + "&read_source=chat_room_foreground_v2"

@@ -206,6 +206,8 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
                 "Notifikasi baru"
         );
 
+        if ("merchant_driver_chat".equals(type)) body = first(data.get("chat_preview"), body);
+
         String orderId = first(
                 data.get("order_id"),
                 data.get("id_order"),
@@ -417,6 +419,7 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
 
 
         boolean merchantDriverChatNotification = isMerchantDriverChat(type, data);
+        if (merchantDriverChatNotification) builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE);
 
 
             if (newIncomingOrder) {
@@ -482,7 +485,10 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
                 NotificationCompat.Builder fallback=new NotificationCompat.Builder(this,channelId)
                     .setSmallIcon(getSmallIcon()).setContentTitle(first(title,"Transiva"))
                     .setContentText(first(body,"Notifikasi baru")).setContentIntent(pendingIntent)
+                    .setVisibility(merchantDriverChatNotification ? NotificationCompat.VISIBILITY_PRIVATE
+                            : NotificationCompat.VISIBILITY_PUBLIC)
                     .setPriority(NotificationCompat.PRIORITY_HIGH).setAutoCancel(true);
+                if (merchantDriverChatNotification) fallback.setStyle(new NotificationCompat.BigTextStyle().bigText(body));
                 if(newIncomingOrder)fallback.setTimeoutAfter(Math.max(1,PushExpiryPolicy.remainingMillis(data,System.currentTimeMillis(),false)));
                 NotificationManagerCompat.from(this).notify(requestCode,fallback.build());
                 ChatNotificationAck.posted(this,data,channelId);

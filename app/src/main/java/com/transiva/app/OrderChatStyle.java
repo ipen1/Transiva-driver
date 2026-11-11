@@ -97,12 +97,7 @@ final class OrderChatStyle {
         LinearLayout bubble = new LinearLayout(activity);
         bubble.setOrientation(LinearLayout.VERTICAL);
         bubble.setPadding(dp(10), dp(6), dp(10), dp(5));
-        GradientDrawable fill = mine ? gradient(0xff1754b9, 0xff124384, 0)
-                : gradient(dark() ? 0xff2e3948 : 0xfff6f7fa, dark() ? 0xff222c39 : 0xffe1e6ed, 0);
-        float r = dp(15), tail = dp(4);
-        fill.setCornerRadii(mine ? new float[]{r,r,tail,tail,r,r,r,r}
-                : new float[]{tail,tail,r,r,r,r,r,r});
-        bubble.setBackground(fill);
+        bubble.setBackground(bubbleFill(mine));
         while (wrapper.getChildCount() > 0) {
             View child = wrapper.getChildAt(0);
             android.view.ViewGroup.LayoutParams previous = child.getLayoutParams();
@@ -143,21 +138,7 @@ final class OrderChatStyle {
             if(box.getChildCount()==1&&box.getChildAt(0) instanceof TextView
                     &&((TextView)box.getChildAt(0)).getText().toString().startsWith("Belum ada pesan"))
                 box.removeViewAt(0);
-            boolean mine = call.optInt("outgoing", 0) == 1;
-            LinearLayout wrapper = new LinearLayout(activity);
-            wrapper.setOrientation(LinearLayout.VERTICAL);
-            wrapper.setGravity(mine ? Gravity.END : Gravity.START);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-            lp.setMargins(0, dp(3), 0, dp(3));
-            wrapper.addView(label(callTitle(call), 14, mine, true));
-            wrapper.addView(label(callDetail(call), 12, mine, false));
-            TextView timestamp = label("", 10, mine, false);
-            receipt(timestamp, call, false);
-            if (mine) timestamp.setTextColor(0xffdae8ff);
-            appendMeta(wrapper, timestamp);
-            decorate(wrapper, call, mine);
-            wrapper.setTag(new Item(call.optString("created_at"), 0, call.optLong("id")));
-            box.addView(wrapper, lp);
+            box.addView(callCard(box, call));
             added = true;
         }
         // Also re-sort when a message page arrives after earlier call cards.
@@ -185,17 +166,79 @@ final class OrderChatStyle {
         return added;
     }
 
+    private GradientDrawable bubbleFill(boolean mine) {
+        GradientDrawable fill = mine ? gradient(0xff1754b9, 0xff124384, 0)
+                : gradient(dark() ? 0xff2e3948 : 0xfff6f7fa, dark() ? 0xff222c39 : 0xffe1e6ed, 0);
+        float r = dp(15), tail = dp(4);
+        fill.setCornerRadii(mine ? new float[]{r,r,tail,tail,r,r,r,r}
+                : new float[]{tail,tail,r,r,r,r,r,r});
+        return fill;
+    }
+
+    private View callCard(LinearLayout box, JSONObject call) {
+        boolean mine = call.optInt("outgoing") == 1;
+        boolean video = "video".equals(call.optString("call_type"));
+        boolean unanswered = !stamped(call, "accepted_at");
+        LinearLayout row = new LinearLayout(activity);
+        row.setGravity(mine ? Gravity.END : Gravity.START);
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, -2);
+        rowParams.topMargin = dp(4);
+        rowParams.bottomMargin = dp(4);
+        row.setLayoutParams(rowParams);
+        row.setTag(new Item(call.optString("created_at"), 0, call.optLong("id")));
+
+        LinearLayout card = new LinearLayout(activity);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(11), dp(9), dp(12), dp(8));
+        GradientDrawable fill = bubbleFill(mine);
+        fill.setStroke(dp(1), mine ? 0x669acbff : dark() ? 0xff465669 : 0xffccd6e2);
+        card.setBackground(fill);
+        int viewport = box.getWidth();
+        if (viewport == 0) viewport = activity.getResources().getDisplayMetrics().widthPixels - dp(24);
+        int available = viewport - box.getPaddingLeft() - box.getPaddingRight();
+        row.addView(card, new LinearLayout.LayoutParams(Math.min(dp(258), Math.max(1, available - dp(20))), -2));
+
+        int accent = unanswered ? (mine || dark() ? 0xffffb9b0 : 0xff922d28)
+                : (mine || dark() ? 0xffbddeff : 0xff214d83);
+        int secondary = mine ? 0xffe0edff : dark() ? 0xffd0dbe8 : 0xff3f5268;
+        TextView badge = label(mine ? "↗" : "↙", 12, true, true);
+        badge.setGravity(Gravity.CENTER);
+        badge.setTextColor(accent);
+        badge.setBackground(gradient(mine || dark() ? 0xff193452 : 0xffdceaff,
+                mine || dark() ? 0xff11243b : 0xffc9dcf3, 21));
+        CallVisuals.Icon icon = new CallVisuals.Icon(video ? "video" : "end", false);
+        icon.setBounds(0, 0, dp(14), dp(14));
+        icon.setColorFilter(accent, android.graphics.PorterDuff.Mode.SRC_IN);
+        badge.setCompoundDrawables(null, icon, null, null);
+        badge.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        card.addView(badge, new LinearLayout.LayoutParams(dp(40), dp(40)));
+
+        LinearLayout info = new LinearLayout(activity);
+        info.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams infoParams = new LinearLayout.LayoutParams(0, -2, 1f);
+        infoParams.setMarginStart(dp(10));
+        card.addView(info, infoParams);
+        info.addView(label(callTitle(call), 14, mine, true));
+        TextView detail = label(callDetail(call), 12, mine, false);
+        detail.setTextColor(secondary);
+        info.addView(detail);
+        TextView timestamp = label(time(call.optString("created_at")), 10, mine, false);
+        timestamp.setTextColor(secondary);
+        appendMeta(info, timestamp);
+        return row;
+    }
+
     private String callTitle(JSONObject call) {
-        return (call.optInt("outgoing",0)==1 ? "↗  " : "↙  ")
-                + ("video".equals(call.optString("call_type")) ? "Panggilan video" : "Panggilan suara");
+        return "video".equals(call.optString("call_type")) ? "Panggilan video" : "Panggilan suara";
     }
 
     private String callDetail(JSONObject call) {
-        if ("rejected".equals(call.optString("status"))) return "Ditolak";
-        if (!stamped(call,"accepted_at")) return "Tidak terjawab";
+        String direction = call.optInt("outgoing") == 1 ? "Keluar" : "Masuk";
+        if ("rejected".equals(call.optString("status"))) return direction + " · Ditolak";
+        if (!stamped(call, "accepted_at")) return direction + " · Tidak terjawab";
         long seconds = Math.max(0, call.optLong("duration_seconds"));
-        String duration = seconds < 60 ? seconds + " dtk" : seconds/60 + " mnt " + seconds%60 + " dtk";
-        return (call.optInt("outgoing",0)==1 ? "Keluar" : "Masuk") + " · " + duration;
+        String duration = seconds < 60 ? seconds + " dtk" : seconds / 60 + " mnt " + seconds % 60 + " dtk";
+        return direction + " · " + duration;
     }
 
     void overflow(LinearLayout header, Runnable search, Fetch fetch, LinearLayout messages) {
