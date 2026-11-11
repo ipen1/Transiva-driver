@@ -421,32 +421,30 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
         boolean merchantDriverChatNotification = isMerchantDriverChat(type, data);
         if (merchantDriverChatNotification) builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE);
 
-
-            if (newIncomingOrder) {
-                builder.setTimeoutAfter(Math.max(1,PushExpiryPolicy.remainingMillis(data,System.currentTimeMillis(),false)));
-                // Android 8+ mengambil suara dari NotificationChannel.
-                // Android 7 dan lebih lama mengambil suara langsung dari Builder.
-                if (Build.VERSION.SDK_INT < 26) {
-                    builder.setSound(orderSoundUri())
-                            .setVibrate(new long[]{0L, 350L, 180L, 350L, 180L, 650L})
-                            .setLights(0xFF0B7CFF, 700, 700);
-                }
-                builder.setPriority(NotificationCompat.PRIORITY_MAX)
-                        .setCategory(NotificationCompat.CATEGORY_STATUS);
-            } else {
-                builder.setDefaults(
-                        NotificationCompat.DEFAULT_SOUND
-                                | NotificationCompat.DEFAULT_VIBRATE
-                                | NotificationCompat.DEFAULT_LIGHTS
-                );
+        if (newIncomingOrder) {
+            builder.setTimeoutAfter(Math.max(1,PushExpiryPolicy.remainingMillis(data,System.currentTimeMillis(),false)));
+            // Android 8+ mengambil suara dari NotificationChannel.
+            // Android 7 dan lebih lama mengambil suara langsung dari Builder.
+            if (Build.VERSION.SDK_INT < 26) {
+                builder.setSound(orderSoundUri())
+                        .setVibrate(new long[]{0L, 350L, 180L, 350L, 180L, 650L})
+                        .setLights(0xFF0B7CFF, 700, 700);
             }
-            if (merchantDriverChatNotification) {
-                // Chat may be high priority, but it must remain a normal heads-up
-                // notification. Full-screen intent is reserved for incoming calls.
-                builder.setCategory(NotificationCompat.CATEGORY_MESSAGE)
-                        .setPriority(NotificationCompat.PRIORITY_HIGH);
-            }
-        
+            builder.setPriority(NotificationCompat.PRIORITY_MAX)
+                    .setCategory(NotificationCompat.CATEGORY_STATUS);
+        } else {
+            builder.setDefaults(
+                    NotificationCompat.DEFAULT_SOUND
+                            | NotificationCompat.DEFAULT_VIBRATE
+                            | NotificationCompat.DEFAULT_LIGHTS
+            );
+        }
+        if (merchantDriverChatNotification) {
+            // Chat may be high priority, but it must remain a normal heads-up
+            // notification. Full-screen intent is reserved for incoming calls.
+            builder.setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH);
+        }
 
         // For operationally urgent pushes, briefly wake the display so the
         // heads-up notification can be noticed. Full-screen UI remains reserved
