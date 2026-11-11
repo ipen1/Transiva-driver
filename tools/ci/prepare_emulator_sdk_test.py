@@ -55,15 +55,18 @@ class EmulatorPreparationTest(unittest.TestCase):
   self.assertEqual(1,self.run_mode('missing_pulse'));self.assertEqual(1,self.count())
   self.assertEqual('failed',self.result()['status']);self.assertFalse(self.result()['tests_started'])
   self.assertIn('libpulse.so.0',self.result()['reason']);self.assertEqual('working',(self.sdk/'emulator/keep').read_text())
- def test_workflow_installs_and_loads_libpulse_before_executing_emulator(self):
+ def test_workflow_checks_bundled_libpulse_before_executing_emulator(self):
   text=(Path(__file__).resolve().parents[2]/'.github/workflows/build-app.yml').read_text()
-  start=text.index('      - name: Install emulator host dependency before SDK verification')
-  end=text.index('      - name: Prepare verified emulator SDK with bounded recovery',start)
-  block=text[start:end]
+  instrumentation=text.split('  instrumentation:',1)[1]
+  self.assertIn('runs-on: ubuntu-24.04',instrumentation)
+  self.assertNotIn('apt-get',instrumentation)
+  start=instrumentation.index('      - name: Verify bundled emulator host library')
+  end=instrumentation.index('      - name: Prepare verified emulator SDK with bounded recovery',start)
+  block=instrumentation[start:end]
   self.assertIn('shell: bash',block);self.assertIn('set -euo pipefail',block)
-  self.assertLess(block.index('sudo apt-get update'),block.index('sudo apt-get install --no-install-recommends -y libpulse0'))
-  self.assertLess(block.index('sudo apt-get install --no-install-recommends -y libpulse0'),block.index('ctypes.CDLL("libpulse.so.0")'))
-  self.assertLess(end,text.index('uses: reactivecircus/android-emulator-runner@'))
+  self.assertIn('ctypes.CDLL("libpulse.so.0")',block)
+  self.assertIn('raise SystemExit(',block)
+  self.assertLess(end,instrumentation.index('uses: reactivecircus/android-emulator-runner@'))
  def test_invalid_package_metadata_cannot_be_promoted(self):self.assertEqual(0,self.run_mode('metadata_once'));self.assertEqual(2,self.count())
  def test_failure_preserves_existing_runner_emulator(self):
   (self.sdk/'emulator').mkdir();(self.sdk/'emulator/keep').write_text('working');self.assertEqual(1,self.run_mode('always_corrupt'));self.assertEqual('working',(self.sdk/'emulator/keep').read_text())
