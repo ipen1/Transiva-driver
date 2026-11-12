@@ -27,7 +27,10 @@ def verify(directory,env,log):
     binary=directory/'emulator'
     if not binary.is_file() or not os.access(binary,os.X_OK):return False,'emulator executable missing'
     try:
-        result=subprocess.run([str(binary),'-version'],env=env,capture_output=True,text=True,timeout=30)
+        # The runtime workflow boots the headless QEMU binary. Probe that same
+        # path so desktop Qt/audio libraries cannot block headless tests.
+        command=[str(binary),'-no-window','-noaudio','-version']
+        result=subprocess.run(command,env=env,capture_output=True,text=True,timeout=30)
         output=result.stdout+result.stderr;log.write(output);log.flush()
         return result.returncode==0 and 'android emulator version' in output.lower(),output.strip()
     except (OSError,subprocess.TimeoutExpired) as error:return False,str(error)

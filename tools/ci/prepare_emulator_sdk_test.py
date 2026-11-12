@@ -23,6 +23,7 @@ package=root/'emulator';package.mkdir()
 if mode=='metadata_once' and count==1:(package/'package.xml').write_text('<broken')
 binary=package/'emulator';binary.write_text('#!/bin/sh\necho "Android emulator version 37.2.12.0"\n');binary.chmod(0o755)
 if mode=='binary_once' and count==1:binary.write_text('#!/bin/sh\nexit 1\n')
+if mode=='desktop_missing_pulse':binary.write_text('#!/bin/sh\nif [ "$*" = "-no-window -noaudio -version" ]; then\n  echo "Android emulator version 37.2.12.0"\nelse\n  echo "qemu-system-x86_64: error while loading shared libraries: libpulse.so.0" >&2\n  exit 127\nfi\n')
 if mode=='missing_pulse':binary.write_text('#!/bin/sh\necho "qemu-system-x86_64: error while loading shared libraries: libpulse.so.0: cannot open shared object file: No such file or directory" >&2\nexit 127\n')
 if mode=='missing_binary_once' and count==1:binary.unlink()
 print('Installed emulator package')
@@ -55,18 +56,22 @@ class EmulatorPreparationTest(unittest.TestCase):
   self.assertEqual(1,self.run_mode('missing_pulse'));self.assertEqual(1,self.count())
   self.assertEqual('failed',self.result()['status']);self.assertFalse(self.result()['tests_started'])
   self.assertIn('libpulse.so.0',self.result()['reason']);self.assertEqual('working',(self.sdk/'emulator/keep').read_text())
- def test_workflow_checks_bundled_libpulse_before_executing_emulator(self):
+ def test_workflow_uses_same_headless_mode_for_verification_and_runtime(self):
   text=(Path(__file__).resolve().parents[2]/'.github/workflows/build-app.yml').read_text()
   instrumentation=text.split('  instrumentation:',1)[1]
   self.assertIn('runs-on: ubuntu-24.04',instrumentation)
   self.assertNotIn('apt-get',instrumentation)
-  start=instrumentation.index('      - name: Verify bundled emulator host library')
-  end=instrumentation.index('      - name: Prepare verified emulator SDK with bounded recovery',start)
-  block=instrumentation[start:end]
-  self.assertIn('shell: bash',block);self.assertIn('set -euo pipefail',block)
-  self.assertIn('ctypes.CDLL("libpulse.so.0")',block)
-  self.assertIn('raise SystemExit(',block)
-  self.assertLess(end,instrumentation.index('uses: reactivecircus/android-emulator-runner@'))
+  self.assertNotIn('ctypes.CDLL',instrumentation)
+  sdk=instrumentation.index('run: python3 tools/ci/prepare_emulator_sdk.py')
+  runner=instrumentation.index('uses: reactivecircus/android-emulator-runner@')
+  self.assertLess(sdk,runner)
+  emulator_options=next(line for line in instrumentation.splitlines() if 'emulator-options:' in line)
+  self.assertIn('-no-window',emulator_options)
+  self.assertIn('-noaudio',emulator_options)
+ def test_headless_verification_does_not_require_desktop_pulseaudio(self):
+  self.assertEqual(0,self.run_mode('desktop_missing_pulse'))
+  self.assertEqual(1,self.count())
+  self.assertEqual('ready',self.result()['status'])
  def test_invalid_package_metadata_cannot_be_promoted(self):self.assertEqual(0,self.run_mode('metadata_once'));self.assertEqual(2,self.count())
  def test_failure_preserves_existing_runner_emulator(self):
   (self.sdk/'emulator').mkdir();(self.sdk/'emulator/keep').write_text('working');self.assertEqual(1,self.run_mode('always_corrupt'));self.assertEqual('working',(self.sdk/'emulator/keep').read_text())
