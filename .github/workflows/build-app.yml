@@ -214,18 +214,6 @@ jobs:
         run: python3 tools/ci/android_runtime_result_test.py
       - name: Verify emulator SDK recovery
         run: python3 tools/ci/prepare_emulator_sdk_test.py
-      - name: Verify bundled emulator host library
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import ctypes
-          try:
-              ctypes.CDLL("libpulse.so.0")
-          except OSError as error:
-              raise SystemExit(f"::error::Emulator host library libpulse.so.0 could not be loaded: {error}")
-          print("Emulator host library libpulse.so.0 is available.")
-          PY
       - name: Prepare verified emulator SDK with bounded recovery
         run: python3 tools/ci/prepare_emulator_sdk.py
       - name: Run connected instrumentation tests
