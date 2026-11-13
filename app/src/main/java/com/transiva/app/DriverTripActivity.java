@@ -494,10 +494,17 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
                 l.addView(text(qty + "x pesanan", 12, "#64748B", false));
                 String optionText = foodItemOptions(it);
                 if(!optionText.isEmpty()) l.addView(text("• " + optionText, 12, "#475569", false));
-                String itemNote = first(it.optString("note"), it.optString("customer_note"), "");
-                if(!itemNote.isEmpty()) l.addView(text("Catatan: " + itemNote, 12, "#B45309", false));
                 r.addView(l, new LinearLayout.LayoutParams(0,-2,1));
-                r.addView(text(rupiah(subtotal), 14, "#111827", true)); c.addView(r);
+                r.addView(text(rupiah(subtotal), 14, "#111827", true));
+                c.addView(r);
+                Object storedNote = it.opt("note");
+                String itemNote = storedNote instanceof String ? (String) storedNote
+                        : first(it.optString("item_note"), it.optString("customer_note"));
+                if (!itemNote.isEmpty()) {
+                    TextView instruction = text("Catatan menu: " + itemNote, 13, "#334155", false);
+                    instruction.setPadding(dp(10), 0, dp(10), dp(6));
+                    c.addView(instruction, new LinearLayout.LayoutParams(-1, -2));
+                }
             }
         }
         String merchantStatus = first(food.optString("merchant_status"), "");
