@@ -413,6 +413,9 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         if (note.startsWith("{")) {
             try {
                 JSONObject parsed = new JSONObject(note);
+                Object savedNote = parsed.opt("customer_note");
+                if ("food".equalsIgnoreCase(parsed.optString("type")) && savedNote instanceof String
+                        && !((String) savedNote).isEmpty()) return (String) savedNote;
                 return firstNonEmpty(
                         parsed.optString("customer_note", ""),
                         parsed.optString("note_customer", ""),
@@ -671,6 +674,12 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         DriverActiveOrderSummary summary = DriverActiveOrderSummary.from(order);
         add(card, text(summary.action, 18, "#0B3A78", true), 0, dp(12), 0, dp(5));
         addOrderPoint(card, summary.target, summary.address, "#128568");
+        if (isFoodOrder(order)) {
+            String note = customerNote(order.raw);
+            if (!note.isEmpty()) {
+                add(card, text("Catatan pelanggan\n" + note, 13, "#334155", false), 0, dp(8), 0, 0);
+            }
+        }
 
         Button resume = primaryButton("Lanjutkan Perjalanan");
         resume.setOnClickListener(v -> openTrip(order));

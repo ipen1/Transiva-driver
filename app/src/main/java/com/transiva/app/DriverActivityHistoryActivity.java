@@ -261,6 +261,9 @@ public class DriverActivityHistoryActivity extends Activity {
         if(trimmed.startsWith("{")){
             try{
                 JSONObject parsed=new JSONObject(trimmed);
+                Object savedNote = parsed.opt("customer_note");
+                if ("food".equalsIgnoreCase(parsed.optString("type")) && savedNote instanceof String
+                        && !((String) savedNote).isEmpty()) return (String) savedNote;
                 note=first(
                         parsed.optString("text"),
                         parsed.optString("note"),

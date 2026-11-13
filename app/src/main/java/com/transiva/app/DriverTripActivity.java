@@ -509,9 +509,16 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             rowText(c, "🍳 Dapur", kitchen);
         }
         if(!readyAt.isEmpty()) rowText(c, "⏱ Siap sekitar", readyAt);
-        String customerNote = first(food.optString("customer_note"), food.optString("note_customer"), food.optString("text"), "");
-        if(customerNote.isEmpty()) customerNote = customerNote();
-        if(!customerNote.isEmpty()) rowText(c, "📝 Catatan customer", customerNote);
+        Object savedNote = food.opt("customer_note");
+        String customerNote = savedNote instanceof String ? (String) savedNote
+                : first(food.optString("note_customer"), food.optString("text"));
+        if (customerNote.isEmpty()) customerNote = customerNote();
+        if (!customerNote.isEmpty()) {
+            TextView noteTitle = text("Catatan pelanggan", 15, "#0B3A78", true);
+            noteTitle.setPadding(0, dp(10), 0, dp(4));
+            c.addView(noteTitle);
+            c.addView(text(customerNote, 14, "#111827", false), new LinearLayout.LayoutParams(-1, -2));
+        }
         add(c,0,0,0,dp(12));
     }
 
