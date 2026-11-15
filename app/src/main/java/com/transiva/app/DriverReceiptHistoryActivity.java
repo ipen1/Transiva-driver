@@ -319,7 +319,8 @@ public class DriverReceiptHistoryActivity extends Activity {
         boolean appFee=DriverIncomeSummary.isAppFee(item.optString("type"),reference);
         boolean grouped=item.optBoolean("grouped_order_wallet",false);
         String type=item.optString("type");
-        String title=grouped?"Mutasi saldo order":appFee?"Biaya layanan aplikasi":"promo_subsidy".equals(type)?"Subsidi promo":"escrow_release".equals(type)?"Pembayaran customer":incoming?"Transfer masuk":"Transfer keluar";
+        boolean qrisIncome = "qris_order_income".equals(type);
+        String title=qrisIncome&&!grouped?"Pembayaran QRIS":grouped?"Mutasi saldo order":appFee?"Biaya layanan aplikasi":"promo_subsidy".equals(type)?"Subsidi promo":"escrow_release".equals(type)?"Pembayaran customer":incoming?"Transfer masuk":"Transfer keluar";
         c.addView(text(title,15,"#0B3A78",true));
         c.addView(referenceText(grouped?item.optString("order_reference"):reference));
         c.addView(text(firstNonEmpty(item.optString("created_at"),"-"),11,"#64748B",false));
@@ -330,7 +331,7 @@ public class DriverReceiptHistoryActivity extends Activity {
             c.addView(row("Perubahan saldo",(incoming?"+ ":"− ")+rupiah(amount),incoming?"#16A34A":"#DC2626",true));
         }else{
             c.addView(row("Nominal",(incoming?"+ ":"− ")+rupiah(amount),incoming?"#16A34A":"#DC2626",true));
-            if(!appFee&&!"promo_subsidy".equals(type)&&!"escrow_release".equals(type))c.addView(stackedRow(incoming?"Diterima dari":"Dikirim ke",counterpart));
+            if(!qrisIncome&&!appFee&&!"promo_subsidy".equals(type)&&!"escrow_release".equals(type))c.addView(stackedRow(incoming?"Diterima dari":"Dikirim ke",counterpart));
             if(fee>0)c.addView(row("Biaya admin","− "+rupiah(fee),"#DC2626",false));
         }
         c.addView(row("Saldo setelah transaksi",rupiah(item.optDouble("balance_after",0)),"#0F172A",false));

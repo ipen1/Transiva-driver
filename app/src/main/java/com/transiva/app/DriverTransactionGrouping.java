@@ -57,7 +57,7 @@ final class DriverTransactionGrouping {
     }
     static String orderKey(String type,String reference) {
         String t=clean(type).toLowerCase(Locale.US),r=clean(reference);
-        String prefix="app_fee".equals(t)?"FEE-":"escrow_release".equals(t)?"RELEASE-":"promo_subsidy".equals(t)?"PROMO-":"";
+        String prefix="app_fee".equals(t)?"FEE-":"escrow_release".equals(t)?"RELEASE-":"promo_subsidy".equals(t)?"PROMO-":"qris_order_income".equals(t)?"QRIS-":"";
         if(prefix.isEmpty()||!r.startsWith(prefix))return "";
         r=r.substring(prefix.length());
         // These are exact server namespaces, not guesses from dates or amounts.

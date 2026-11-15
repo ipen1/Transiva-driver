@@ -188,6 +188,7 @@ public class DriverReceiptDetailActivity extends Activity {
         boolean incoming = "in".equals(direction);
         String walletType = data.optString("type", "").toLowerCase(Locale.US);
         boolean promoSubsidy = "promo_subsidy".equals(walletType);
+        boolean qrisIncome = "qris_order_income".equals(walletType);
         boolean appFeeEntry = DriverIncomeSummary.isAppFee(walletType,data.optString("reference"));
         boolean escrowRelease = "escrow_release".equals(walletType);
         String counterpart = firstNonEmpty(data.optString("counterparty_username"), "Driver tidak diketahui");
@@ -208,7 +209,7 @@ public class DriverReceiptDetailActivity extends Activity {
         LinearLayout txt = new LinearLayout(this);
         txt.setOrientation(LinearLayout.VERTICAL);
         header.addView(txt, new LinearLayout.LayoutParams(0, -2, 1));
-        String walletTitle = promoSubsidy ? "Subsidi Voucher Transiva" : (appFeeEntry ? "Fee Aplikasi" : (escrowRelease ? "Pembayaran Customer" : (incoming ? "Transfer Masuk" : "Transfer Keluar")));
+        String walletTitle = qrisIncome ? "Pembayaran QRIS" : promoSubsidy ? "Subsidi Voucher Transiva" : (appFeeEntry ? "Fee Aplikasi" : (escrowRelease ? "Pembayaran Customer" : (incoming ? "Transfer Masuk" : "Transfer Keluar")));
         txt.addView(text(walletTitle, 13, "#64748B", true));
         TextView reference=text(firstNonEmpty(data.optString("reference"),"TRANSFER"),14,"#0B3A78",true);reference.setTextIsSelectable(true);txt.addView(reference,new LinearLayout.LayoutParams(-1,-2));
         root.addView(header);
@@ -223,8 +224,8 @@ public class DriverReceiptDetailActivity extends Activity {
         root.addView(status);
 
         LinearLayout party = sectionCard();
-        if (!promoSubsidy && !appFeeEntry && !escrowRelease) party.addView(row(incoming ? "👤 Diterima dari" : "👤 Dikirim ke", counterpart, "#0B3A78", true));
-        String amountLabel = promoSubsidy ? "Subsidi Promo" : (appFeeEntry ? "Fee Aplikasi" : (escrowRelease ? "Dana Customer" : "Nominal Transfer"));
+        if (!qrisIncome && !promoSubsidy && !appFeeEntry && !escrowRelease) party.addView(row(incoming ? "👤 Diterima dari" : "👤 Dikirim ke", counterpart, "#0B3A78", true));
+        String amountLabel = qrisIncome ? "Pembayaran QRIS" : promoSubsidy ? "Subsidi Promo" : (appFeeEntry ? "Fee Aplikasi" : (escrowRelease ? "Dana Customer" : "Nominal Transfer"));
         party.addView(row(amountLabel, rupiah(amount), incoming ? "#16A34A" : "#DC2626", true));
         if (fee > 0) party.addView(row("Biaya Admin", "- " + rupiah(fee), "#DC2626", false));
         String note = firstNonEmpty(data.optString("note"));
@@ -272,7 +273,7 @@ public class DriverReceiptDetailActivity extends Activity {
         for(int i=0;i<ledger.length();i++){
             JSONObject w=ledger.optJSONObject(i);if(w==null)continue;
             boolean incoming="in".equalsIgnoreCase(w.optString("direction"));
-            String type=w.optString("type"),title="app_fee".equals(type)?"Fee aplikasi & merchant":"promo_subsidy".equals(type)?"Subsidi voucher":"escrow_release".equals(type)?"Pembayaran customer":"Mutasi saldo";
+            String type=w.optString("type"),title="qris_order_income".equals(type)?"Pembayaran QRIS":"app_fee".equals(type)?"Fee aplikasi & merchant":"promo_subsidy".equals(type)?"Subsidi voucher":"escrow_release".equals(type)?"Pembayaran customer":"Mutasi saldo";
             box.addView(divider());box.addView(row(title,(incoming?"+ ":"− ")+rupiah(w.optDouble("amount")),incoming?"#16A34A":"#DC2626",false));
             box.addView(row("Referensi mutasi",w.optString("reference","-"),"#334155",false));
             box.addView(row("Saldo setelah mutasi",rupiah(w.optDouble("balance_after")),"#0F172A",false));
