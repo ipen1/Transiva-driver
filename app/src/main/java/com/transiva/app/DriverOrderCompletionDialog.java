@@ -317,6 +317,7 @@ public final class DriverOrderCompletionDialog {
 
     private static String paymentLabel(String raw) {
         String x = raw == null ? "" : raw.trim().toLowerCase(Locale.US);
+        if ("qris".equals(x)) return "QRIS";
         if (x.contains("balance") || x.contains("saldo") || x.contains("wallet") || x.contains("transpay") || x.contains("transiva_pay") || x.contains("transivapay")) return "TransPay";
         if(x.equals("cash")||x.equals("tunai"))return "Tunai";
         return x.isEmpty()?"Belum tersedia":raw;

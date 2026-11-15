@@ -356,7 +356,8 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         tripLiveSummary=text("Menyiapkan rute jalan…",13,"#0878F9",true);tripLiveSummary.setPadding(0,dp(6),0,dp(4));h.addView(tripLiveSummary);
         h.addView(text("Garis berwarna: panduan aktif • abu-abu: rute pesanan",11,"#64748B",false));
         distanceHint = text("", 13, "#059669", true); distanceHint.setPadding(dp(12), dp(9), dp(12), dp(9)); distanceHint.setBackground(stroke("#ECFDF5", "#86EFAC", dp(14), 1)); LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-1,-2); hp.setMargins(0, dp(8),0,0); h.addView(distanceHint, hp);
-        TextView pay = text(isNonCash() ? "💳 NON-TUNAI • TransPay" : "💵 TUNAI • Tagih customer", 13, isNonCash() ? "#1D4ED8" : "#B45309", true); pay.setGravity(Gravity.CENTER); pay.setPadding(dp(12),dp(9),dp(12),dp(9)); pay.setBackground(stroke(isNonCash()?"#EFF6FF":"#FFFBEB", isNonCash()?"#93C5FD":"#FCD34D", dp(14),1)); LinearLayout.LayoutParams payLp=new LinearLayout.LayoutParams(-1,-2); payLp.setMargins(0,dp(8),0,0); h.addView(pay,payLp);
+        TextView pay = text(order != null && "qris".equalsIgnoreCase(order.optString("payment_method")) ? "QRIS lunas · Rp0 ditagih"
+                : isNonCash() ? "💳 NON-TUNAI • TransPay" : "💵 TUNAI • Tagih customer", 13, isNonCash() ? "#1D4ED8" : "#B45309", true); pay.setGravity(Gravity.CENTER); pay.setPadding(dp(12),dp(9),dp(12),dp(9)); pay.setBackground(stroke(isNonCash()?"#EFF6FF":"#FFFBEB", isNonCash()?"#93C5FD":"#FCD34D", dp(14),1)); LinearLayout.LayoutParams payLp=new LinearLayout.LayoutParams(-1,-2); payLp.setMargins(0,dp(8),0,0); h.addView(pay,payLp);
         add(h,0,dp(8),0,dp(12));
     }
     protected void mini(LinearLayout parent, String icon, String label, String value){

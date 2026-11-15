@@ -445,7 +445,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
 
     protected boolean isNonCash(){
         String p = first(order == null ? "" : order.optString("payment_method"), "cash").toLowerCase(Locale.US);
-        return p.equals("balance") || p.contains("transpay") || p.contains("transiva_pay") || p.equals("wallet") || p.equals("saldo");
+        return p.equals("qris") || p.equals("balance") || p.contains("transpay") || p.contains("transiva_pay") || p.equals("wallet") || p.equals("saldo");
     }
     protected Button dangerOutlineButton(String label) {
         Button button = new Button(this);
