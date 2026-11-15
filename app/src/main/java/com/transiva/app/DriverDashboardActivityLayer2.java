@@ -587,7 +587,7 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         String pickupDistance=DriverDistanceText.kilometers(pickupKm);
         if(!Double.isNaN(pickupKm)&&!Double.isInfinite(pickupKm)&&pickupKm>=0)pickupDistance="± "+pickupDistance;
         add(card,DriverKdiUi.distances(this,pickupDistance,DriverDistanceText.kilometers(tripKm)),0,dp(9),0,0);
-        String payment="balance".equalsIgnoreCase(order.paymentMethod)?"TransPay":"Tunai";
+        String payment = "qris".equalsIgnoreCase(order.paymentMethod) ? "QRIS" : order.paymentLabel;
         add(card,text("Tarif order "+rupiah(order.driverEarning)+" · "+payment,13,"#0B3A78",true),0,dp(9),0,0);
         if(feePreview!=null)add(card,text("Potongan "+rupiah(feePreview.optInt("app_fee"))+" · Bersih "+rupiah(feePreview.optInt("driver_net")),12,"#64748B",false),0,dp(3),0,0);
         add(card,DriverKdiUi.appreciation(this),0,0,0,0);
