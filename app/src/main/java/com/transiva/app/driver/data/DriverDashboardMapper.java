@@ -137,7 +137,8 @@ public final class DriverDashboardMapper {
                         order.optString("distance_km"), ""),
                 normalizeOfferSeconds(order),
                 first(order.optString("payment_method"), "cash"),
-                first(order.optString("payment_label"), order.optString("payment_method").equalsIgnoreCase("balance") ? "TransPay" : "Tunai"),
+                first(order.optString("payment_label"), "qris".equalsIgnoreCase(order.optString("payment_method")) ? "QRIS"
+                        : order.optString("payment_method").equalsIgnoreCase("balance") ? "TransPay" : "Tunai"),
                 order
         );
     }
