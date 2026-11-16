@@ -196,6 +196,7 @@
         <activity android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" android:name=".DriverReceiptDetailActivity" android:exported="false" android:theme="@style/AppTheme" />
         <activity android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" android:name=".DriverTopUpActivity" android:exported="false" android:theme="@style/AppTheme" />
         <activity android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" android:name=".DriverMidtransPaymentActivity" android:exported="false" android:theme="@style/AppTheme" />
+        <activity android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" android:name=".DriverDuitkuPaymentActivity" android:exported="false" android:theme="@style/AppTheme" />
         <activity android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" android:name=".DriverWithdrawActivity" android:exported="false" android:theme="@style/AppTheme" />
 
         <activity android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" android:name=".ChatCameraActivity" android:exported="false" android:theme="@style/AppTheme" />
