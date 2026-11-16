@@ -189,6 +189,7 @@ public class DriverReceiptDetailActivity extends Activity {
         String walletType = data.optString("type", "").toLowerCase(Locale.US);
         boolean promoSubsidy = "promo_subsidy".equals(walletType);
         boolean qrisIncome = "qris_order_income".equals(walletType);
+        boolean deposit = "deposit".equals(walletType);
         boolean appFeeEntry = DriverIncomeSummary.isAppFee(walletType,data.optString("reference"));
         boolean escrowRelease = "escrow_release".equals(walletType);
         String counterpart = firstNonEmpty(data.optString("counterparty_username"), "Driver tidak diketahui");
@@ -209,7 +210,7 @@ public class DriverReceiptDetailActivity extends Activity {
         LinearLayout txt = new LinearLayout(this);
         txt.setOrientation(LinearLayout.VERTICAL);
         header.addView(txt, new LinearLayout.LayoutParams(0, -2, 1));
-        String walletTitle = qrisIncome ? "Pembayaran QRIS" : promoSubsidy ? "Subsidi Voucher Transiva" : (appFeeEntry ? "Fee Aplikasi" : (escrowRelease ? "Pembayaran Customer" : (incoming ? "Transfer Masuk" : "Transfer Keluar")));
+        String walletTitle = deposit ? "Deposit QRIS Duitku" : qrisIncome ? "Pembayaran QRIS" : promoSubsidy ? "Subsidi Voucher Transiva" : (appFeeEntry ? "Fee Aplikasi" : (escrowRelease ? "Pembayaran Customer" : (incoming ? "Transfer Masuk" : "Transfer Keluar")));
         txt.addView(text(walletTitle, 13, "#64748B", true));
         TextView reference=text(firstNonEmpty(data.optString("reference"),"TRANSFER"),14,"#0B3A78",true);reference.setTextIsSelectable(true);txt.addView(reference,new LinearLayout.LayoutParams(-1,-2));
         root.addView(header);
@@ -224,8 +225,8 @@ public class DriverReceiptDetailActivity extends Activity {
         root.addView(status);
 
         LinearLayout party = sectionCard();
-        if (!qrisIncome && !promoSubsidy && !appFeeEntry && !escrowRelease) party.addView(row(incoming ? "👤 Diterima dari" : "👤 Dikirim ke", counterpart, "#0B3A78", true));
-        String amountLabel = qrisIncome ? "Pembayaran QRIS" : promoSubsidy ? "Subsidi Promo" : (appFeeEntry ? "Fee Aplikasi" : (escrowRelease ? "Dana Customer" : "Nominal Transfer"));
+        if (!deposit && !qrisIncome && !promoSubsidy && !appFeeEntry && !escrowRelease) party.addView(row(incoming ? "👤 Diterima dari" : "👤 Dikirim ke", counterpart, "#0B3A78", true));
+        String amountLabel = deposit ? "Nominal Deposit" : qrisIncome ? "Pembayaran QRIS" : promoSubsidy ? "Subsidi Promo" : (appFeeEntry ? "Fee Aplikasi" : (escrowRelease ? "Dana Customer" : "Nominal Transfer"));
         party.addView(row(amountLabel, rupiah(amount), incoming ? "#16A34A" : "#DC2626", true));
         if (fee > 0) party.addView(row("Biaya Admin", "- " + rupiah(fee), "#DC2626", false));
         String note = firstNonEmpty(data.optString("note"));

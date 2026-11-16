@@ -6,6 +6,8 @@ import android.content.Intent;
 import android.net.Uri;
 import android.provider.OpenableColumns;
 import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -18,6 +20,7 @@ import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
@@ -33,21 +36,18 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.text.NumberFormat;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
 public class DriverTopUpActivity extends Activity {
     private DriverUiScope uiScope;
     private static final String BASE_URL = "https://transiva.my.id/";
+    private static final String DUITKU_API = BASE_URL + "server/driver_duitku_deposit.php?action=";
     private static final int MIN_DEPOSIT = 10000;
-    private static final int REQ_PAY = 7301;
     private static final int REQ_PROOF = 7302;
     private static final int TIMEOUT = 25000;
 
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final List<Button> quickButtons = new ArrayList<>();
     private SessionManager session;
     private LinearLayout root, activeCard, depositCard, manualCard;
     private ProgressBar progress;
@@ -57,6 +57,8 @@ public class DriverTopUpActivity extends Activity {
     private TextView proofNameText;
     private Uri proofUri;
     private String activeOrderId = "", activePaymentUrl = "";
+    private boolean automaticAvailable;
+    private String activeProvider = "duitku";
     private int activeAmountValue = 0, cooldownSeconds = 0;
     private Runnable cooldownTicker;
 
@@ -65,16 +67,27 @@ public class DriverTopUpActivity extends Activity {
         session = new SessionManager(this);
         uiScope=new DriverUiScope(this);
         build();
+        if (b != null) {
+            activeOrderId = b.getString("active_deposit_id", "");
+            activeProvider = b.getString("active_deposit_provider", "duitku");
+        }
+    }
+
+    @Override protected void onSaveInstanceState(Bundle state) {
+        super.onSaveInstanceState(state);
+        state.putString("active_deposit_id", activeOrderId);
+        state.putString("active_deposit_provider", activeProvider);
     }
 
     @Override protected void onResume() {
         super.onResume();
-        loadState(true);
+        if (activeOrderId.isEmpty()) loadState(true);
+        else checkActivePayment(0);
     }
 
     @Override protected void onPause() {
         super.onPause();
-        if (cooldownTicker != null) main.removeCallbacks(cooldownTicker);
+        main.removeCallbacksAndMessages(null);
     }
 
     private void build() {
@@ -139,12 +152,12 @@ public class DriverTopUpActivity extends Activity {
     private void depositCard() {
         depositCard = card(); depositCard.setPadding(dp(16),dp(16),dp(16),dp(16)); add(depositCard,0,0,0,14);
         depositCard.addView(text("Deposit Otomatis",17,"#0B3A78",true));
-        TextView sub = text("Bayar langsung melalui Midtrans",12,"#64748B",false); sub.setPadding(0,dp(5),0,dp(12)); depositCard.addView(sub);
+        TextView sub = text("Bayar otomatis lewat QRIS Duitku. Nominal ini juga dipakai untuk deposit manual.",12,"#64748B",false); sub.setPadding(0,dp(5),0,dp(12)); depositCard.addView(sub);
         amountInput = new EditText(this); amountInput.setSingleLine(true); amountInput.setTextSize(18); amountInput.setTypeface(Typeface.DEFAULT_BOLD); amountInput.setTextColor(DriverThemeTokens.color(this, "#0F172A")); amountInput.setHint("Contoh: 50000"); amountInput.setHintTextColor(DriverThemeTokens.color(this, "#94A3B8")); amountInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER); amountInput.setImeOptions(EditorInfo.IME_ACTION_DONE); amountInput.setPadding(dp(16),0,dp(16),0); amountInput.setBackground(stroke("#FFFFFF","#D7E6F8",18,1));
         depositCard.addView(amountInput,new LinearLayout.LayoutParams(-1,dp(54)));
         LinearLayout q1 = new LinearLayout(this); q1.setOrientation(LinearLayout.HORIZONTAL); LinearLayout.LayoutParams qlp = new LinearLayout.LayoutParams(-1,-2); qlp.setMargins(0,dp(12),0,0); depositCard.addView(q1,qlp); quick(q1,20000); quick(q1,50000); quick(q1,100000);
         LinearLayout q2 = new LinearLayout(this); q2.setOrientation(LinearLayout.HORIZONTAL); LinearLayout.LayoutParams q2lp = new LinearLayout.LayoutParams(-1,-2); q2lp.setMargins(0,dp(8),0,0); depositCard.addView(q2,q2lp); quick(q2,200000); quick(q2,500000); quick(q2,1000000);
-        payButton = button("Buat Deposit"); LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-1,dp(54)); blp.setMargins(0,dp(16),0,0); depositCard.addView(payButton,blp); payButton.setOnClickListener(v->createPayment());
+        payButton = button("Bayar via Duitku"); payButton.setEnabled(false); LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-1,dp(54)); blp.setMargins(0,dp(16),0,0); depositCard.addView(payButton,blp); payButton.setOnClickListener(v->createPayment());
         cooldownText = text("",12,"#B45309",true); cooldownText.setGravity(Gravity.CENTER); cooldownText.setPadding(0,dp(10),0,0); cooldownText.setVisibility(View.GONE); depositCard.addView(cooldownText);
         statusText = text("Pilih nominal lalu lanjutkan pembayaran.",12,"#64748B",false); statusText.setGravity(Gravity.CENTER); statusText.setPadding(dp(12),dp(12),dp(12),dp(4)); depositCard.addView(statusText);
     }
@@ -153,10 +166,76 @@ public class DriverTopUpActivity extends Activity {
         manualCard = card(); manualCard.setPadding(dp(16),dp(16),dp(16),dp(16)); add(manualCard,0,0,0,0);
         manualCard.addView(text("Deposit Manual",17,"#0B3A78",true));
         TextView sub=text("Transfer lalu kirim bukti. Saldo masuk setelah diverifikasi admin.",12,"#64748B",false); sub.setPadding(0,dp(5),0,dp(12)); manualCard.addView(sub);
-        TextView bank=text("Rekening/QR tujuan mengikuti informasi pembayaran resmi Transiva.",12,"#334155",true); bank.setPadding(dp(12),dp(10),dp(12),dp(10)); bank.setBackground(round("#F2F7FF",14)); manualCard.addView(bank);
+        TextView scan = text("Pindai QRIS Transiva dan masukkan nominal deposit.",12,"#334155",true);
+        manualCard.addView(scan);
+        ImageView barcode = new ImageView(this);
+        barcode.setContentDescription("QRIS statis untuk deposit manual Transiva");
+        barcode.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        barcode.setVisibility(View.GONE);
+        LinearLayout.LayoutParams qrParams = new LinearLayout.LayoutParams(-1, dp(225));
+        qrParams.topMargin = dp(8);
+        manualCard.addView(barcode, qrParams);
+        TextView imageStatus = text("Memuat QRIS manual…",12,"#64748B",false);
+        manualCard.addView(imageStatus);
+        loadManualQr(barcode, imageStatus);
         chooseProofButton=outline("Pilih Bukti Transfer"); LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,dp(50)); cp.setMargins(0,dp(12),0,0); manualCard.addView(chooseProofButton,cp); chooseProofButton.setOnClickListener(v->pickProof());
         proofNameText=text("Belum ada bukti dipilih",11,"#64748B",false); proofNameText.setPadding(0,dp(7),0,0); manualCard.addView(proofNameText);
         manualSubmitButton=button("Kirim Deposit Manual"); LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(-1,dp(54)); mp.setMargins(0,dp(12),0,0); manualCard.addView(manualSubmitButton,mp); manualSubmitButton.setOnClickListener(v->submitManualDeposit());
+    }
+
+    private void loadManualQr(ImageView barcode, TextView imageStatus) {
+        imageStatus.setText("Memuat QRIS manual…");
+        imageStatus.setOnClickListener(null);
+        if (!uiScope.execute(() -> {
+            HttpURLConnection connection = null;
+            Bitmap decoded = null;
+            try {
+                connection = com.transiva.app.driver.data.DriverConnectionRepository.open(BASE_URL + "assets/qris.jpg");
+                connection.setInstanceFollowRedirects(false);
+                connection.setConnectTimeout(8000);
+                connection.setReadTimeout(8000);
+                if (connection.getResponseCode() == 200) {
+                    try (InputStream stream = connection.getInputStream();
+                         java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream()) {
+                        byte[] chunk = new byte[8192];
+                        for (int count; (count = stream.read(chunk)) != -1;) {
+                            if (buffer.size() + count > 3 * 1024 * 1024) throw new java.io.IOException("QR terlalu besar");
+                            buffer.write(chunk, 0, count);
+                        }
+                        byte[] bytes = buffer.toByteArray();
+                        BitmapFactory.Options options = new BitmapFactory.Options();
+                        options.inJustDecodeBounds = true;
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
+                        int max = Math.max(options.outWidth, options.outHeight);
+                        if (max > 0) {
+                            options.inSampleSize = 1;
+                            while (max / options.inSampleSize > 1600) options.inSampleSize *= 2;
+                            options.inJustDecodeBounds = false;
+                            decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+                // The existing proof upload remains available.
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+            final Bitmap qr = decoded;
+            uiScope.post(() -> {
+                if (qr == null) {
+                    manualQrRetry(barcode, imageStatus);
+                    return;
+                }
+                barcode.setImageBitmap(qr);
+                barcode.setVisibility(View.VISIBLE);
+                imageStatus.setVisibility(View.GONE);
+            });
+        })) manualQrRetry(barcode, imageStatus);
+    }
+
+    private void manualQrRetry(ImageView barcode, TextView imageStatus) {
+        imageStatus.setText("QRIS manual belum termuat. Ketuk untuk memuat ulang.");
+        imageStatus.setOnClickListener(view -> loadManualQr(barcode, imageStatus));
     }
 
     private void pickProof() {
@@ -203,7 +282,7 @@ public class DriverTopUpActivity extends Activity {
     }
 
     private void quick(LinearLayout p,int a) {
-        Button b = outline(rupiah(a)); b.setTextSize(11); b.setOnClickListener(v->amountInput.setText(String.valueOf(a))); quickButtons.add(b);
+        Button b = outline(rupiah(a)); b.setTextSize(11); b.setOnClickListener(v->amountInput.setText(String.valueOf(a)));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,dp(42),1); if(p.getChildCount()>0) lp.setMargins(dp(7),0,0,0); p.addView(b,lp);
     }
 
@@ -212,7 +291,7 @@ public class DriverTopUpActivity extends Activity {
         uiScope.execute(() -> {
             try {
                 JSONObject wallet = getJson(BASE_URL+"server/driver_wallet_summary.php");
-                JSONObject act = getJson(BASE_URL+"server/driver_midtrans_active.php");
+                JSONObject act = getJson(DUITKU_API+"active");
                 uiScope.post(() -> {
                     progress.setVisibility(View.GONE);
                     if(wallet.optBoolean("success",false)) {
@@ -220,6 +299,11 @@ public class DriverTopUpActivity extends Activity {
                         pendingText.setText("Pending deposit: "+rupiah(wallet.optDouble("pending_deposit",0)));
                     }
                     if(act.optBoolean("success",false)) applyActiveState(act);
+                    else {
+                        automaticAvailable = false;
+                        setDepositEnabled(false);
+                        setStatus("Status Duitku belum tersedia. Deposit manual tetap tersedia.");
+                    }
                 });
             } catch(Exception e) {
                 uiScope.post(() -> { progress.setVisibility(View.GONE); setStatus("Tidak dapat memperbarui status deposit."); });
@@ -229,21 +313,27 @@ public class DriverTopUpActivity extends Activity {
 
     private void applyActiveState(JSONObject response) {
         JSONObject a = response.optJSONObject("active");
+        automaticAvailable = response.optBoolean("available");
         cooldownSeconds = response.optInt("cooldown_seconds",0);
-        if(a != null && "PENDING".equalsIgnoreCase(a.optString("status","PENDING"))) {
+        if(a != null && ("PENDING".equalsIgnoreCase(a.optString("status")) || "CREATING".equalsIgnoreCase(a.optString("status")))) {
+            activeProvider = a.optString("provider", "duitku");
             activeOrderId = a.optString("order_id",""); activePaymentUrl = a.optString("redirect_url",""); activeAmountValue = a.optInt("amount",0);
             activeAmount.setText(rupiah(activeAmountValue)); activeOrder.setText("Order ID  "+activeOrderId); activeCard.setVisibility(View.VISIBLE);
             setDepositEnabled(false);
-            setStatus("Selesaikan atau batalkan transaksi aktif sebelum membuat deposit baru.");
+            activeHint.setText("midtrans".equals(activeProvider) ? "Tagihan Midtrans sebelumnya masih aktif."
+                    : "Tagihan QRIS Duitku masih aktif. Lanjutkan pembayaran atau arsipkan tagihan.");
+            setStatus("Selesaikan transaksi aktif sebelum membuat deposit otomatis baru.");
         } else {
             activeOrderId=""; activePaymentUrl=""; activeAmountValue=0; activeCard.setVisibility(View.GONE); setDepositEnabled(cooldownSeconds<=0);
+            if (!automaticAvailable) setStatus("Deposit otomatis belum tersedia untuk akun ini. Gunakan deposit manual.");
         }
         startCooldown(cooldownSeconds);
     }
 
     private void setDepositEnabled(boolean enabled) {
-        amountInput.setEnabled(enabled); payButton.setEnabled(enabled); payButton.setAlpha(enabled?1f:.5f); amountInput.setAlpha(enabled?1f:.55f);
-        for(Button b:quickButtons){ b.setEnabled(enabled); b.setAlpha(enabled?1f:.55f); }
+        boolean allowAutomatic = enabled && automaticAvailable;
+        payButton.setEnabled(allowAutomatic);
+        payButton.setAlpha(allowAutomatic ? 1f : .5f);
     }
 
     private void startCooldown(int seconds) {
@@ -261,34 +351,36 @@ public class DriverTopUpActivity extends Activity {
     private void createPayment() {
         int amount=parse(amountInput.getText().toString()); if(amount<MIN_DEPOSIT){info("Nominal Tidak Valid","Minimal deposit Rp10.000.");return;}
         setBusy(true,"Menyiapkan transaksi...");
-        uiScope.execute(() -> {
+        if (!uiScope.execute(() -> {
             try {
                 JSONObject req=new JSONObject(); req.put("amount",amount);
-                JSONObject j=postJson(BASE_URL+"server/driver_midtrans_create.php",req,UUID.randomUUID().toString());
+                JSONObject j=postJson(DUITKU_API+"create",req,UUID.randomUUID().toString());
                 boolean ok=j.optBoolean("success",false); String msg=j.optString("message","Gagal membuat deposit"); String url=j.optString("redirect_url",""); String order=j.optString("order_id",""); int cd=j.optInt("cooldown_seconds",0);
                 uiScope.post(() -> {
                     setBusy(false,msg);
                     if(!ok){ if(cd>0) startCooldown(cd); info("Deposit",msg); loadState(false); return; }
-                    activeOrderId=order; activePaymentUrl=url; activeAmountValue=j.optInt("amount",amount); loadState(false);
+                    activeProvider=j.optString("provider","duitku");
+                    activeOrderId=order; activePaymentUrl=url; activeAmountValue=j.optInt("amount",amount);
                     if(!url.isEmpty()) openPayment(url,order,activeAmountValue);
+                    else loadState(false);
                 });
             } catch(Exception e) { uiScope.post(() -> { setBusy(false,"Koneksi bermasalah"); info("Koneksi","Gagal menghubungi server pembayaran."); }); }
-        });
+        })) setBusy(false,"Sistem sedang sibuk. Coba lagi.");
     }
 
     private void openActivePayment() {
-        if(activePaymentUrl==null||activePaymentUrl.trim().isEmpty()){ info("Transaksi","Link pembayaran tidak tersedia. Segarkan halaman dan coba lagi."); return; }
+        if(activePaymentUrl==null||activePaymentUrl.trim().isEmpty()){ checkActivePayment(0); return; }
         openPayment(activePaymentUrl,activeOrderId,activeAmountValue);
     }
 
     private void openPayment(String url,String order,int amount) {
-        Intent i=new Intent(this,DriverMidtransPaymentActivity.class); i.putExtra("payment_url",url); i.putExtra("order_id",order); i.putExtra("amount",amount); startActivityForResult(i,REQ_PAY);
+        Intent i=new Intent(this,"midtrans".equals(activeProvider)
+                ? DriverMidtransPaymentActivity.class : DriverDuitkuPaymentActivity.class); i.putExtra("payment_url",url); i.putExtra("order_id",order); i.putExtra("amount",amount); startActivity(i);
     }
 
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
         super.onActivityResult(requestCode,resultCode,data);
-        if(requestCode==REQ_PAY) checkActivePayment(0);
-        else if(requestCode==REQ_PROOF && resultCode==RESULT_OK && data!=null && data.getData()!=null){
+        if(requestCode==REQ_PROOF && resultCode==RESULT_OK && data!=null && data.getData()!=null){
             proofUri=data.getData();
             try{getContentResolver().takePersistableUriPermission(proofUri,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}
             if(proofNameText!=null) proofNameText.setText(displayName(proofUri));
@@ -297,13 +389,16 @@ public class DriverTopUpActivity extends Activity {
 
     private void checkActivePayment(int attempt) {
         if(activeOrderId.isEmpty()){ loadState(false); return; }
-        setStatus(attempt==0?"Memeriksa status pembayaran...":"Menunggu konfirmasi Midtrans...");
+        final String order = activeOrderId;
+        final boolean legacy = "midtrans".equals(activeProvider);
+        setStatus(attempt==0?"Memeriksa status pembayaran…":"Menunggu konfirmasi pembayaran…");
         uiScope.execute(() -> {
             try {
-                JSONObject b=new JSONObject(); b.put("order_id",activeOrderId); JSONObject j=postJson(BASE_URL+"server/driver_midtrans_status.php",b,null); JSONObject d=j.optJSONObject("deposit"); String st=d==null?"":d.optString("status",""); int balance=j.optInt("balance",0);
+                JSONObject b=new JSONObject(); b.put("order_id",order); JSONObject j=postJson(legacy ? BASE_URL+"server/driver_midtrans_status.php" : DUITKU_API+"status",b,null); JSONObject d=j.optJSONObject("deposit"); String st=d==null?"":d.optString("status",""); int balance=j.optInt("balance",0);
                 uiScope.post(() -> {
-                    balanceText.setText(rupiah(balance));
-                    if("PAID".equalsIgnoreCase(st)){ activeOrderId=""; activePaymentUrl=""; setStatus("✅ Deposit berhasil. Saldo sudah masuk otomatis."); loadState(false); info("Deposit Berhasil","Pembayaran sudah terkonfirmasi dan saldo driver telah ditambahkan."); }
+                    if (!order.equals(activeOrderId)) return;
+                    if (j.optBoolean("success")) balanceText.setText(rupiah(balance));
+                    if("PAID".equalsIgnoreCase(st) && d != null && !d.isNull("credited_at") && !d.optString("credited_at").isEmpty()){ activeOrderId=""; activePaymentUrl=""; setStatus("✅ Deposit berhasil. Saldo sudah masuk otomatis."); loadState(false); info("Deposit Berhasil","Pembayaran sudah terkonfirmasi dan saldo driver telah ditambahkan."); }
                     else if("CANCELLED".equalsIgnoreCase(st)||"EXPIRED".equalsIgnoreCase(st)||"FAILED".equalsIgnoreCase(st)){ loadState(false); }
                     else if(attempt<3) main.postDelayed(() -> checkActivePayment(attempt+1),2500);
                     else loadState(false);
@@ -314,22 +409,26 @@ public class DriverTopUpActivity extends Activity {
 
     private void confirmCancel() {
         if(activeOrderId.isEmpty()) return;
+        boolean legacy = "midtrans".equals(activeProvider);
         PremiumDialogs.builder(this)
-                .setTitle("Batalkan Deposit?")
-                .setMessage("Transaksi ini akan dihentikan. Setelah dibatalkan, Anda harus menunggu 1 menit sebelum membuat deposit baru.")
+                .setTitle(legacy ? "Batalkan Deposit?" : "Arsipkan Tagihan QRIS?")
+                .setMessage(legacy ? "Setelah dibatalkan, tunggu 1 menit sebelum membuat deposit baru."
+                        : "Lakukan hanya jika QRIS belum dibayar. Jangan bayar QR dari tagihan yang diarsipkan. Pembayaran yang sudah terlanjur dikirim tetap diperiksa.")
                 .setNegativeButton("Kembali",null)
                 .setPositiveButton("Batalkan Deposit",(d,w)->cancelActive())
                 .show();
     }
 
     private void cancelActive() {
-        final String order=activeOrderId; setBusy(true,"Membatalkan transaksi..."); cancelButton.setEnabled(false);
+        final String order=activeOrderId;
+        final boolean legacy = "midtrans".equals(activeProvider);
+        setBusy(true,"Membatalkan transaksi..."); cancelButton.setEnabled(false);
         uiScope.execute(() -> {
             try {
-                JSONObject b=new JSONObject(); b.put("order_id",order); JSONObject j=postJson(BASE_URL+"server/driver_midtrans_cancel.php",b,UUID.randomUUID().toString()); boolean ok=j.optBoolean("success",false); String msg=j.optString("message","Gagal membatalkan deposit"); int cd=j.optInt("cooldown_seconds",0);
+                JSONObject b=new JSONObject(); b.put("order_id",order); JSONObject j=postJson(legacy ? BASE_URL+"server/driver_midtrans_cancel.php" : DUITKU_API+"cancel",b,UUID.randomUUID().toString()); boolean ok=j.optBoolean("success",false); String msg=j.optString("message","Gagal membatalkan deposit"); int cd=j.optInt("cooldown_seconds",0);
                 uiScope.post(() -> {
                     cancelButton.setEnabled(true); setBusy(false,msg);
-                    if(ok){ activeOrderId=""; activePaymentUrl=""; activeCard.setVisibility(View.GONE); startCooldown(cd>0?cd:60); loadState(false); info("Deposit Dibatalkan","Transaksi berhasil dibatalkan. Deposit baru dapat dibuat setelah 1 menit."); }
+                    if(ok){ activeOrderId=""; activePaymentUrl=""; activeCard.setVisibility(View.GONE); startCooldown(cd); loadState(false); info(legacy ? "Deposit Dibatalkan" : "Tagihan Diarsipkan","Deposit baru dapat dibuat setelah 1 menit."); }
                     else { info("Tidak Dapat Dibatalkan",msg); checkActivePayment(0); }
                 });
             } catch(Exception e){ uiScope.post(() -> { cancelButton.setEnabled(true); setBusy(false,"Koneksi bermasalah"); info("Koneksi","Gagal membatalkan transaksi."); }); }
@@ -347,7 +446,7 @@ public class DriverTopUpActivity extends Activity {
         } finally { if(c!=null){uiScope.owner.release(c);c.disconnect();} }
     }
     private String read(InputStream in)throws Exception{if(in==null)return"";BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8));StringBuilder s=new StringBuilder();String l;while((l=r.readLine())!=null)s.append(l);r.close();return s.toString();}
-    private void setBusy(boolean b,String m){progress.setVisibility(b?View.VISIBLE:View.GONE);if(payButton!=null&&activeOrderId.isEmpty()&&cooldownSeconds<=0){payButton.setEnabled(!b);payButton.setAlpha(b?.65f:1f);}setStatus(m);}
+    private void setBusy(boolean b,String m){progress.setVisibility(b?View.VISIBLE:View.GONE);if(payButton!=null)setDepositEnabled(!b&&activeOrderId.isEmpty()&&cooldownSeconds<=0);setStatus(m);}
     private void setStatus(String s){if(statusText!=null)statusText.setText(s);}
     private int parse(String v){try{return Integer.parseInt(v.replace(".","").replace(",","").trim());}catch(Exception e){return 0;}}
     private String rupiah(double v){NumberFormat nf=NumberFormat.getCurrencyInstance(new Locale("id","ID"));nf.setMaximumFractionDigits(0);return nf.format(v).replace("Rp","Rp ");}
