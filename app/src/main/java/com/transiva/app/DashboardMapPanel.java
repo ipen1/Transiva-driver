@@ -47,8 +47,6 @@ final class DashboardMapPanel {
     private java.util.List<String> liveKeys = java.util.Collections.emptyList();
     private int appliedPadding = -1;
     private long lastPulseAt;
-    private final ScrollView details;
-    private final android.widget.Switch foregroundOffers;
     private com.google.android.gms.tasks.CancellationTokenSource locateRequest;
     private final Map<String, Pin> pins = new LinkedHashMap<>();
     private GoogleMap map;
@@ -57,18 +55,15 @@ final class DashboardMapPanel {
     private boolean centered;
     private boolean destroyed;
     private DriverDashboardState state;
-    private android.app.AlertDialog detailDialog;
     private String focusedOffer = "";
     private View actionCard;
     private android.view.ViewGroup actionHome;
     private android.view.ViewGroup.LayoutParams actionParams;
     private String requestedId = "", requestedToken = "";
 
-    DashboardMapPanel(DriverDashboardActivity host, FrameLayout page, ScrollView details, android.widget.Switch foregroundOffers, Bundle saved) {
+    DashboardMapPanel(DriverDashboardActivity host, FrameLayout page, Bundle saved) {
         this.host = host;
         this.page = page;
-        this.details = details;
-        this.foregroundOffers = foregroundOffers;
         mapView = new MapView(host);
         mapView.onCreate(saved == null ? null : saved.getBundle("dashboard_map"));
         page.addView(mapView, 0, new FrameLayout.LayoutParams(-1, -1));
@@ -236,7 +231,6 @@ final class DashboardMapPanel {
                 } else pin.move(point);
             }
         }
-        if ((newOffer || !preferred.isEmpty()) && detailDialog != null) detailDialog.dismiss();
         selectOffer(next, changed || mapJustReady || !preferred.isEmpty());
         updatePulse();
     }
@@ -289,7 +283,9 @@ final class DashboardMapPanel {
                 : "Tawaran (" + liveKeys.size() + ")");
         offersTab.setBackground(host.round(!activeShown ? "#F2F7FF" : "#FFFFFF", dp(16)));
         activeTab.setBackground(host.round(activeShown ? "#F2F7FF" : "#FFFFFF", dp(16)));
-        if (host.priorityOrderTitle != null) host.priorityOrderTitle.setText(activeShown ? "Order aktif" : "Tawaran order");
+        if (host.priorityOrderTitle != null && host.priorityOrderTitle.getParent() instanceof View) {
+            ((View) host.priorityOrderTitle.getParent()).setVisibility(activeShown ? View.VISIBLE : View.GONE);
+        }
         if (selectedAction != null) {
             actionHome = (android.view.ViewGroup) selectedAction.getParent();
             actionParams = selectedAction.getLayoutParams();
@@ -332,7 +328,7 @@ final class DashboardMapPanel {
     private void limitPopup() {
         int available = page.getHeight();
         if (available <= 0) return;
-        int cap = Math.max(dp(85), Math.round(available * .46f) - (acceptDock.getVisibility() == View.VISIBLE ? dp(51) : 0)
+        int cap = Math.max(dp(85), Math.round(available * .54f) - (acceptDock.getVisibility() == View.VISIBLE ? dp(51) : 0)
                 - (tabs.getVisibility() == View.VISIBLE ? dp(44) : 0));
         offers.measure(View.MeasureSpec.makeMeasureSpec(Math.max(0, page.getWidth() - dp(20)), View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(cap, View.MeasureSpec.AT_MOST));
@@ -395,23 +391,14 @@ final class DashboardMapPanel {
     }
 
     private void showDetails() {
-        if (detailDialog != null || details.getParent() != null) return;
-        DriverAppSettings.applyToView(host, details);
-        detailDialog = PremiumDialogs.builder(host).setTitle("Menu Driver").setView(details)
-                .setPositiveButton("Tutup", null).create();
-        detailDialog.setOnDismissListener(dialog -> {
-            android.view.ViewParent parent = details.getParent();
-            if (parent instanceof android.view.ViewGroup) ((android.view.ViewGroup) parent).removeView(details);
-            detailDialog = null;
-        });
-        detailDialog.show();
+        host.startActivity(new Intent(host, DriverMenuActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP));
     }
 
     void start() { mapView.onStart(); }
     void resume() {
         mapView.onResume();
         resumed = true;
-        DashboardOfferForeground.refreshSetting(host, foregroundOffers);
         enableLocation();
         centerDriver(false);
         updatePulse();
@@ -427,7 +414,6 @@ final class DashboardMapPanel {
     void save(Bundle out) { Bundle mapState = new Bundle(); mapView.onSaveInstanceState(mapState); out.putBundle("dashboard_map", mapState); }
     void destroy() {
         destroyed = true;
-        if (detailDialog != null) detailDialog.dismiss();
         if (pulse != null) pulse.cancel();
         pins.clear();
         map = null;
@@ -440,17 +426,15 @@ final class DashboardMapPanel {
             return;
         }
         if (pulse != null) return;
-        if (DevicePerformanceProfile.get(host).reduceMapMotion) {
-            for (Pin pin : pins.values()) pin.frame(.15f);
-            return;
-        }
+        boolean lowerRate = DevicePerformanceProfile.get(host).reduceMapMotion;
+        for (Pin pin : pins.values()) pin.frame(0f);
         pulse = ValueAnimator.ofFloat(0f, 1f);
         pulse.setDuration(2400L);
         pulse.setRepeatCount(ValueAnimator.INFINITE);
         pulse.setInterpolator(new LinearInterpolator());
         pulse.addUpdateListener(animation -> {
             long now = android.os.SystemClock.elapsedRealtime();
-            if (now - lastPulseAt < 32) return;
+            if (now - lastPulseAt < (lowerRate ? 66 : 32)) return;
             lastPulseAt = now;
             float time = (float) animation.getAnimatedValue();
             for (Pin pin : pins.values()) pin.frame(time);
@@ -460,12 +444,13 @@ final class DashboardMapPanel {
 
     private final class Pin {
         final Marker marker;
-        final Circle core, first, second;
+        final Circle core;
+        final Circle[] rings;
         Pin(LatLng point, String key) {
             core = map.addCircle(new CircleOptions().center(point).radius(28)
                     .fillColor(0x32F27547).strokeColor(0xB3E95635).strokeWidth(dp(2)).zIndex(3));
-            first = wave(point);
-            second = wave(point);
+            rings = new Circle[]{wave(point), wave(point), wave(point)};
+            frame(0f);
             marker = map.addMarker(new MarkerOptions().position(point).title("Titik jemput")
                     .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE)).zIndex(6));
             if (marker != null) marker.setTag(key);
@@ -473,10 +458,17 @@ final class DashboardMapPanel {
         void move(LatLng point) {
             if (marker.getPosition().equals(point)) return;
             marker.setPosition(point);
-            core.setCenter(point); first.setCenter(point); second.setCenter(point);
+            core.setCenter(point);
+            for (Circle ring : rings) ring.setCenter(point);
         }
-        void frame(float time) { waveFrame(first, time); waveFrame(second, (time + .5f) % 1f); }
-        void remove() { if (marker != null) marker.remove(); core.remove(); first.remove(); second.remove(); }
+        void frame(float time) {
+            for (int i = 0; i < rings.length; i++) waveFrame(rings[i], (time + i / (float) rings.length) % 1f);
+        }
+        void remove() {
+            if (marker != null) marker.remove();
+            core.remove();
+            for (Circle ring : rings) ring.remove();
+        }
     }
 
     private Circle wave(LatLng point) {
@@ -485,8 +477,10 @@ final class DashboardMapPanel {
     }
 
     private void waveFrame(Circle circle, float time) {
-        circle.setRadius(30 + 140 * time);
-        circle.setStrokeColor(WAVE_COLOR | ((int) (142 * (1f - time)) << 24));
+        circle.setRadius(20 + 165 * time);
+        float opacity = (1f - time) * (1f - time);
+        circle.setStrokeColor(WAVE_COLOR | ((int) (205 * opacity) << 24));
+        circle.setFillColor(WAVE_COLOR | ((int) (13 * opacity) << 24));
     }
 
     private int dp(int value) { return host.dp(value); }

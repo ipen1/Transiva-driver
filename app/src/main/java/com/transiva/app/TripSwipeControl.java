@@ -69,10 +69,9 @@ final class TripSwipeControl extends FrameLayout {
     }
 
     @Override public boolean onTouchEvent(MotionEvent event) {
-        if (!isEnabled()) return false;
+        if (!isEnabled()) return true;
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                if (event.getX() > dp(55)) return false;
                 thumb.animate().cancel();
                 thumb.setTranslationX(0);
                 startX = event.getX();
@@ -81,30 +80,31 @@ final class TripSwipeControl extends FrameLayout {
                 getParent().requestDisallowInterceptTouchEvent(true);
                 return true;
             case MotionEvent.ACTION_MOVE:
-                if (!dragging) return false;
+                if (!dragging) return true;
                 float travel = travel();
                 float offset = Math.min(travel, Math.max(0, event.getX() - startX));
                 thumb.setTranslationX(offset);
                 label.setText(offset >= travel * .90f ? "Lepas untuk konfirmasi" : instruction);
                 return true;
             case MotionEvent.ACTION_UP:
-                if (!dragging) return false;
+                if (!dragging) return true;
                 boolean confirmed = travel() > 0 && thumb.getTranslationX() >= travel() * .90f;
                 resetDrag();
                 if (confirmed && isEnabled()) submit.run();
                 return true;
             case MotionEvent.ACTION_POINTER_DOWN:
             case MotionEvent.ACTION_CANCEL:
-                if (!dragging) return false;
+                if (!dragging) return true;
                 resetDrag();
                 return true;
             default:
-                return dragging;
+                return true;
         }
     }
 
     private void resetDrag() {
         dragging = false;
+        if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
         thumb.animate().translationX(0).setDuration(150).start();
         label.setText(instruction);
         interaction.accept(false);

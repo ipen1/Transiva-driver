@@ -34,14 +34,14 @@ public final class TripLocationController {
             if (callback != null) callback.onPermissionRequired();
             return;
         }
-        stop();
+        if (listener != null) return;
         try {
             manager = (LocationManager) activity.getSystemService(Activity.LOCATION_SERVICE);
             if (manager == null) return;
             listener = new LocationListener() {
                 @Override public void onLocationChanged(Location l) {
                     if (!accept(l)) return;
-                    if (LocationManager.GPS_PROVIDER.equals(l.getProvider())) lastGpsFixAt = System.currentTimeMillis();
+                    if (LocationManager.GPS_PROVIDER.equals(l.getProvider()) && TripArrivalLocation.verified(l) != null) lastGpsFixAt = System.currentTimeMillis();
                     lastAccepted = new Location(l);
                     if (callback != null) callback.onLocation(l);
                 }
@@ -50,11 +50,11 @@ public final class TripLocationController {
                 @Override public void onProviderDisabled(String p) {}
             };
             Location last = bestLastKnown();
-            if (last != null && fresh(last) && callback != null) callback.onLocation(last);
+            if (last != null) listener.onLocationChanged(last);
             DevicePerformanceProfile perf = DevicePerformanceProfile.get(activity);
-            try { manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, perf.tripGpsMs, perf.tripMinDistanceM, listener, Looper.getMainLooper()); }
+            try { manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, Math.min(perf.tripGpsMs, 1000L), 0f, listener, Looper.getMainLooper()); }
             catch (Throwable t) { TransivaDiagnostics.error(activity, "order", "TRIP_GPS_PROVIDER_START_FAILED", t); }
-            try { manager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, perf.tripNetworkMs, perf.tripMinDistanceM, listener, Looper.getMainLooper()); }
+            try { manager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, perf.tripNetworkMs, 0f, listener, Looper.getMainLooper()); }
             catch (Throwable t) { TransivaDiagnostics.error(activity, "order", "TRIP_NETWORK_PROVIDER_START_FAILED", t); }
         } catch (Throwable t) { TransivaDiagnostics.error(activity, "order", "TRIP_LOCATION_START_FAILED", t); }
     }
@@ -63,6 +63,8 @@ public final class TripLocationController {
         try { if (manager != null && listener != null) manager.removeUpdates(listener); }
         catch (Throwable t) { TransivaDiagnostics.error(activity, "order", "TRIP_LOCATION_STOP_FAILED", t); }
         listener = null;
+        lastAccepted = null;
+        lastGpsFixAt = 0L;
     }
 
     @SuppressLint("MissingPermission")
@@ -75,6 +77,9 @@ public final class TripLocationController {
         catch (Throwable t) { TransivaDiagnostics.error(activity, "order", "TRIP_LAST_NETWORK_FAILED", t); }
         if (gps == null) return net; if (net == null) return gps;
         if (!fresh(net)) return gps; if (!fresh(gps)) return net;
+        boolean preciseGps = TripArrivalLocation.verified(gps) != null;
+        boolean preciseNet = TripArrivalLocation.verified(net) != null;
+        if (preciseGps != preciseNet) return preciseGps ? gps : net;
         float ga = gps.hasAccuracy() ? gps.getAccuracy() : 9999f;
         float na = net.hasAccuracy() ? net.getAccuracy() : 9999f;
         return ga <= na ? gps : net;
@@ -92,7 +97,7 @@ public final class TripLocationController {
     private boolean accept(Location l) {
         if (l == null || !valid(l.getLatitude(), l.getLongitude())||!fresh(l)) return false;
         long now = System.currentTimeMillis();
-        if (LocationManager.NETWORK_PROVIDER.equals(l.getProvider()) && lastGpsFixAt > 0L && now - lastGpsFixAt < GPS_PRIORITY_MS) return false;
+        if (LocationManager.NETWORK_PROVIDER.equals(l.getProvider()) && lastGpsFixAt > 0L && now - lastGpsFixAt < GPS_PRIORITY_MS && TripArrivalLocation.verified(l) == null) return false;
         if (lastAccepted != null) {
             long nt = l.getTime(), ot = lastAccepted.getTime();
             if (nt > 0L && ot > 0L && nt + OUT_OF_ORDER_TOLERANCE_MS < ot) return false;

@@ -115,7 +115,6 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         renderOrder();
         // Realtime response includes the ecosystem atomically with the order.
         refreshButtons();
-        startLocationWatch();
 
         // Warm StableRouteEngine cache before the driver taps Navigasi.
         // When a valid location already exists, native navigation can reuse it instantly.
@@ -168,7 +167,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
                         else if(fresh!=null){
                             String incoming=first(fresh.optString("order_id"),fresh.optString("id"));if(!key.equals(incoming)&&!internalId().equals(fresh.optString("id")))return;
                             JSONObject routeSnapshot=fresh.optJSONObject("server_route");
-                            String signature=fresh.optString("status")+"|"+fresh.optString("assignment_version")+"|"+fresh.optString("customer_received")+"|"+fresh.optString("price")+"|"+fresh.optString("delivery_lat")+"|"+fresh.optString("delivery_lng")+"|"+String.valueOf(fresh.optJSONObject("ecosystem"))+"|"+String.valueOf(fresh.optJSONObject("destination_extension"))+"|"+String.valueOf(fresh.optJSONObject("extra_fare_request"))+"|"+fresh.optString("price_change_status")+"|"+waitingActionKey(fresh)+"|"+(routeSnapshot==null?"":routeSnapshot.optString("route_hash")+":"+routeSnapshot.optLong("version"));
+                            String signature=fresh.optString("status")+"|"+fresh.optString("assignment_version")+"|"+fresh.optString("customer_received")+"|"+fresh.optString("price")+"|"+NavigationTargetPolicy.revision(fresh)+"|"+fresh.optString("delivery_lat")+"|"+fresh.optString("delivery_lng")+"|"+String.valueOf(fresh.optJSONObject("ecosystem"))+"|"+String.valueOf(fresh.optJSONObject("destination_extension"))+"|"+String.valueOf(fresh.optJSONObject("extra_fare_request"))+"|"+fresh.optString("price_change_status")+"|"+waitingActionKey(fresh)+"|"+(routeSnapshot==null?"":routeSnapshot.optString("route_hash")+":"+routeSnapshot.optLong("version"));
                             JSONObject waiting=fresh.optJSONObject("smart_waiting");order.put("smart_waiting",waiting);if(waitingView!=null)waitingView.bind(waiting);
                             if(signature.equals(realtimeSignature)){refreshButtons();return;}realtimeSignature=signature;
                             order=fresh;saveActiveOrder();renderOrder();refreshButtons();requestStableRoute(false);
@@ -184,7 +183,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
                     if(DriverOrderSyncSignal.assignmentEnded(error)) showTripEnded("assignment_ended");
                     else {
                         tripConnectionLost=true;
-                        tripNeedsSync();
+                        refreshButtons();
                     }
                 });
             }
@@ -339,7 +338,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     }
 
     void updatePremiumMapInsets() {
-        if (googleMap == null || itinerary == null || actionDock.getTop() <= 0) return;
+        if (tripSliding || googleMap == null || itinerary == null || actionDock.getTop() <= 0) return;
         int topInset = itinerary.getBottom() + dp(4);
         int bottomInset = premiumMap.getHeight() - actionDock.getTop() + dp(5);
         if (topInset + bottomInset + dp(46) >= premiumMap.getHeight()) return;
@@ -545,7 +544,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     }
 
     protected void fitNativeOverview(){
-        if(googleMap==null||tripCameraBrowsing||tripCameraFollowing) return;
+        if(googleMap==null||tripSliding||tripCameraBrowsing||tripCameraFollowing) return;
         try{
             final com.google.android.gms.maps.GoogleMap fittedMap=googleMap;final MapView fittedView=mapView;
             LatLngBounds.Builder b=new LatLngBounds.Builder(); int n=0;
@@ -555,7 +554,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             if(driverMarker!=null){b.include(driverMarker.getPosition());n++;}
             for(LatLng p:parseRoutePoints(pendingPickupRoutePoints)){b.include(p);n++;}
             for(LatLng p:parseRoutePoints(pendingDeliveryRoutePoints)){b.include(p);n++;}
-            if(n>=2) mapView.post(() -> { if(googleMap!=fittedMap||mapView!=fittedView||tripCameraBrowsing||tripCameraFollowing||isFinishing()||isDestroyed())return;try{ googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(b.build(), dp(42))); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } });
+            if(n>=2) mapView.post(() -> { if(googleMap!=fittedMap||mapView!=fittedView||tripSliding||tripCameraBrowsing||tripCameraFollowing||isFinishing()||isDestroyed())return;try{ googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(b.build(), dp(42))); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } });
             else if(n==1){ LatLng x=driverMarker!=null?driverMarker.getPosition():(pickupMarker!=null?pickupMarker.getPosition():deliveryMarker.getPosition()); googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(x,15f)); }
         }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
     }

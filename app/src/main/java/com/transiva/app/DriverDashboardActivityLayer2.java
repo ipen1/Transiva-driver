@@ -201,17 +201,6 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         DriverMessageUnreadRepository.retainOnlyActiveOrders(this, activeMessageOrders);
         DriverBottomNavigation.refreshUnread(this, bottomNavigationView);
 
-        if (this instanceof DriverDashboardActivity) {
-            LinearLayout dashboardWallet = ((DriverDashboardActivity) this).wallet;
-            if (dashboardWallet != null) {
-                boolean priorityMode = (state.activeOrders != null && !state.activeOrders.isEmpty())
-                        || (state.online && state.offers != null && !state.offers.isEmpty());
-                int desiredVisibility = priorityMode ? View.GONE : View.VISIBLE;
-                if (dashboardWallet.getVisibility() != desiredVisibility) {
-                    dashboardWallet.setVisibility(desiredVisibility);
-                }
-            }
-        }
         activeBox.removeAllViews();
         if (state.activeOrders == null || state.activeOrders.isEmpty()) {
             session.remove("current_order_id");
@@ -536,12 +525,14 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         add(card,row,0,dp(7),0,0);
     }
     protected View orderCard(DriverOrder order) {
-        LinearLayout card = card();
+        DriverOfferCardUi ui = new DriverOfferCardUi(this);
+        LinearLayout card = ui.card();
         boolean queued = order.raw != null && order.raw.optBoolean("queued", false);
         int queuePosition = order.raw == null ? 0 : order.raw.optInt("queue_position", 0);
-        String cardTitle = queued ? "Order Antrean" : "Tawaran";
         String serviceLabel = aiServiceLabel(order);
-        card.addView(DriverKdiUi.header(this,serviceIcon(serviceLabel)+"  "+serviceLabel,cardTitle+" #"+order.id));
+        TextView countdown = ui.header(card, serviceIcon(serviceLabel) + "  " + serviceLabel,
+                order.id, order.remainingSeconds >= 0);
+        if (order.remainingSeconds >= 0) offerCountdownController.bindCountdown(offerCountdownController.key(order), countdown);
         if (queued) {
             add(card, text("Sudah diterima • antrean " + Math.max(1, queuePosition) + ". Selesaikan order aktif terlebih dahulu.",
                     13, "#B45309", true), 0, dp(6), 0, 0);
@@ -552,13 +543,18 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         String familyName = firstNonEmpty(identityRaw.optString("family_name", ""), customerName);
         String familyRelation = firstNonEmpty(identityRaw.optString("family_relationship", ""), "Keluarga");
         String identityName = familyOrder ? (familyName + " • " + familyRelation) : customerName;
-        TextView identityPerson=text(identityName+" · "+(familyOrder?"Transiva Family":"Akun Pribadi"),13,"#0B3A78",true);
-        identityPerson.setSingleLine(true);identityPerson.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        add(card,identityPerson,0,dp(10),0,dp(2));
-        JSONObject rep=identityRaw.optJSONObject("customer_reputation");
-        if(rep!=null){int count=rep.optInt("rating_count");String reputation=rep.optBoolean("unavailable")?"Rating belum tersedia":rep.optBoolean("is_new",true)?"Customer baru · "+count+" penilaian":"⭐ "+String.format(new Locale("id","ID"),"%.1f",rep.optDouble("average_rating"))+" · "+count+" penilaian";if(rep.optBoolean("is_exemplary"))reputation+=" · Customer Teladan";add(card,text(reputation,12,"#A17A2B",true),0,dp(2),0,dp(4));}
-
-        addOrderPoint(card,"Jemput",order.pickupAddress,"#128568");
+        JSONObject rep = identityRaw.optJSONObject("customer_reputation");
+        String reputation = "";
+        if (rep != null) {
+            int count = rep.optInt("rating_count");
+            reputation = rep.optBoolean("unavailable") ? "Rating belum tersedia"
+                    : rep.optBoolean("is_new", true) ? "Customer baru · " + count + " penilaian"
+                    : "★ " + String.format(new Locale("id","ID"), "%.1f", rep.optDouble("average_rating"))
+                            + " · " + count + " penilaian";
+            if (rep.optBoolean("is_exemplary")) reputation += " · Customer Teladan";
+        }
+        ui.rider(card, identityName + " · " + (familyOrder ? "Transiva Family" : "Akun Pribadi"), reputation);
+        ui.point(card, "Jemput", order.pickupAddress, "#077A61");
         JSONObject feePreview=order.raw==null?null:order.raw.optJSONObject("commission");
         JSONObject ecoPayload = order.raw == null ? null : order.raw.optJSONObject("ecosystem");
         JSONArray routeStops = ecoPayload == null ? null : ecoPayload.optJSONArray("waypoints");
@@ -569,27 +565,25 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
                 int seq = stop.optInt("sequence", i + 1);
                 String address = firstNonEmpty(stop.optString("address", ""), "Titik Stop " + seq);
                 String note = firstNonEmpty(stop.optString("note", ""));
-                addOrderPoint(card,"Singgah "+seq,address+(note.isEmpty()||DriverShoppingPlanView.plan(order.raw)!=null?"":"\nCatatan: "+note),"#B45309");
+                ui.point(card,"Singgah "+seq,address+(note.isEmpty()||DriverShoppingPlanView.plan(order.raw)!=null?"":"\nCatatan: "+note),"#B45309");
             }
         }
-        addOrderPoint(card,"Tujuan",order.destinationAddress,"#0B7CFF");
+        ui.point(card, "Tujuan", order.destinationAddress, "#0871DB");
         double tripKm=order.raw==null?Double.NaN:order.raw.optDouble("distance_km",Double.NaN);
         if(Double.isNaN(tripKm)&&order.raw!=null)tripKm=order.raw.optDouble("trip_distance_km",Double.NaN);
         double pickupKm=order.raw==null?Double.NaN:order.raw.optDouble("pickup_distance_km",Double.NaN);
         if(Double.isNaN(pickupKm)&&order.raw!=null)pickupKm=order.raw.optDouble("driver_distance_km",Double.NaN);
         String pickupDistance=DriverDistanceText.kilometers(pickupKm);
         if(!Double.isNaN(pickupKm)&&!Double.isInfinite(pickupKm)&&pickupKm>=0)pickupDistance="± "+pickupDistance;
-        add(card,DriverKdiUi.distances(this,pickupDistance,DriverDistanceText.kilometers(tripKm)),0,dp(9),0,0);
+        add(card,DriverKdiUi.distances(this,pickupDistance,DriverDistanceText.kilometers(tripKm)),0,dp(4),0,0);
         String payment = "qris".equalsIgnoreCase(order.paymentMethod) ? "QRIS" : order.paymentLabel;
-        add(card,text("Tarif order "+rupiah(order.driverEarning)+" · "+payment,13,"#0B3A78",true),0,dp(9),0,0);
-        if(feePreview!=null)add(card,text("Potongan "+rupiah(feePreview.optInt("app_fee"))+" · Bersih "+rupiah(feePreview.optInt("driver_net")),12,"#64748B",false),0,dp(3),0,0);
-        add(card,DriverKdiUi.appreciation(this),0,0,0,0);
+        ui.fare(card, order.driverEarning, payment, feePreview);
 
         JSONObject shoppingPlan=DriverShoppingPlanView.plan(order.raw);
         if(shoppingPlan!=null)add(card,DriverShoppingPlanView.view(this,shoppingPlan,true),0,dp(8),0,0);
         String customerNote = shoppingPlan==null?customerNote(order.raw):"";
         if (!customerNote.isEmpty()) {
-            add(card, text("📝 Catatan customer: " + customerNote,
+            add(card, text("📝 Catatan: " + customerNote,
                     12, "#7C2D12", false), 0, dp(7), 0, 0);
         }
 
@@ -608,20 +602,6 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
                 if (cookMinutes > 0) kitchen += " • ±" + cookMinutes + " menit";
                 add(card, text(kitchen, 13, "#B45309", true), 0, dp(5), 0, 0);
             }
-        }
-
-        if (order.remainingSeconds >= 0) {
-            String key = offerCountdownController.key(order);
-            TextView countdown = text("Menghitung…", 14, "#16A34A", true);
-            countdown.setGravity(Gravity.CENTER);
-            countdown.setMinWidth(dp(112));
-            countdown.setPadding(dp(13), dp(7), dp(13), dp(7));
-
-            LinearLayout countdownRow = new LinearLayout(this);
-            countdownRow.setGravity(Gravity.END);
-            countdownRow.addView(countdown, new LinearLayout.LayoutParams(-2, -2));
-            add(card, countdownRow, 0, dp(10), 0, 0);
-            offerCountdownController.bindCountdown(key, countdown);
         }
 
         boolean capacityReached = !queued && currentState != null

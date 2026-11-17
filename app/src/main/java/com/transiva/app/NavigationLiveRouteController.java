@@ -163,6 +163,7 @@ final class NavigationLiveRouteController implements AutoCloseable {
         try{host.pendingRouteGeoJson=host.routeGeoJson(current.pointsJson());}catch(Exception e){NavigationDiagnostics.error(host,"NAV_GEOMETRY_FAILED",e);return;}host.setRoutePoints(current.latLngPoints);host.routeManeuvers=current.maneuvers;host.instructionController.setTarget(host.targetMode,host.targetLat(),host.targetLng());
         host.pendingRouteKm=current.distanceMeters/1000;host.pendingRouteSeconds=current.durationSeconds;host.lastRouteSuccessAt=System.currentTimeMillis();host.routeFailureCount=0;
         host.lastRenderedRouteIndex=-1;host.lastRenderedRouteProgressMeters=Double.NaN;
+        voice.arrivalTarget(NavigationSessionStore.identity(host)+"|"+base());
         voice.route(restoredId+"-"+index);options.profile(profile,available.usedProfile);
         boolean firstPose=!host.displayInitialized;
         DriverNavigationActivityLayer1.SnapPoint match=host.snapToRoute(host.driverLat,host.driverLng);

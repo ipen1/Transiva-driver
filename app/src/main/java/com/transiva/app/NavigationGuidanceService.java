@@ -132,6 +132,7 @@ public final class NavigationGuidanceService extends Service implements Location
     }};
     private void install(){
         voice.enabled(getSharedPreferences("navigation_guidance",0).getBoolean("voice",true));
+        voice.arrivalTarget(snapshot.optString("owner")+"|"+snapshot.optString("base"));
         String id=snapshot.optString("route_id");if(id.equals(routeId)&&route!=null)return;
         route=NavigationSessionStore.route(snapshot);shape.clear();lengths.clear();total=0;prior=Double.NaN;routeId=id;deviation.reset();suspect=false;reacquiring=true;
         if(route==null){recovery.require(SystemClock.elapsedRealtime());return;}

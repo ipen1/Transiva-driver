@@ -16,6 +16,10 @@ public final class NavigationVoiceController implements AutoCloseable {
     private TextToSpeech engine;
     private boolean ready,closed,enabled=true,resumed,initialized;
     private String route="";
+    private String arrivalTarget = "";
+    // Both guidance owners run on the main thread. Bound entries to recent destinations.
+    private static final java.util.LinkedHashSet<String> SPOKEN_ARRIVALS = new java.util.LinkedHashSet<>();
+    void arrivalTarget(String key) { arrivalTarget = key == null ? "" : key; }
     private java.util.function.Consumer<Boolean> statusListener;
     public NavigationVoiceController(Activity a){
         this(a,()->!a.isFinishing()&&!a.isDestroyed());
@@ -34,7 +38,7 @@ public final class NavigationVoiceController implements AutoCloseable {
         }));
     }
     public void status(java.util.function.Consumer<Boolean> callback){statusListener=callback;if(initialized)callback.accept(ready);}
-    public void route(String key){if(!route.equals(key)){route=key;policy.reset();if(engine!=null)engine.stop();}}
+    public void route(String key){if(!route.equals(key)){route=key;policy.reset();if(engine!=null&&!SPOKEN_ARRIVALS.contains(arrivalTarget))engine.stop();}}
     public void enabled(boolean value){enabled=value;if(!value&&engine!=null)engine.stop();if(value&&initialized&&!ready)Toast.makeText(context,"Suara Bahasa Indonesia belum siap. Periksa pengaturan Text-to-speech HP.",Toast.LENGTH_LONG).show();}
     public boolean enabled(){return enabled;}
     public void resumed(boolean value){resumed=value;if(!value&&engine!=null)engine.stop();}
@@ -57,8 +61,15 @@ public final class NavigationVoiceController implements AutoCloseable {
     }
     public void speak(int index,double meters,String text,boolean arrival,double speed){speak(index,meters,text,arrival,speed,true);}
     public void speak(int index,double meters,String text,boolean arrival,double speed,boolean confirmed){
-        if(!available()||!policy.shouldSpeak(index,meters,speed,arrival,confirmed,SystemClock.elapsedRealtime()))return;
-        if(engine.speak(NavigationSpeechText.prompt(meters,speed,arrival,text),TextToSpeech.QUEUE_FLUSH,null,"nav-"+route+"-"+index)!=TextToSpeech.SUCCESS)policy.retry(index);
+        if (!available() || (arrival && SPOKEN_ARRIVALS.contains(arrivalTarget))
+                || !policy.shouldSpeak(index,meters,speed,arrival,confirmed,SystemClock.elapsedRealtime())) return;
+        int result = engine.speak(NavigationSpeechText.prompt(meters,speed,arrival,text),
+                TextToSpeech.QUEUE_FLUSH,null,"nav-"+route+"-"+index);
+        if (result != TextToSpeech.SUCCESS) policy.retry(index);
+        else if (arrival && confirmed && meters <= 25 && !arrivalTarget.isEmpty()) {
+            SPOKEN_ARRIVALS.add(arrivalTarget);
+            if (SPOKEN_ARRIVALS.size() > 64) SPOKEN_ARRIVALS.remove(SPOKEN_ARRIVALS.iterator().next());
+        }
     }
     public boolean cruise(int index,double meters,double speed){
         if(!available()||!policy.cruise(index,meters,speed,SystemClock.elapsedRealtime()))return false;

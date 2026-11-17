@@ -184,7 +184,10 @@ abstract class DriverTripActivityLayer1 extends Activity {
                 String verb = separator >= 0 ? label.substring(separator + 3) : label;
                 premium = new TripSwipeControl(getContext(),
                         "Geser untuk " + verb.toLowerCase(new Locale("id", "ID")), action);
-                premium.interaction(active -> tripInteraction(false, active));
+                premium.interaction(active -> {
+                    tripInteraction(false, active);
+                    if (active && googleMap != null) googleMap.stopAnimation();
+                });
                 addView(premium, new LinearLayout.LayoutParams(-1, -1));
                 return;
             }

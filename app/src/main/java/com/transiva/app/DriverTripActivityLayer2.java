@@ -250,11 +250,18 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
 
 
     protected void onDriverLocationChanged(Location l){
+        Location verified = TripArrivalLocation.verified(l);
+        if (verified != null && (tripArrivalFix == null
+                || verified.getElapsedRealtimeNanos() >= tripArrivalFix.getElapsedRealtimeNanos())) {
+            tripArrivalFix = verified;
+        }
         SmoothLocationEngine.Fix fix = smoothLocation.offer(l);
-        if(fix == null) return;
+        if (fix == null) {
+            refreshButtons();
+            return;
+        }
 
         Location accepted = fix.location;
-        tripArrivalFix=new Location(l);
         double newLat = accepted.getLatitude();
         double newLng = accepted.getLongitude();
         if(!valid(tripStartLat, tripStartLng)){

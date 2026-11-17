@@ -24,7 +24,7 @@ final class TripVehicleMotionController implements AutoCloseable {
     void mapReady(){if(active)render();}
     void recenter(){if(host.googleMap!=null&&host.driverMarker!=null){com.google.android.gms.maps.model.LatLng p=host.driverMarker.getPosition();host.googleMap.moveCamera(com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(p,17f));}if(active)render();}
     private void render(){
-        if(closed||!active||host.googleMap==null||!host.mapReady||NavigationTargetPolicy.terminal(host.order))return;
+        if(closed||!active||host.googleMap==null||!host.mapReady||host.tripSliding||NavigationTargetPolicy.terminal(host.order))return;
         if(last!=null&&host.tripLiveRoutes!=null&&revision!=host.tripLiveRoutes.visualRevision())offer(last);
         NavigationMotionInterpolator.Pose p=motion.sample(SystemClock.elapsedRealtime());if(p==null)return;
         double lat=p.lat,lng=p.lng,heading=p.bearing;if(p.onRoute&&host.tripLiveRoutes!=null){NavigationGeometry.Point point=host.tripLiveRoutes.visualPoint(p.progress);if(point!=null){lat=point.lat;lng=point.lng;heading=point.bearing;}}

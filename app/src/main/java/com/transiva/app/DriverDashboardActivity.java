@@ -105,7 +105,7 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         });
         mapSavedState = savedInstanceState;
         setContentView(buildScreen());
-        mapPanel.requestedOffer(getIntent());
+        if (mapPanel != null) mapPanel.requestedOffer(getIntent());
         DriverAppSettings.apply(this);
         if (getIntent().getBooleanExtra("from_fcm", false)) presenter.refreshOrders();
         else presenter.load(true);
@@ -297,7 +297,7 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         bottomNavigationView = DriverBottomNavigation.build(
                 this, DriverBottomNavigation.ActiveItem.HOME);
         content.addView(bottomNavigationView, 0, new LinearLayout.LayoutParams(-1, DriverBottomNavigation.height(this)));
-        mapPanel = new DashboardMapPanel(this, page, scroll, foregroundOffers, mapSavedState);
+        mapPanel = new DashboardMapPanel(this, page, mapSavedState);
         mapSavedState = null;
 
         loading = new ProgressBar(this);
