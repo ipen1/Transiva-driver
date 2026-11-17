@@ -160,6 +160,7 @@
         <activity android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" android:name=".DriverEmergencyActivity" android:exported="false" />
         <activity android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" android:name=".DriverLocationActivity" android:exported="false" android:theme="@style/AppTheme" />
         <activity android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" android:name=".DriverDashboardActivity" android:exported="false" android:theme="@style/AppTheme" />
+        <activity android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" android:name=".DriverMenuActivity" android:exported="false" android:theme="@style/AppTheme" />
         <activity android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" android:name=".DriverSettingsActivity" android:exported="false" android:theme="@style/AppTheme" />
         <activity android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" android:name=".DriverTripActivity" android:exported="false" android:theme="@style/AppTheme" />
         <service android:name=".IncomingCallRingingService" android:exported="false" android:foregroundServiceType="shortService" android:stopWithTask="false" />
