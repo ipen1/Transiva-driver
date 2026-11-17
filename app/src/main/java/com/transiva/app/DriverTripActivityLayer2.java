@@ -157,6 +157,19 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         cancelOrderBtn.setOnClickListener(v -> cancellationController.show());
         options.addView(cancelOrderBtn, btnLp(6));
 
+        if (tripDetailsScreen()) {
+            c.removeView(header);
+            c.setPadding(0, 0, 0, 0);
+            c.setBackground(null);
+            c.setElevation(0);
+            options.setVisibility(View.VISIBLE);
+            cancelOrderBtn.setText("Batalkan order");
+            cancelOrderBtn.setBackgroundColor(Color.TRANSPARENT);
+            c.addView(options);
+            add(c, 0, 0, 0, dp(8));
+            return;
+        }
+
         if (communicationController != null) communicationController.onStop();
         LinearLayout quick = new LinearLayout(this); quick.setOrientation(LinearLayout.HORIZONTAL);
         customerChatBtn = premiumRideTrip() ? outline("Hubungi") : primary("Pelanggan");
@@ -455,7 +468,8 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
                     float distance = TripArrivalLocation.distance(trustedArrivalFix(), target);
                     showAction(pickup ? arrivedPickupBtn : arrivedDeliveryBtn,
                             distance >= 0 && distance <= ARRIVE_RADIUS_METER);
-                    if (tripStateReady()) dockHint.setText(distance < 0 ? "Menunggu lokasi terverifikasi"
+                    if (tripStateReady() && dockHint != null) dockHint.setText(updatingStatus || waypointArrivalBusy || tripCancelRunning
+                            ? "Memproses perubahan order…" : distance < 0 ? "Menunggu lokasi terverifikasi"
                             : distance > ARRIVE_RADIUS_METER ? "Aktif dalam radius 100 m" : "Lokasi terverifikasi");
                 }
                 endActionUpdate();

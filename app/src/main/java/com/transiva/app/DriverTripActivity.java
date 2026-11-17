@@ -67,7 +67,6 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     private LinearLayout itinerary;
     private TextView pickupLine, deliveryLine;
     private TripMapChatPreview chatPreview;
-    private android.app.AlertDialog detailsDialog;
     private int premiumTop = -1, premiumBottom = -1;
     private boolean mapFirstRide;
     @Override protected boolean premiumRideTrip() { return mapFirstRide; }
@@ -93,8 +92,10 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_WINDOW_SETUP_FAILED",e); }
         session = new SessionManager(this);
         tripRouteScope = new DriverUiScope(this);
-        tripLiveRoutes = new TripLiveRouteController(this);
-        tripVehicleMotion = new TripVehicleMotionController(this);
+        if (!tripDetailsScreen()) {
+            tripLiveRoutes = new TripLiveRouteController(this);
+            tripVehicleMotion = new TripVehicleMotionController(this);
+        }
         api = new DriverNetworkRepository(session);
         tripLocationController = new TripLocationController(this, new TripLocationController.Callback() {
             @Override public void onLocation(Location location) { onDriverLocationChanged(location); }
@@ -313,7 +314,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         progressBar.setVisibility(View.GONE);
         premiumMap.addView(progressBar, new FrameLayout.LayoutParams(dp(42), dp(42), Gravity.CENTER));
         chatPreview = new TripMapChatPreview(this, premiumMap, () -> order, () -> {
-            if (googleMap == null || pickupMarker == null || !itinerary.isShown() || detailsDialog != null) return null;
+            if (googleMap == null || pickupMarker == null || !itinerary.isShown()) return null;
             android.graphics.Point pt = googleMap.getProjection().toScreenLocation(pickupMarker.getPosition());
             return new android.graphics.PointF(pt.x, pt.y);
         }, () -> itinerary.getBottom(), () -> actionDock.getTop() - dp(52),
@@ -323,18 +324,12 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     }
 
     void showPremiumDetails() {
-        if (detailsDialog != null || root.getParent() != null) return;
-        ScrollView content = new ScrollView(this);
-        content.addView(root, new ScrollView.LayoutParams(-1, -2));
-        detailsDialog = PremiumDialogs.builder(this).setTitle("Detail perjalanan")
-                .setView(content).setPositiveButton("Tutup", null).create();
-        detailsDialog.setOnDismissListener(dialog -> {
-            content.removeView(root);
-            detailsDialog = null;
-        });
-        DriverAppSettings.applyToView(this, content);
-        DriverAppSettings.applyToView(this, content);
-        detailsDialog.show();
+        if (order == null || NavigationTargetPolicy.terminal(order) || isFinishing()) return;
+        Intent details = new Intent(this, DriverTripDetailsActivity.class)
+                .putExtra("order_json", order.toString()).putExtra("order_kind", orderKind)
+                .putExtra("trip_fix", trustedArrivalFix())
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(details);
     }
 
     void updatePremiumMapInsets() {
@@ -351,7 +346,6 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
 
     protected void renderEmpty(){
         if (premiumMap != null) {
-            if (detailsDialog != null) detailsDialog.dismiss();
             if (chatPreview != null) chatPreview.stop();
             premiumMap.removeAllViews();
             premiumMap.addView(root, new FrameLayout.LayoutParams(-1, -2));
@@ -368,11 +362,11 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         retainedMapSlot=null;
         try {
         root.removeAllViews();
-        if (!premiumRideTrip()) top("Driver Trip", "");
+        if (!premiumRideTrip() && !tripDetailsScreen()) top("Driver Trip", "");
         addHeaderCard();
         JSONObject stopPolicy=order.optJSONObject("stop_pricing");
         if(stopPolicy==null){try{stopPolicy=new JSONObject(order.optString("note","{}")).optJSONObject("stop_pricing");}catch(Exception ignored){}}
-        if(stopPolicy!=null){
+        if(stopPolicy!=null && !tripDetailsScreen()){
             LinearLayout appreciation=card();appreciation.setPadding(dp(14),dp(12),dp(14),dp(12));
             appreciation.addView(text("WAKTU ANDA BERHARGA",11,"#A17A2B",true));
             appreciation.addView(text("100% biaya tunggu untuk Anda",14,"#0B477D",true));
@@ -399,15 +393,15 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         addLocationCard("Titik jemput", pickupAddress(), true);
         addLocationCard("Tujuan", deliveryAddress(), false);
         if(!"arrived_delivery".equals(status()) || extensionNeedsArrival())addMapCard();
+        if (tripDetailsScreen()) addFoodOrNoteCard();
         addActions();
         if("arrived_delivery".equals(status()) && !extensionNeedsArrival())addMapCard();
-        addFoodOrNoteCard();
+        if (!tripDetailsScreen()) addFoodOrNoteCard();
         } finally {
             LinearLayout fresh=root;root=displayRoot;
             TripMapContent.apply(displayRoot,fresh,retainedMapCard,retainedMapSlot);
         }
-        if (premiumRideTrip()) {
-            if (detailsDialog != null) DriverAppSettings.applyToView(this, root);
+        if (premiumRideTrip() && !tripDetailsScreen()) {
             pickupLine.setText(pickupAddress());
             deliveryLine.setText(deliveryAddress());
         }

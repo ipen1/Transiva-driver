@@ -29,6 +29,7 @@ import java.util.function.Supplier;
 
 /** Foreground, order-scoped previews using the same authenticated room as the chat screen. */
 final class TripMapChatPreview {
+    private static final int MAX_QUEUED = 32;
     private final Activity activity;
     private final FrameLayout mapLayer;
     private final Supplier<JSONObject> order;
@@ -40,10 +41,12 @@ final class TripMapChatPreview {
     private final ArrayDeque<String> messages = new ArrayDeque<>();
     private final LinearLayout bubble;
     private final TextView message;
+    private final TextView pageBadge;
     private final ArrayList<String> pages = new ArrayList<>();
     private DriverUiScope scope;
     private boolean registered;
     private boolean busy;
+    private boolean moreWaiting;
     private String identity = "";
     private long lastId;
     private int page;
@@ -62,22 +65,32 @@ final class TripMapChatPreview {
 
         bubble = new LinearLayout(activity);
         bubble.setOrientation(LinearLayout.VERTICAL);
-        bubble.setPadding(dp(12), dp(7), dp(12), dp(8));
+        bubble.setPadding(dp(12), dp(8), dp(12), dp(9));
+        bubble.setMinimumHeight(dp(48));
         int surface = DriverThemeTokens.surface(activity);
         android.graphics.drawable.GradientDrawable glass = DriverNavigationUi.roundRect(
-                Color.argb(239, Color.red(surface), Color.green(surface), Color.blue(surface)), dp(15));
+                Color.argb(248, Color.red(surface), Color.green(surface), Color.blue(surface)), dp(17));
         glass.setStroke(dp(1), DriverThemeTokens.border(activity));
         bubble.setBackground(glass);
-        bubble.setElevation(dp(4));
+        bubble.setElevation(dp(6));
+        LinearLayout heading = new LinearLayout(activity);
+        heading.setGravity(Gravity.CENTER_VERTICAL);
         TextView title = new TextView(activity);
-        title.setText("Pesan pelanggan");
+        title.setText("●  Pesan pelanggan");
         title.setTextSize(11);
         title.setTypeface(null, Typeface.BOLD);
-        title.setTextColor(DriverThemeTokens.textSecondary(activity));
-        bubble.addView(title);
+        title.setTextColor(DriverThemeTokens.accent(activity));
+        heading.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        pageBadge = new TextView(activity);
+        pageBadge.setTextSize(10);
+        pageBadge.setTextColor(DriverThemeTokens.textSecondary(activity));
+        pageBadge.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        heading.addView(pageBadge);
+        bubble.addView(heading);
         message = new TextView(activity);
         message.setTextColor(DriverThemeTokens.textPrimary(activity));
-        message.setTextSize(13);
+        message.setTextSize(14);
+        message.setPadding(0, dp(3), 0, 0);
         message.setMaxLines(3);
         bubble.addView(message, new LinearLayout.LayoutParams(-1, -2));
         bubble.setVisibility(View.INVISIBLE);
@@ -119,6 +132,12 @@ final class TripMapChatPreview {
             NavigationDiagnostics.error(activity, "MAP_CHAT_RECEIVER_FAILED", e);
         }
         failures = 0;
+        if (identity.equals(NavigationTargetPolicy.identity(order.get()))) {
+            if (!pages.isEmpty()) {
+                pageStarted = android.os.SystemClock.elapsedRealtime();
+                main.post(position);
+            } else if (!messages.isEmpty()) showNext();
+        }
         main.post(poll);
     }
 
@@ -132,7 +151,7 @@ final class TripMapChatPreview {
         registered = false;
         busy = false;
         main.removeCallbacksAndMessages(null);
-        clear();
+        hideBubble();
     }
 
     private final Runnable poll = this::fetch;
@@ -142,6 +161,7 @@ final class TripMapChatPreview {
         DriverUiScope request = scope;
         if (request == null || !request.alive() || busy || NavigationTargetPolicy.id(current).isEmpty()
                 || NavigationTargetPolicy.terminal(current)) return;
+        if (messages.size() >= MAX_QUEUED) { moreWaiting = true; return; }
         String key = NavigationTargetPolicy.identity(current);
         if (!key.equals(identity)) {
             identity = key;
@@ -155,7 +175,7 @@ final class TripMapChatPreview {
                 .appendQueryParameter("room_id", room(current))
                 .appendQueryParameter("source", NavigationTargetPolicy.source(current))
                 .appendQueryParameter("page_mode", after == 0 ? "latest" : "newer")
-                .appendQueryParameter("limit", after == 0 ? "12" : "24")
+                .appendQueryParameter("limit", "24")
                 .appendQueryParameter("last_id", String.valueOf(after)).build().toString();
         busy = true;
         if (!request.execute(() -> {
@@ -173,27 +193,34 @@ final class TripMapChatPreview {
         busy = false;
         boolean success = result != null && result.optBoolean("success");
         if (success && result.optBoolean("ended")) { clear(); return; }
-        if (success && "driver".equalsIgnoreCase(result.optString("viewer_type", "driver")) && key.equals(NavigationTargetPolicy.identity(order.get())) && !result.optBoolean("ended")) {
+        if (!key.equals(NavigationTargetPolicy.identity(order.get()))) {
+            main.post(poll);
+            return;
+        }
+        boolean truncated = false;
+        if (success && "driver".equalsIgnoreCase(result.optString("viewer_type", "driver"))) {
             JSONArray rows = result.optJSONArray("messages");
             if (rows != null) for (int i = 0; i < rows.length(); i++) {
                 JSONObject row = rows.optJSONObject(i);
                 if (row == null) continue;
                 long id = row.optLong("id");
-                lastId = Math.max(lastId, id);
-                if (id <= after || !"customer".equalsIgnoreCase(row.optString("sender_type"))
-                        || row.optInt("is_read") != 0 || row.optBoolean("is_read")) continue;
-                String value = preview(row.optString("message").trim());
+                if (id <= lastId) continue;
+                boolean unreadCustomer = "customer".equalsIgnoreCase(row.optString("sender_type"))
+                        && row.optInt("is_read") == 0 && !row.optBoolean("is_read");
+                String value = unreadCustomer ? preview(row.optString("message").trim()) : "";
                 if (!value.isEmpty()) {
-                    if (messages.size() == 12) messages.removeFirst();
+                    if (messages.size() >= MAX_QUEUED) { truncated = true; break; }
                     messages.addLast(value);
                 }
+                lastId = id;
             }
-            if (pages.isEmpty()) showNext();
         }
         failures = success ? 0 : Math.min(failures + 1, 3);
-        boolean more = success && after > 0 && lastId > after && result.optBoolean("has_more");
+        moreWaiting = truncated || (success && after > 0 && lastId > after && result.optBoolean("has_more"));
+        if (pages.isEmpty()) showNext();
+        updatePageBadge();
         main.removeCallbacks(poll);
-        main.postDelayed(poll, more ? 350 : 7000L << failures);
+        if (!truncated) main.postDelayed(poll, moreWaiting ? 350 : 7000L << failures);
     }
 
     private static String preview(String raw) {
@@ -212,7 +239,11 @@ final class TripMapChatPreview {
     private void showNext() {
         String next = messages.pollFirst();
         if (next == null) { clear(); return; }
-        int width = Math.max(dp(120), Math.min(dp(216), mapLayer.getWidth() - dp(24)));
+        if (moreWaiting && messages.size() <= MAX_QUEUED / 2 && !busy) {
+            main.removeCallbacks(poll);
+            main.postDelayed(poll, 180L);
+        }
+        int width = Math.max(dp(112), Math.min(dp(222), mapLayer.getWidth() - dp(20)));
         if (bubble.getLayoutParams().width != width) {
             bubble.getLayoutParams().width = width;
             bubble.requestLayout();
@@ -233,10 +264,17 @@ final class TripMapChatPreview {
     private void showPage() {
         String value = pages.get(page);
         message.setText(value);
+        updatePageBadge();
         bubble.setContentDescription("Pesan pelanggan. " + value + ". Buka chat.");
         pageVisibleMs = 0;
         pageLimitMs = Math.max(3500, Math.min(8500, 1900 + value.length() * 46));
         pageStarted = android.os.SystemClock.elapsedRealtime();
+    }
+
+    private void updatePageBadge() {
+        if (pages.size() > 1) pageBadge.setText((page + 1) + "/" + pages.size());
+        else if (!messages.isEmpty()) pageBadge.setText("+" + messages.size());
+        else pageBadge.setText("");
     }
 
     private long pageStarted;
@@ -246,16 +284,30 @@ final class TripMapChatPreview {
             if (pages.isEmpty() || scope == null || !scope.alive()) return;
             PointF point = pickup.get();
             int width = bubble.getWidth(), height = bubble.getHeight();
-            float y = point == null ? -1 : point.y - height - dp(36);
-            boolean visible = point != null && point.x >= 0 && point.x <= mapLayer.getWidth()
-                    && y >= visibleTop.getAsInt() && point.y < visibleBottom.getAsInt() && width > 0;
+            int top = Math.max(dp(4), visibleTop.getAsInt()) + dp(7);
+            int bottom = Math.min(mapLayer.getHeight(), visibleBottom.getAsInt()) - dp(6);
+            boolean onMap = point != null && point.x >= 0 && point.x <= mapLayer.getWidth()
+                    && point.y >= top && point.y <= bottom;
+            boolean visible = width > 0 && height > 0 && top + height <= bottom
+                    && mapLayer.getWidth() >= width + dp(12);
             if (visible) {
-                bubble.setTranslationX(Math.max(dp(8), Math.min(point.x - width / 2f, mapLayer.getWidth() - width - dp(8))));
+                float x = onMap ? point.x - width / 2f : mapLayer.getWidth() - width - dp(10);
+                float y = top;
+                if (onMap) {
+                    float above = point.y - height - dp(32);
+                    if (above >= top) y = above;
+                    else if (point.y + height + dp(12) <= bottom) y = point.y + dp(12);
+                    else x = point.x < mapLayer.getWidth() / 2f
+                            ? mapLayer.getWidth() - width - dp(10) : dp(8);
+                }
+                bubble.setTranslationX(Math.max(dp(8), Math.min(x, mapLayer.getWidth() - width - dp(8))));
                 bubble.setTranslationY(y);
                 if (bubble.getVisibility() != View.VISIBLE) {
                     bubble.setVisibility(View.VISIBLE);
                     bubble.setAlpha(0f);
-                    bubble.animate().alpha(1f).setDuration(190).start();
+                    bubble.setScaleX(.97f);
+                    bubble.setScaleY(.97f);
+                    bubble.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(200L).start();
                 }
                 pageVisibleMs += 100;
             } else if (bubble.getVisibility() == View.VISIBLE) {
@@ -281,6 +333,10 @@ final class TripMapChatPreview {
         messages.clear();
         pages.clear();
         main.removeCallbacks(position);
+        hideBubble();
+    }
+
+    private void hideBubble() {
         bubble.animate().cancel();
         message.animate().cancel();
         message.setAlpha(1f);

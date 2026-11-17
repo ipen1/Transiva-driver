@@ -5,7 +5,7 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.view.Gravity;
 import android.view.MotionEvent;
-import android.view.View;
+import android.view.ViewConfiguration;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
@@ -15,13 +15,16 @@ final class TripSwipeControl extends FrameLayout {
     private final String instruction;
     private final Runnable submit;
     private java.util.function.Consumer<Boolean> interaction = ignored -> {};
-    private float startX;
+    private final int touchSlop;
+    private float startX, startY;
+    private boolean moved;
     private boolean dragging;
 
     TripSwipeControl(Context context, String instruction, Runnable submit) {
         super(context);
         this.instruction = instruction;
         this.submit = submit;
+        touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         setMinimumHeight(dp(48));
         label = new TextView(context);
         label.setGravity(Gravity.CENTER);
@@ -75,12 +78,15 @@ final class TripSwipeControl extends FrameLayout {
                 thumb.animate().cancel();
                 thumb.setTranslationX(0);
                 startX = event.getX();
+                startY = event.getY();
+                moved = false;
                 dragging = true;
                 interaction.accept(true);
                 getParent().requestDisallowInterceptTouchEvent(true);
                 return true;
             case MotionEvent.ACTION_MOVE:
                 if (!dragging) return true;
+                moved |= Math.abs(event.getX() - startX) > touchSlop || Math.abs(event.getY() - startY) > touchSlop;
                 float travel = travel();
                 float offset = Math.min(travel, Math.max(0, event.getX() - startX));
                 thumb.setTranslationX(offset);
@@ -88,9 +94,13 @@ final class TripSwipeControl extends FrameLayout {
                 return true;
             case MotionEvent.ACTION_UP:
                 if (!dragging) return true;
-                boolean confirmed = travel() > 0 && thumb.getTranslationX() >= travel() * .90f;
+                float dx = event.getX() - startX;
+                float dy = event.getY() - startY;
+                boolean confirmed = travel() > 0 && dx >= travel() * .90f;
+                boolean tapped = !moved && Math.abs(dx) <= touchSlop && Math.abs(dy) <= touchSlop;
                 resetDrag();
                 if (confirmed && isEnabled()) submit.run();
+                else if (tapped && isEnabled()) performClick();
                 return true;
             case MotionEvent.ACTION_POINTER_DOWN:
             case MotionEvent.ACTION_CANCEL:
@@ -101,6 +111,8 @@ final class TripSwipeControl extends FrameLayout {
                 return true;
         }
     }
+
+    @Override public boolean performClick() { return super.performClick(); }
 
     private void resetDrag() {
         dragging = false;

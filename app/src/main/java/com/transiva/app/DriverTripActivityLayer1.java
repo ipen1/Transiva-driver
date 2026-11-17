@@ -164,6 +164,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected Location lastSpeedLocation = null;
 
     protected boolean premiumRideTrip() { return false; }
+    protected boolean tripDetailsScreen() { return false; }
 
     protected final class SlideActionView extends LinearLayout {
         private final TextView labelView;
@@ -189,6 +190,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
                     if (active && googleMap != null) googleMap.stopAnimation();
                 });
                 addView(premium, new LinearLayout.LayoutParams(-1, -1));
+                setEnabled(false);
                 return;
             }
             setOrientation(HORIZONTAL);
