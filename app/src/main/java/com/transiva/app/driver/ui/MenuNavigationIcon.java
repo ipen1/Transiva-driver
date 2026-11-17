@@ -8,12 +8,14 @@ import android.view.View;
 
 final class MenuNavigationIcon extends View {
     private final DriverBottomNavigation.ActiveItem item;
+    private final boolean active;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path path = new Path();
 
-    MenuNavigationIcon(Context context, DriverBottomNavigation.ActiveItem item, int color) {
+    MenuNavigationIcon(Context context, DriverBottomNavigation.ActiveItem item, int color, boolean active) {
         super(context);
         this.item = item;
+        this.active = active;
         paint.setColor(color);
         paint.setStrokeWidth(1.65f);
         paint.setStyle(Paint.Style.STROKE);
@@ -41,7 +43,7 @@ final class MenuNavigationIcon extends View {
                 path.lineTo(5, 21);
                 path.lineTo(5, 11);
                 path.close();
-                paint.setStyle(Paint.Style.FILL);
+                paint.setStyle(active ? Paint.Style.FILL : Paint.Style.STROKE);
                 canvas.drawPath(path, paint);
                 paint.setStyle(Paint.Style.STROKE);
                 break;
