@@ -67,6 +67,47 @@ public class TripMapGestureInstrumentedTest {
             });
         }
     }
+    @Test public void arrivalSwipeAndTapStayInTheDock() {
+        try (ActivityScenario<TestHarnessActivity> scenario = ActivityScenario.launch(TestHarnessActivity.class)) {
+            scenario.onActivity(activity -> {
+                android.widget.FrameLayout root = new android.widget.FrameLayout(activity);
+                MapTouchProxy map = new MapTouchProxy(activity);
+                root.addView(map, new android.widget.FrameLayout.LayoutParams(400, 96));
+                java.util.concurrent.atomic.AtomicInteger submissions = new java.util.concurrent.atomic.AtomicInteger();
+                java.util.concurrent.atomic.AtomicInteger taps = new java.util.concurrent.atomic.AtomicInteger();
+                TripSwipeControl swipe = new TripSwipeControl(activity, "Geser untuk tiba", submissions::incrementAndGet);
+                swipe.setOnClickListener(v -> taps.incrementAndGet());
+                root.addView(swipe, new android.widget.FrameLayout.LayoutParams(400, 96));
+                int exactWidth = View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY);
+                int exactHeight = View.MeasureSpec.makeMeasureSpec(96, View.MeasureSpec.EXACTLY);
+                root.measure(exactWidth, exactHeight);
+                root.layout(0, 0, 400, 96);
+
+                assertFalse(swipe.isEnabled());
+                swipeGesture(root, 15, 15);
+                assertEquals(0, taps.get());
+                swipe.setEnabled(true);
+                swipeGesture(root, 15, 15);
+                assertEquals(1, taps.get());
+                assertEquals(0, submissions.get());
+                swipeGesture(root, 15, 395);
+                assertEquals(1, submissions.get());
+                assertEquals(1, taps.get());
+                assertEquals("Arrival drag must never move the map", 0, map.moves);
+            });
+        }
+    }
+
+    private static void swipeGesture(View root, float start, float end) {
+        long now = SystemClock.uptimeMillis();
+        int[] actions = {MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE, MotionEvent.ACTION_UP};
+        for (int i = 0; i < actions.length; i++) {
+            MotionEvent event = MotionEvent.obtain(now, now + i * 16, actions[i], i == 0 ? start : end, 32, 0);
+            try { root.dispatchTouchEvent(event); }
+            finally { event.recycle(); }
+        }
+    }
+
     @Test public void orderCardRefreshNeverDetachesTheExistingMapSurface(){
         AtomicReference<LinearLayout> displayRef=new AtomicReference<>(),mapRef=new AtomicReference<>();
         java.util.concurrent.atomic.AtomicInteger detaches=new java.util.concurrent.atomic.AtomicInteger();
