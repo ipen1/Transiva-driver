@@ -57,6 +57,8 @@ import java.util.Map;
 import java.util.Set;
 public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
     private DashboardOfferMonitor offerMonitor;
+    private DashboardMapPanel mapPanel;
+    private Bundle mapSavedState;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -88,6 +90,7 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
             @Override public void refreshDashboard() { if (presenter != null) presenter.load(false); }
             @Override public void tickOfferCountdown() {
                 if (offerCountdownController != null) offerCountdownController.tick();
+                if (mapPanel != null) mapPanel.expire();
             }
         });
 
@@ -100,13 +103,14 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
             @Override public DriverDashboardState state() { return currentState; }
             @Override public void refreshOrders() { presenter.refreshOrders(); }
         });
+        mapSavedState = savedInstanceState;
         setContentView(buildScreen());
+        mapPanel.requestedOffer(getIntent());
         DriverAppSettings.apply(this);
         if (getIntent().getBooleanExtra("from_fcm", false)) presenter.refreshOrders();
         else presenter.load(true);
         showOpportunityPromptIfNeeded(getIntent());
     }
-
 
     protected void showOpportunityPromptIfNeeded(Intent intent) {
         if (intent == null || isFinishing()) return;
@@ -145,6 +149,7 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
 
     @Override protected void onStart() {
         super.onStart();
+        if (mapPanel != null) mapPanel.start();
         if (!realtimeReceiverRegistered) {
             try {
                 IntentFilter filter = new IntentFilter(TransivaFirebaseService.ACTION_DRIVER_DATA_CHANGED);
@@ -162,11 +167,13 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
             catch (Throwable error) { TransivaDriverCrashReporter.nonFatal("dashboard_receiver_stop", error); }
             realtimeReceiverRegistered = false;
         }
+        if (mapPanel != null) mapPanel.stop();
         super.onStop();
     }
 
     @Override protected void onResume() {
         super.onResume();
+        if (mapPanel != null) mapPanel.resume();
         if (pendingBackgroundLocationSettings) {
             if (hasBackgroundLocationPermission()) {
                 continueOnlineAfterPermissions();
@@ -183,7 +190,6 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         if (presenter != null) presenter.load(false);
         if (offerMonitor != null) offerMonitor.start();
 
-        // Kembali dari halaman pengaturan GPS tanpa perlu menutup/membuka ulang APK.
         if (pendingOnlineAfterGps && hasLocationPermission() && hasBackgroundLocationPermission() && isLocationProviderEnabled()) {
             pendingOnlineAfterGps = false;
             setSwitch(true);
@@ -203,16 +209,19 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        if (mapPanel != null) mapPanel.requestedOffer(intent);
         if (presenter != null && intent.getBooleanExtra("from_fcm", false)) presenter.refreshOrders();
     }
 
     @Override protected void onPause() {
+        if (mapPanel != null) mapPanel.pause();
         if (offerMonitor != null) offerMonitor.stop();
         if (refreshController != null) refreshController.stop();
         super.onPause();
     }
 
     @Override protected void onDestroy() {
+        if (mapPanel != null) mapPanel.destroy();
         if(dashboardScope!=null)dashboardScope.close();
         if (refreshController != null) refreshController.destroy();
         handler.removeCallbacksAndMessages(null);
@@ -240,17 +249,26 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         return true;
     }
 
+    @Override public void showDashboard(DriverDashboardState state) {
+        super.showDashboard(state);
+        if (mapPanel != null) mapPanel.present(state);
+    }
+
+    @Override protected void onSaveInstanceState(Bundle out) {
+        super.onSaveInstanceState(out);
+        if (mapPanel != null) mapPanel.save(out);
+    }
+
+    @Override public void onLowMemory() {
+        super.onLowMemory();
+        if (mapPanel != null) mapPanel.lowMemory();
+    }
     protected View buildScreen() {
         page = new FrameLayout(this);
         page.setBackgroundColor(DriverThemeTokens.color(this, "#F7FAFF"));
 
-        shell = new LinearLayout(this);
-        shell.setOrientation(LinearLayout.VERTICAL);
-        page.addView(shell, new FrameLayout.LayoutParams(-1, -1));
-
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
-        shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -264,27 +282,29 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         content.addView(homeSections);
 
         buildStatusAndEmergency();
-        // Order menjadi prioritas visual. Panel hanya muncul bila ada
-        // order aktif/tawaran dan posisinya selalu tepat di bawah status.
         orderSections = new LinearLayout(this);
         orderSections.setOrientation(LinearLayout.VERTICAL);
         orderSections.setVisibility(View.GONE);
-        homeSections.addView(orderSections);
         buildOrderSections();
 
         buildWalletAndPerformance();
         buildDriverLocationMenu();
         buildSmartAssistant();
         buildDriverGrowth();
+        Switch foregroundOffers = DashboardOfferForeground.setting(this);
+        add(homeSections, foregroundOffers, 0, dp(8), 0, 0);
 
         bottomNavigationView = DriverBottomNavigation.build(
                 this, DriverBottomNavigation.ActiveItem.HOME);
-        shell.addView(bottomNavigationView, new LinearLayout.LayoutParams(-1, DriverBottomNavigation.height(this)));
+        content.addView(bottomNavigationView, 0, new LinearLayout.LayoutParams(-1, DriverBottomNavigation.height(this)));
+        mapPanel = new DashboardMapPanel(this, page, scroll, foregroundOffers, mapSavedState);
+        mapSavedState = null;
 
         loading = new ProgressBar(this);
         loading.setVisibility(View.GONE);
         FrameLayout.LayoutParams lp =
                 new FrameLayout.LayoutParams(dp(44), dp(44), Gravity.CENTER);
+        loading.setElevation(dp(8));
         page.addView(loading, lp);
 
         return page;

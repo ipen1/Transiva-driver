@@ -16,6 +16,8 @@ public class TransivaDriverApplication extends Application implements Applicatio
     private static volatile WeakReference<Activity> currentActivity = new WeakReference<>(null);
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
+    static boolean hasResumedActivity() { return currentActivity.get() != null; }
+
     public static Context getAppContext() {
         return appContext;
     }

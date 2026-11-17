@@ -159,14 +159,14 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
 
         if (communicationController != null) communicationController.onStop();
         LinearLayout quick = new LinearLayout(this); quick.setOrientation(LinearLayout.HORIZONTAL);
-        customerChatBtn = primary("Pelanggan");
+        customerChatBtn = premiumRideTrip() ? outline("Hubungi") : primary("Pelanggan");
         customerChatBtn.setContentDescription("Chat pelanggan");
         compactTripAction(customerChatBtn);
         communicationController = new TripCommunicationController(this, order, driverUsername, customerChatBtn);
         communicationController.onStart();
         customerChatBtn.setOnClickListener(v -> communicationController.openCustomerChat());
         quick.addView(customerChatBtn, new LinearLayout.LayoutParams(0, dp(48), 1));
-        Button nav = outline("Navigasi"); compactTripAction(nav); nav.setOnClickListener(v -> communicationController.openNavigation(!isDeliveryPhase(status()), lastDriverLat, lastDriverLng));
+        Button nav = premiumRideTrip() ? primary("Navigasi") : outline("Navigasi"); compactTripAction(nav); nav.setOnClickListener(v -> communicationController.openNavigation(!isDeliveryPhase(status()), lastDriverLat, lastDriverLng));
         LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(0, dp(48), 1); np.setMarginStart(dp(6)); quick.addView(nav, np);
         LinearLayout.LayoutParams qp = new LinearLayout.LayoutParams(-1,-2); qp.setMargins(0,dp(1),0,0); c.addView(quick, qp);
         if (isFoodOrder()) {
@@ -177,6 +177,20 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
             LinearLayout.LayoutParams merchantParams=new LinearLayout.LayoutParams(0,dp(48),1);
             merchantParams.setMarginStart(dp(6));
             quick.addView(merchantChat,merchantParams);
+        }
+        if (premiumRideTrip()) {
+            c.removeView(quick);
+            quick.removeView(nav);
+            quick.addView(nav, 0, new LinearLayout.LayoutParams(0, dp(48), 1));
+            LinearLayout.LayoutParams contact = (LinearLayout.LayoutParams) customerChatBtn.getLayoutParams();
+            contact.setMarginStart(dp(7));
+            customerChatBtn.setBackground(round("#F2F7FF", dp(16)));
+            nav.setBackground(DriverNavigationUi.roundRect(android.graphics.Color.rgb(0, 93, 222), dp(16)));
+            actionDock.addView(quick, 0, new LinearLayout.LayoutParams(-1, -2));
+            dockHint.setGravity(Gravity.CENTER);
+            dockHint.setPadding(0, dp(3), 0, dp(1));
+            header.removeView(more);
+            options.setVisibility(View.VISIBLE);
         }
         c.addView(options);
         add(c,0,0,0,dp(10));
@@ -190,8 +204,8 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         button.setElevation(0);
     }
     protected LinearLayout.LayoutParams slideLp(int top) {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(72));
-        p.setMargins(0, dp(top), 0, 0);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(premiumRideTrip() ? 48 : 72));
+        p.setMargins(0, dp(premiumRideTrip() ? Math.max(6, top) : top), 0, 0);
         return p;
     }
 
@@ -425,6 +439,18 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         distanceHint.setText("Status server belum dikenali penuh. Gunakan kontrol geser tiba penjemputan bila order memang sedang menuju penjemputan.");
             }finally{
                 if(!tripStateReady()&&dockHint!=null&&!NavigationTargetPolicy.terminal(order))dockHint.setText(tripConnectionLost ? "Menghubungkan ulang…" : "Menyinkronkan status perjalanan…");
+                if (premiumRideTrip() && ("taken".equals(st) || "on_delivery".equals(st))
+                        && (st.equals("taken") || DriverEcosystemFeatures.from(order).nextPendingWaypoint() == null)) {
+                    boolean pickup = st.equals("taken");
+                    NavigationTargetPolicy.Target target = new NavigationTargetPolicy.Target(pickup ? "pickup" : "delivery",
+                            pickup ? coord("pickup_lat", "user_lat") : coord("delivery_lat", "destination_lat"),
+                            pickup ? coord("pickup_lng", "user_lng") : coord("delivery_lng", "destination_lng"));
+                    float distance = TripArrivalLocation.distance(trustedArrivalFix(), target);
+                    showAction(pickup ? arrivedPickupBtn : arrivedDeliveryBtn,
+                            distance >= 0 && distance <= ARRIVE_RADIUS_METER);
+                    if (tripStateReady()) dockHint.setText(distance < 0 ? "Menunggu lokasi terverifikasi"
+                            : distance > ARRIVE_RADIUS_METER ? "Aktif dalam radius 100 m" : "Lokasi terverifikasi");
+                }
                 endActionUpdate();
             }
     }

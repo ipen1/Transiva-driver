@@ -70,6 +70,42 @@ import static org.maplibre.android.style.layers.Property.LINE_CAP_ROUND;
 import static org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND;
 public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
 
+    private TripMapChatPreview mapChatPreview;
+    private NavigationArrivalController arrival;
+    private View navigationDock;
+    private View guidanceHeader;
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (arrival != null) arrival.active(true);
+        if (mapChatPreview != null && !inPictureInPicture) mapChatPreview.start();
+    }
+
+    @Override protected void onPause() {
+        if (arrival != null) arrival.active(false);
+        if (mapChatPreview != null) mapChatPreview.stop();
+        super.onPause();
+    }
+
+    @Override protected void onDestroy() {
+        if (arrival != null) arrival.close();
+        super.onDestroy();
+    }
+
+    @Override public void onPictureInPictureModeChanged(boolean pip, android.content.res.Configuration config) {
+        super.onPictureInPictureModeChanged(pip, config);
+        if (navigationDock != null) navigationDock.setVisibility(pip ? View.GONE : View.VISIBLE);
+        if (arrival != null) arrival.active(!pip && activityResumed);
+        if (mapChatPreview != null) {
+            if (pip) mapChatPreview.stop();
+            else if (activityResumed) mapChatPreview.start();
+        }
+    }
+
+    @Override void onNavigationOrderSynced(JSONObject fresh) {
+        if (arrival != null) arrival.synced(fresh);
+    }
+
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -139,6 +175,11 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
 
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);if(isFinishing()||isDestroyed())return;setIntent(intent);readOrder();readIdentity();
+        if (arrival != null) arrival.resetOrder();
+        if (mapChatPreview != null && activityResumed && !inPictureInPicture) {
+            mapChatPreview.stop();
+            mapChatPreview.start();
+        }
         if(communicationController!=null)communicationController.onStop();
         communicationController=new NavigationCommunicationController(this,order,messageButton,callButton);
         if(activityStarted)communicationController.onStart();
@@ -203,41 +244,113 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         LinearLayout header=new LinearLayout(this);header.setOrientation(LinearLayout.VERTICAL);header.setPadding(dp(14),dp(10),dp(14),dp(10));
         header.setBackground(roundRect(DriverThemeTokens.surface(this),22));header.setElevation(dp(6));
         FrameLayout.LayoutParams headLp=new FrameLayout.LayoutParams(-1,-2,Gravity.TOP);headLp.setMargins(dp(12),dp(12),dp(12),0);
-        android.widget.ScrollView headerScroll=new android.widget.ScrollView(this);headerScroll.setTag("navigation_header_container");headerScroll.setVerticalScrollBarEnabled(false);headerScroll.addView(header,new android.widget.ScrollView.LayoutParams(-1,-2));page.addView(headerScroll,headLp);
+        android.widget.ScrollView headerScroll=new android.widget.ScrollView(this);headerScroll.setTag("navigation_header_container");headerScroll.setVerticalScrollBarEnabled(false);headerScroll.setElevation(dp(6));guidanceHeader=headerScroll;headerScroll.addView(header,new android.widget.ScrollView.LayoutParams(-1,-2));page.addView(headerScroll,headLp);
         page.addOnLayoutChangeListener((v,l,t,rr,b,ol,ot,orr,ob)->{int desired=header.getMeasuredHeight(),limit=Math.max(dp(100),page.getHeight()-dp(130));int height=Math.min(desired,limit);FrameLayout.LayoutParams hp=(FrameLayout.LayoutParams)headerScroll.getLayoutParams();if(height>0&&hp.height!=height){hp.height=height;headerScroll.setLayoutParams(hp);}});
         LinearLayout titleRow=new LinearLayout(this);titleRow.setGravity(Gravity.CENTER_VERTICAL);header.addView(titleRow,new LinearLayout.LayoutParams(-1,-2));
         backButton=new TextView(this);backButton.setText("‹");backButton.setTextSize(32);backButton.setGravity(Gravity.CENTER);backButton.setTextColor(DriverThemeTokens.textPrimary(this));backButton.setContentDescription("Kembali dari navigasi");backButton.setOnClickListener(v->finish());titleRow.addView(backButton,new LinearLayout.LayoutParams(dp(48),dp(48)));
         routeBadge=new TextView(this);routeBadge.setText("Menyiapkan rute…");routeBadge.setTextColor(DriverThemeTokens.textPrimary(this));routeBadge.setTextSize(14);routeBadge.setTypeface(Typeface.DEFAULT,Typeface.BOLD);routeBadge.setMaxLines(3);routeBadge.setPadding(dp(6),0,0,0);titleRow.addView(routeBadge,new LinearLayout.LayoutParams(0,-2,1));
-        instructionBadge=new TextView(this);instructionBadge.setText("↑ Ikuti rute");instructionBadge.setTextColor(DriverThemeTokens.textPrimary(this));instructionBadge.setTextSize(15);instructionBadge.setMaxLines(3);instructionBadge.setTypeface(Typeface.DEFAULT,Typeface.BOLD);instructionBadge.setPadding(dp(12),dp(10),dp(12),dp(10));instructionBadge.setBackground(roundRect(DriverThemeTokens.surfaceAlt(this),14));LinearLayout.LayoutParams instructionLp=new LinearLayout.LayoutParams(-1,-2);instructionLp.topMargin=dp(6);header.addView(instructionBadge,instructionLp);
-        // Options are inserted into this measured column, avoiding absolute vertical offsets.
+        instructionBadge=new TextView(this);instructionBadge.setText("↑ Ikuti rute");instructionBadge.setTextColor(Color.WHITE);instructionBadge.setTextSize(21);instructionBadge.setMaxLines(3);instructionBadge.setTypeface(Typeface.DEFAULT,Typeface.BOLD);instructionBadge.setPadding(dp(12),dp(10),dp(12),dp(10));instructionBadge.setBackground(roundRect(Color.rgb(0, 93, 222),14));LinearLayout.LayoutParams instructionLp=new LinearLayout.LayoutParams(-1,-2);instructionLp.topMargin=dp(6);header.addView(instructionBadge,instructionLp);
         header.setTag("navigation_header");
-        LinearLayout bottomActions=new LinearLayout(this);bottomActions.setGravity(Gravity.CENTER_VERTICAL);bottomActions.setPadding(dp(8),dp(8),dp(8),dp(8));bottomActions.setBackground(roundRect(DriverThemeTokens.surface(this),22));bottomActions.setElevation(dp(6));
-        speedBadge=new TextView(this);speedBadge.setText("0 km/j\nRata-rata 0 km/j");speedBadge.setTextColor(DriverThemeTokens.textPrimary(this));speedBadge.setTextSize(12);speedBadge.setGravity(Gravity.CENTER);speedBadge.setMaxLines(3);bottomActions.addView(speedBadge,new LinearLayout.LayoutParams(0,-2,1.15f));
-        messageButton=new TextView(this);LinearLayout.LayoutParams msgLp=new LinearLayout.LayoutParams(0,dp(48),1);msgLp.leftMargin=dp(6);bottomActions.addView(messageButton,msgLp);
-        callButton=new TextView(this);LinearLayout.LayoutParams callLp=new LinearLayout.LayoutParams(0,dp(48),1);callLp.leftMargin=dp(6);bottomActions.addView(callButton,callLp);
-        FrameLayout.LayoutParams bottomLp=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);bottomLp.setMargins(dp(12),0,dp(12),dp(22));page.addView(bottomActions,bottomLp);
-        communicationController=new NavigationCommunicationController(this,order,messageButton,callButton);
-        recenterButton=new TextView(this);recenterButton.setText("◎  Ikuti");recenterButton.setTextSize(14);recenterButton.setTypeface(Typeface.DEFAULT,Typeface.BOLD);recenterButton.setGravity(Gravity.CENTER);
-        recenterButton.setTextColor(DriverThemeTokens.onAccent(this));recenterButton.setBackground(roundRect(DriverThemeTokens.color(this,"#146DE8"),24));recenterButton.setElevation(dp(5));recenterButton.setContentDescription("Kembali mengikuti posisi kendaraan");
-        FrameLayout.LayoutParams followLp=new FrameLayout.LayoutParams(dp(112),dp(48),Gravity.BOTTOM|Gravity.RIGHT);followLp.setMargins(dp(12),0,dp(12),dp(108));page.addView(recenterButton,followLp);
-        recenterButton.setVisibility(cameraController!=null&&!cameraController.following()?View.VISIBLE:View.GONE);
-        bottomActions.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,orr,ob)->{FrameLayout.LayoutParams fp=(FrameLayout.LayoutParams)recenterButton.getLayoutParams();int margin=bottomActions.getHeight()+dp(34);if(fp.bottomMargin!=margin){fp.bottomMargin=margin;recenterButton.setLayoutParams(fp);}});
-        recenterButton.setOnClickListener(v->{if(cameraController==null||map==null)return;map.cancelTransitions();cameraController.follow(true);recenterButton.setVisibility(View.GONE);updateNativePosition(true);});
+        TextView more = new TextView(this);
+        more.setText("⋮");
+        more.setTag("navigation_options");
+        more.setContentDescription("Opsi navigasi");
+        more.setGravity(Gravity.CENTER);
+        more.setTextSize(24);
+        more.setTextColor(DriverThemeTokens.textPrimary(this));
+        titleRow.addView(more, new LinearLayout.LayoutParams(dp(48), dp(48)));
+
+        LinearLayout bottomActions = new LinearLayout(this);
+        navigationDock = bottomActions;
+        bottomActions.setOrientation(LinearLayout.VERTICAL);
+        bottomActions.setPadding(dp(8), dp(8), dp(8), dp(7));
+        bottomActions.setBackground(roundRect(DriverThemeTokens.surface(this), 22));
+        bottomActions.setElevation(dp(7));
+        LinearLayout communication = new LinearLayout(this);
+        bottomActions.addView(communication, new LinearLayout.LayoutParams(-1, -2));
+        messageButton = new TextView(this);
+        communication.addView(messageButton, new LinearLayout.LayoutParams(0, dp(48), 1));
+        callButton = new TextView(this);
+        LinearLayout.LayoutParams callLp = new LinearLayout.LayoutParams(0, dp(48), 1);
+        callLp.setMarginStart(dp(7));
+        communication.addView(callButton, callLp);
+        if (!NavigationTargetPolicy.id(order).isEmpty()) arrival = new NavigationArrivalController(this, bottomActions);
+        FrameLayout.LayoutParams bottomLp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
+        bottomLp.setMargins(dp(10), 0, dp(10), dp(20));
+        page.addView(bottomActions, bottomLp);
+        communicationController = new NavigationCommunicationController(this, order, messageButton, callButton);
+
+        speedBadge = new TextView(this);
+        speedBadge.setText("0 km/j");
+        speedBadge.setTextColor(DriverThemeTokens.textPrimary(this));
+        speedBadge.setTextSize(12);
+        speedBadge.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        speedBadge.setGravity(Gravity.CENTER);
+        speedBadge.setPadding(dp(10), dp(6), dp(10), dp(6));
+        speedBadge.setBackground(roundRect(DriverThemeTokens.surface(this), 22));
+        speedBadge.setElevation(dp(4));
+        FrameLayout.LayoutParams speedLp = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.LEFT);
+        speedLp.leftMargin = dp(10);
+        page.addView(speedBadge, speedLp);
+
+        recenterButton = new TextView(this);
+        recenterButton.setText("◎  Ikuti");
+        recenterButton.setTextSize(14);
+        recenterButton.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        recenterButton.setGravity(Gravity.CENTER);
+        recenterButton.setTextColor(DriverThemeTokens.textPrimary(this));
+        recenterButton.setBackground(roundRect(DriverThemeTokens.surface(this), 24));
+        recenterButton.setElevation(dp(5));
+        recenterButton.setContentDescription("Kembali mengikuti posisi kendaraan");
+        FrameLayout.LayoutParams followLp = new FrameLayout.LayoutParams(dp(88), dp(48), Gravity.BOTTOM | Gravity.RIGHT);
+        followLp.rightMargin = dp(10);
+        page.addView(recenterButton, followLp);
+        recenterButton.setVisibility(cameraController != null && !cameraController.following() ? View.VISIBLE : View.GONE);
+        bottomActions.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,orr,ob) -> {
+            int margin = page.getHeight() - t + dp(8);
+            updateBottomMargin(recenterButton, margin);
+            updateBottomMargin(speedBadge, margin);
+            if (fallbackButton != null) updateBottomMargin(fallbackButton, margin + dp(51));
+        });
+        recenterButton.setOnClickListener(v -> {
+            if (cameraController == null || map == null) return;
+            map.cancelTransitions();
+            cameraController.follow(true);
+            recenterButton.setVisibility(View.GONE);
+            updateNativePosition(true);
+        });
 
         TextView attribution = new TextView(this);
         attribution.setText("© OpenStreetMap contributors");
-        attribution.setTextColor(DriverThemeTokens.color(this, "#7A475569"));
+        attribution.setTextColor(DriverThemeTokens.textSecondary(this));
+        attribution.setBackground(roundRect(DriverThemeTokens.surface(this), 5));
+        attribution.setPadding(dp(4), 0, dp(4), 0);
         attribution.setTextSize(8);
-        FrameLayout.LayoutParams attrLp = new FrameLayout.LayoutParams(-2, -2);
-        attrLp.gravity = Gravity.BOTTOM | Gravity.RIGHT;
+        FrameLayout.LayoutParams attrLp = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.RIGHT);
         attrLp.rightMargin = dp(8);
-        attrLp.bottomMargin = dp(6);
+        attrLp.bottomMargin = dp(5);
         page.addView(attribution, attrLp);
+
+        mapChatPreview = new TripMapChatPreview(this, page, () -> order, () -> {
+            if (map == null || !styleReady || inPictureInPicture) return null;
+            double lat = NavigationTargetPolicy.coord(order, "pickup_lat", "user_lat");
+            double lng = NavigationTargetPolicy.coord(order, "pickup_lng", "user_lng");
+            return NavigationTargetPolicy.valid(lat, lng)
+                    ? map.getProjection().toScreenLocation(new org.maplibre.android.geometry.LatLng(lat, lng)) : null;
+        }, () -> guidanceHeader.getBottom(), () -> bottomActions.getTop() - dp(49),
+                () -> { if (communicationController != null) communicationController.openChat(); });
 
         setContentView(page);
         DriverAppSettings.apply(this);
     }
 
+
+    private void updateBottomMargin(View view, int margin) {
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) view.getLayoutParams();
+        if (params.bottomMargin == margin) return;
+        params.bottomMargin = margin;
+        view.setLayoutParams(params);
+    }
 
     protected void initNativeMap(Bundle state) {
         if (mapInitAttempted || isFinishing() || navigationRoot == null) return;
@@ -298,7 +411,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
             fallbackButton.setOnClickListener(v -> openExternalNavigation());
             FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-2, dp(48));
             lp.gravity = Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM;
-            lp.bottomMargin = dp(92);
+            lp.bottomMargin = navigationDock == null ? dp(92) : navigationRoot.getHeight() - navigationDock.getTop() + dp(59);
             navigationRoot.addView(fallbackButton, lp);
         }
         if (fallbackButton != null) fallbackButton.setVisibility(View.VISIBLE);
@@ -399,6 +512,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
 
     protected void handleNavigationLocationFix(Location raw, SmoothLocationEngine.Fix fix) {
         if (fix == null || fix.location == null) return;
+        if (arrival != null) arrival.fix(raw);
         Location l = fix.location;
         if(lastFixRealtimeMs>0&&SystemClock.elapsedRealtime()-lastFixRealtimeMs>12000){
             lastMatchedProgressMeters=Double.NaN;lastMatchedRawLat=Double.NaN;lastMatchedRawLng=Double.NaN;lastMatchRealtimeMs=0;

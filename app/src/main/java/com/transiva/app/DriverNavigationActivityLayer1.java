@@ -470,7 +470,7 @@ abstract class DriverNavigationActivityLayer1 extends Activity {
         if (communicationController != null) communicationController.onPictureInPictureModeChanged(isInPictureInPictureMode);
         if (instructionBadge != null) {
             instructionBadge.setVisibility(isInPictureInPictureMode ? View.GONE : View.VISIBLE);
-            instructionBadge.setTextSize(13);
+            instructionBadge.setTextSize(21);
         }
 
         if (isInPictureInPictureMode) {

@@ -91,8 +91,10 @@ abstract class DriverNavigationActivityLayer2 extends DriverNavigationActivityLa
         double cameraBearing=cameraController==null?heading:cameraController.update(map,lat,lng,heading,currentSpeedKmh,pipController!=null&&pipController.isActive(),immediate);
         smoothMarkerBearing=heading;
         if(vehicleController!=null)vehicleController.update(lat,lng,heading-cameraBearing);
-        long now=SystemClock.elapsedRealtime();if(speedBadge!=null&&now-lastSpeedUiAt>=400){lastSpeedUiAt=now;speedBadge.setText(String.format(Locale.US,"%.0f km/j\nRata-rata %.0f km/j",currentSpeedKmh,averageSpeedKmh));}
+        long now=SystemClock.elapsedRealtime();if(speedBadge!=null&&now-lastSpeedUiAt>=400){lastSpeedUiAt=now;speedBadge.setText(String.format(Locale.US,"%.0f km/j",currentSpeedKmh));}
     }
+
+    void onNavigationOrderSynced(JSONObject fresh) {}
 
     protected void updateSpeed(Location l) {
         double instant = 0d;

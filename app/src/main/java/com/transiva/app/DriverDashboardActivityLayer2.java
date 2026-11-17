@@ -201,8 +201,6 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         DriverMessageUnreadRepository.retainOnlyActiveOrders(this, activeMessageOrders);
         DriverBottomNavigation.refreshUnread(this, bottomNavigationView);
 
-        // Adaptive mode: keep active trip and incoming offers above secondary widgets.
-        // Wallet is declared by the concrete dashboard, not this parent layer.
         if (this instanceof DriverDashboardActivity) {
             LinearLayout dashboardWallet = ((DriverDashboardActivity) this).wallet;
             if (dashboardWallet != null) {
@@ -218,8 +216,6 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         if (state.activeOrders == null || state.activeOrders.isEmpty()) {
             session.remove("current_order_id");
             session.remove("current_order_source");
-            // Tidak tampilkan placeholder di panel prioritas. Bila ada tawaran,
-            // tawaran langsung menjadi kartu pertama yang terlihat.
         } else {
             java.util.List<DriverOrder> activeOrders = new java.util.ArrayList<>(state.activeOrders);
             DriverOrder guided = DriverActiveOrderSummary.guided(this, activeOrders);
@@ -244,11 +240,7 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
 
         offerBox.removeAllViews();
         if (offerCountdownController != null) offerCountdownController.beginSnapshot();
-        if (!state.online) {
-            // Panel prioritas tetap ringkas; status offline sudah terlihat di atas.
-        } else if (state.offers.isEmpty()) {
-            // Tidak tampilkan placeholder agar order aktif tetap menjadi fokus.
-        } else {
+        if (state.online && !state.offers.isEmpty()) {
             Set<String> activeOfferKeys = new HashSet<>();
             boolean hasFreshOffer = false;
             for (DriverOrder offer : state.offers) {
@@ -261,6 +253,7 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
                 activeOfferKeys.add(key);
                 offerCountdownController.syncDeadline(offer);
                 View card = orderCard(offer);
+                card.setTag(key);
                 offerBox.addView(card);
                 DriverOrderTelemetry.watchVisibility(card, offer, () -> offerCountdownController.remainingMillis(key));
             }
@@ -647,6 +640,7 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
             add(card, capacityNotice, 0, dp(12), 0, 0);
         } else {
             String key = offerCountdownController.key(order);
+            action.setTag(DashboardMapPanel.ACCEPT_ACTION);
             offerCountdownController.bindButton(key, action);
             action.setOnClickListener(v -> {
                 long remaining = offerCountdownController.remainingMillis(key);

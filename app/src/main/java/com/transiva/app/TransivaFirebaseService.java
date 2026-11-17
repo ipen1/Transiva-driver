@@ -250,6 +250,7 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
             }
         }
 
+        if (isNewIncomingOrder(type, data)) DashboardOfferForeground.maybeOpen(this, orderId, data);
         publishBubbleEvent(type, title, body, orderId, roomId, data);
 
         showNotification(
@@ -355,6 +356,10 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
                 data
         );
 
+        if (newIncomingOrder && data != null) {
+            intent.putExtra("order_db_id", first(data.get("order_db_id"), ""));
+            intent.putExtra("dashboard_offer_token", first(data.get("action_token"), ""));
+        }
         intent.addFlags(
                 Intent.FLAG_ACTIVITY_CLEAR_TOP
                         | Intent.FLAG_ACTIVITY_SINGLE_TOP

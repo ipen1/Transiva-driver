@@ -83,7 +83,7 @@ final class NavigationLiveRouteController implements AutoCloseable {
         });
         orderSync=new NavigationOrderSync(h,new NavigationOrderSync.Callback(){
             public org.json.JSONObject currentOrder(){return host.order;}
-            public void updated(org.json.JSONObject fresh){applyOrderState(fresh,true);}
+            public void updated(org.json.JSONObject fresh){applyOrderState(fresh,true);host.onNavigationOrderSynced(fresh);}
         });
         options=new NavigationOptionsController(h,h.navigationRoot,new NavigationOptionsController.Listener(){
             public void profile(String value){if(!closed&&coordinator.valid()&&!value.equals(profile)){profile=value;targetChanged();}}
@@ -227,6 +227,7 @@ final class NavigationLiveRouteController implements AutoCloseable {
         refresh.hold(SystemClock.elapsedRealtime(),x.optLong("manual_until")-System.currentTimeMillis());
         if(result.roadPolicy<2||x.optBoolean("needs_route")||System.currentTimeMillis()-x.optLong("saved")>120000)recovery.require(SystemClock.elapsedRealtime());
     }
+    void refreshOrderState() { orderSync.refresh(); }
     private void adoptCheckpointOrder(){
         org.json.JSONObject x=NavigationSessionStore.read(host);if(x==null)return;
         try{org.json.JSONObject fresh=new org.json.JSONObject(x.optString("order"));if(NavigationTargetPolicy.same(host.order,fresh))applyOrderState(fresh,false);}

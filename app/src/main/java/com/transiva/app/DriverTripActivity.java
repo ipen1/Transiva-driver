@@ -63,6 +63,14 @@ import java.util.Locale;
 import android.util.Base64;
 public class DriverTripActivity extends DriverTripActivityLayer2 {
     private LinearLayout retainedMapCard;
+    private FrameLayout premiumMap;
+    private LinearLayout itinerary;
+    private TextView pickupLine, deliveryLine;
+    private TripMapChatPreview chatPreview;
+    private android.app.AlertDialog detailsDialog;
+    private int premiumTop = -1, premiumBottom = -1;
+    private boolean mapFirstRide;
+    @Override protected boolean premiumRideTrip() { return mapFirstRide; }
     private View retainedMapSlot;
     private NavigationFrameTelemetry frameTelemetry;
     private boolean realtimeTripRunning=false,realtimeBusy;
@@ -99,6 +107,8 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         orderSignal = new DriverOrderSyncSignal(this, () -> order, this::refreshTripRealtime);
         loadOrder();
         if(order!=null)try{order.put("source",isPickupOrder()?"pickup_orders":"orders");if(!NavigationTargetPolicy.terminal(order)){session.put("current_order_source",isPickupOrder()?"pickup_orders":"orders");session.put("current_order_id",orderId());}}catch(org.json.JSONException e){NavigationDiagnostics.error(this,"TRIP_SOURCE_FAILED",e);}
+        mapFirstRide = order != null && !isPickupOrder()
+                && (isRideService(order.optString("order_type")) || isRideService(order.optString("service_name")));
         buildBase();
         if(order == null){ renderEmpty();
             renderEcosystemFeatures(); return; }
@@ -115,8 +125,8 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     }
     @Override protected void onStart(){super.onStart();try{if(mapView!=null)mapView.onStart();}catch(RuntimeException e){NavigationDiagnostics.error(this,"TRIP_MAP_START_FAILED",e);}}
     @Override protected void onStop(){try{if(mapView!=null)mapView.onStop();}catch(RuntimeException e){NavigationDiagnostics.error(this,"TRIP_MAP_STOP_FAILED",e);}super.onStop();}
-    @Override protected void onResume(){ super.onResume(); NavigationDisplayPolicy.prefer(this,NavigationCompatibilityProfile.resolve(this,"auto").visualFrameMs); if(frameTelemetry==null)frameTelemetry=new NavigationFrameTelemetry(this,"trip");frameTelemetry.start(); if(tripLiveRoutes!=null)tripLiveRoutes.active(true); if(tripVehicleMotion!=null)tripVehicleMotion.active(true); realtimeTripRunning=true;if(orderSignal!=null)orderSignal.active(true);tripStateFresh=false;realtimeSignature="";refreshButtons(); mainHandler.removeCallbacks(realtimeTripPoll); mainHandler.post(realtimeTripPoll); try{ if(mapView!=null) mapView.onResume(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_RESUME_FAILED",e); } if(order != null) startLocationWatch(); if(communicationController!=null) communicationController.onStart(); }
-    @Override protected void onPause(){ if(orderSignal!=null)orderSignal.active(false); if(frameTelemetry!=null)frameTelemetry.close(); if(tripLiveRoutes!=null)tripLiveRoutes.active(false); if(tripVehicleMotion!=null)tripVehicleMotion.active(false); tripStateFresh=false;tripSliding=false;tripTouchingMap=false;realtimeGeneration++;realtimeBusy=false;if(realtimeClient!=null)realtimeClient.shutdown(); destinationExtension.close(); realtimeTripRunning=false; mainHandler.removeCallbacks(realtimeTripPoll); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView!=null) mapView.onPause(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_PAUSE_FAILED",e); } super.onPause(); }
+    @Override protected void onResume(){ super.onResume(); NavigationDisplayPolicy.prefer(this,NavigationCompatibilityProfile.resolve(this,"auto").visualFrameMs); if(frameTelemetry==null)frameTelemetry=new NavigationFrameTelemetry(this,"trip");frameTelemetry.start(); if(tripLiveRoutes!=null)tripLiveRoutes.active(true); if(tripVehicleMotion!=null)tripVehicleMotion.active(true); realtimeTripRunning=true;if(orderSignal!=null)orderSignal.active(true);tripStateFresh=false;realtimeSignature="";refreshButtons(); mainHandler.removeCallbacks(realtimeTripPoll); mainHandler.post(realtimeTripPoll); try{ if(mapView!=null) mapView.onResume(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_RESUME_FAILED",e); } if(order != null) startLocationWatch(); if(communicationController!=null) communicationController.onStart(); if(chatPreview!=null && itinerary.isShown())chatPreview.start(); }
+    @Override protected void onPause(){ if(chatPreview!=null)chatPreview.stop(); if(orderSignal!=null)orderSignal.active(false); if(frameTelemetry!=null)frameTelemetry.close(); if(tripLiveRoutes!=null)tripLiveRoutes.active(false); if(tripVehicleMotion!=null)tripVehicleMotion.active(false); tripStateFresh=false;tripSliding=false;tripTouchingMap=false;realtimeGeneration++;realtimeBusy=false;if(realtimeClient!=null)realtimeClient.shutdown(); destinationExtension.close(); realtimeTripRunning=false; mainHandler.removeCallbacks(realtimeTripPoll); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView!=null) mapView.onPause(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_PAUSE_FAILED",e); } super.onPause(); }
     @Override protected void onDestroy(){ if(tripVehicleMotion!=null)tripVehicleMotion.close(); if(tripLiveRoutes!=null)tripLiveRoutes.close(); realtimeGeneration++;if(realtimeClient!=null)realtimeClient.shutdown(); tripRouteGeneration++; if(tripRequestOwner!=null)tripRequestOwner.close();if(tripRouteScope!=null)tripRouteScope.close(); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView != null) mapView.onDestroy(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_DESTROY_FAILED",e); } super.onDestroy(); }
     @Override public void onLowMemory(){ super.onLowMemory(); try{ if(mapView!=null) mapView.onLowMemory(); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } }
 
@@ -268,7 +278,14 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             saveActiveOrder();
         }
     }
+    static boolean isRideService(String raw) {
+        String name = raw.toLowerCase(Locale.US).replaceAll("[^a-z]", "");
+        return java.util.Arrays.asList("transride", "transbike", "transcar", "ride", "bike", "car")
+                .stream().anyMatch(type -> name.equals(type) || (type.startsWith("trans") && name.startsWith(type)));
+    }
+
     protected void buildBase(){
+        if (premiumRideTrip()) { buildPremiumBase(); return; }
         FrameLayout page = new FrameLayout(this); page.setBackgroundColor(DriverThemeTokens.color(this, "#F3F8FF"));
         ScrollView scroll = new NavigationTripScrollView(this); FrameLayout.LayoutParams scrollLp=new FrameLayout.LayoutParams(-1,-1);scrollLp.bottomMargin=dp(112);page.addView(scroll,scrollLp);
         root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(14), dp(12), dp(14), dp(16));
@@ -281,7 +298,65 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         setContentView(page);
         DriverAppSettings.apply(this);
     }
+    private void buildPremiumBase() {
+        PremiumRideTripLayout layout = new PremiumRideTripLayout(this);
+        premiumMap = layout.premiumMap;
+        itinerary = layout.itinerary;
+        actionDock = layout.actionDock;
+        pickupLine = layout.pickupLine;
+        deliveryLine = layout.deliveryLine;
+
+        root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(12), dp(8), dp(12), dp(12));
+        progressBar = new ProgressBar(this);
+        progressBar.setElevation(dp(8));
+        progressBar.setVisibility(View.GONE);
+        premiumMap.addView(progressBar, new FrameLayout.LayoutParams(dp(42), dp(42), Gravity.CENTER));
+        chatPreview = new TripMapChatPreview(this, premiumMap, () -> order, () -> {
+            if (googleMap == null || pickupMarker == null || !itinerary.isShown() || detailsDialog != null) return null;
+            android.graphics.Point pt = googleMap.getProjection().toScreenLocation(pickupMarker.getPosition());
+            return new android.graphics.PointF(pt.x, pt.y);
+        }, () -> itinerary.getBottom(), () -> actionDock.getTop() - dp(52),
+                () -> { if (communicationController != null) communicationController.openCustomerChat(); });
+        setContentView(premiumMap);
+        DriverAppSettings.apply(this);
+    }
+
+    void showPremiumDetails() {
+        if (detailsDialog != null || root.getParent() != null) return;
+        ScrollView content = new ScrollView(this);
+        content.addView(root, new ScrollView.LayoutParams(-1, -2));
+        detailsDialog = PremiumDialogs.builder(this).setTitle("Detail perjalanan")
+                .setView(content).setPositiveButton("Tutup", null).create();
+        detailsDialog.setOnDismissListener(dialog -> {
+            content.removeView(root);
+            detailsDialog = null;
+        });
+        DriverAppSettings.applyToView(this, content);
+        DriverAppSettings.applyToView(this, content);
+        detailsDialog.show();
+    }
+
+    void updatePremiumMapInsets() {
+        if (googleMap == null || itinerary == null || actionDock.getTop() <= 0) return;
+        int topInset = itinerary.getBottom() + dp(4);
+        int bottomInset = premiumMap.getHeight() - actionDock.getTop() + dp(5);
+        if (topInset + bottomInset + dp(46) >= premiumMap.getHeight()) return;
+        if (topInset == premiumTop && bottomInset == premiumBottom) return;
+        premiumTop = topInset;
+        premiumBottom = bottomInset;
+        googleMap.setPadding(dp(5), topInset, dp(5), bottomInset);
+        fitNativeOverview();
+    }
+
     protected void renderEmpty(){
+        if (premiumMap != null) {
+            if (detailsDialog != null) detailsDialog.dismiss();
+            if (chatPreview != null) chatPreview.stop();
+            premiumMap.removeAllViews();
+            premiumMap.addView(root, new FrameLayout.LayoutParams(-1, -2));
+        }
         root.removeAllViews(); top("Driver Trip", "");
         LinearLayout c = card(); c.setPadding(dp(18), dp(16), dp(18), dp(16));
         c.addView(text(order == null ? "Order tidak ditemukan." : "Perjalanan telah berakhir.", 16, "#64748B", false));
@@ -293,7 +368,8 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);
         retainedMapSlot=null;
         try {
-        root.removeAllViews(); top("Driver Trip", "");
+        root.removeAllViews();
+        if (!premiumRideTrip()) top("Driver Trip", "");
         addHeaderCard();
         JSONObject stopPolicy=order.optJSONObject("stop_pricing");
         if(stopPolicy==null){try{stopPolicy=new JSONObject(order.optString("note","{}")).optJSONObject("stop_pricing");}catch(Exception ignored){}}
@@ -331,6 +407,11 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             LinearLayout fresh=root;root=displayRoot;
             TripMapContent.apply(displayRoot,fresh,retainedMapCard,retainedMapSlot);
         }
+        if (premiumRideTrip()) {
+            if (detailsDialog != null) DriverAppSettings.applyToView(this, root);
+            pickupLine.setText(pickupAddress());
+            deliveryLine.setText(deliveryAddress());
+        }
         if(mapReady){initNativeTripMarkers();applyPendingRoute();updateMap();}
     }
     protected void top(String title, String sub){
@@ -354,6 +435,18 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         double orderVoucher = optDouble("total_discount", "voucher_discount"); if(orderVoucher > 0){ TextView subsidy=text("🏷 Customer mendapat potongan " + rupiah(orderVoucher) + " • biaya ditanggung Transiva • pendapatan Anda tetap dihitung dari ongkir normal.",12,"#047857",true); subsidy.setPadding(dp(12),dp(10),dp(12),dp(10)); h.addView(subsidy); }
         distanceInfo = text("📡 Mengukur jarak driver...", 13, "#64748B", false); distanceInfo.setPadding(0, dp(10),0,0); h.addView(distanceInfo);
         tripLiveSummary=text("Menyiapkan rute jalan…",13,"#0878F9",true);tripLiveSummary.setPadding(0,dp(6),0,dp(4));h.addView(tripLiveSummary);
+        if (premiumRideTrip()) {
+            h.removeView(tripLiveSummary);
+            if (itinerary.getChildCount() > 2) itinerary.removeViewAt(2);
+            tripLiveSummary.setMaxLines(2);
+            tripLiveSummary.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            tripLiveSummary.setTextColor(DriverThemeTokens.textPrimary(this));
+            tripLiveSummary.setPadding(dp(8), dp(5), dp(8), dp(5));
+            tripLiveSummary.setBackground(round("#F2F7FF", dp(12)));
+            LinearLayout.LayoutParams summary = new LinearLayout.LayoutParams(-1, -2);
+            summary.topMargin = dp(4);
+            itinerary.addView(tripLiveSummary, summary);
+        }
         h.addView(text("Garis berwarna: panduan aktif • abu-abu: rute pesanan",11,"#64748B",false));
         distanceHint = text("", 13, "#059669", true); distanceHint.setPadding(dp(12), dp(9), dp(12), dp(9)); distanceHint.setBackground(stroke("#ECFDF5", "#86EFAC", dp(14), 1)); LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-1,-2); hp.setMargins(0, dp(8),0,0); h.addView(distanceHint, hp);
         TextView pay = text(order != null && "qris".equalsIgnoreCase(order.optString("payment_method")) ? "QRIS lunas · Rp0 ditagih"
@@ -376,9 +469,13 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         add(c,0,0,0,dp(12));
     }
     protected void addMapCard(){
+        if (premiumRideTrip() && retainedMapCard != null) return;
         if(retainedMapCard!=null){retainedMapSlot=new View(this);add(retainedMapSlot,0,0,0,0);return;}
         LinearLayout c = card();retainedMapCard=c; c.setPadding(dp(9), dp(8), dp(9), dp(9));
-        c.addView(text("Peta perjalanan", 15, "#0B3A78", true));
+        if (premiumRideTrip()) {
+            c.setPadding(0, 0, 0, 0);
+            c.setElevation(0);
+        } else c.addView(text("Peta perjalanan", 15, "#0B3A78", true));
         
         mapView = new MapView(this);
         mapView.onCreate(null);
@@ -399,6 +496,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
                 googleMap.setOnCameraMoveStartedListener(reason->{if(reason==com.google.android.gms.maps.GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE){tripCameraFollowing=false;tripCameraBrowsing=true;if(tripFollowButton!=null)tripFollowButton.setVisibility(View.VISIBLE);}});
             } catch (Throwable ignored) { TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
             if(tripSavedCamera!=null){googleMap.moveCamera(CameraUpdateFactory.newCameraPosition(tripSavedCamera));tripSavedCamera=null;}
+            if (premiumRideTrip()) updatePremiumMapInsets();
             initNativeTripMarkers();
             applyPendingRoute();
             updateMap();
@@ -409,14 +507,30 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         tripFollowButton=text("◎  Ikuti",14,"#FFFFFF",true);tripFollowButton.setGravity(Gravity.CENTER);tripFollowButton.setBackground(round("#146DE8",dp(24)));tripFollowButton.setElevation(dp(4));tripFollowButton.setContentDescription("Ikuti posisi kendaraan pada peta perjalanan");
         FrameLayout.LayoutParams flp=new FrameLayout.LayoutParams(dp(86),dp(48),Gravity.BOTTOM|Gravity.RIGHT);flp.setMargins(dp(10),dp(10),dp(10),dp(10));mapFrame.addView(tripFollowButton,flp);tripFollowButton.setVisibility(tripCameraFollowing?View.GONE:View.VISIBLE);
         tripFollowButton.setOnClickListener(v->{tripCameraFollowing=true;tripCameraBrowsing=false;tripFollowButton.setVisibility(View.GONE);if(googleMap!=null)googleMap.stopAnimation();if(tripVehicleMotion!=null)tripVehicleMotion.recenter();});
-        c.addView(mapFrame, mp);if(realtimeTripRunning){mapView.onStart();mapView.onResume();} add(c,0,0,0,dp(12));
+        if (premiumRideTrip()) {
+            mp = new LinearLayout.LayoutParams(-1, -1);
+            tripFollowButton.setText("◎");
+            tripFollowButton.setTextColor(DriverThemeTokens.textPrimary(this));
+            tripFollowButton.setBackground(round("#FFFFFF", dp(24)));
+            flp.width = dp(48);
+            actionDock.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+                int margin = premiumMap.getHeight() - t + dp(8);
+                if (flp.bottomMargin != margin) {
+                    flp.bottomMargin = margin;
+                    tripFollowButton.setLayoutParams(flp);
+                }
+            });
+            premiumMap.addView(c, 0, new FrameLayout.LayoutParams(-1, -1));
+        } else add(c,0,0,0,dp(12));
+        c.addView(mapFrame, mp);
+        if(realtimeTripRunning){mapView.onStart();mapView.onResume();}
     }
 
     protected void initNativeTripMarkers(){
         if(googleMap==null) return;
         double pLat=coord("pickup_lat","user_lat"), pLng=coord("pickup_lng","user_lng");
         double dLat=coord("delivery_lat","destination_lat"), dLng=coord("delivery_lng","destination_lng");
-        if(valid(pLat,pLng)){LatLng position=new LatLng(pLat,pLng);if(pickupMarker==null)pickupMarker=googleMap.addMarker(new MarkerOptions().position(position).title("Pickup").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)));else pickupMarker.setPosition(position);}else if(pickupMarker!=null){pickupMarker.remove();pickupMarker=null;}
+        if(valid(pLat,pLng)){LatLng position=new LatLng(pLat,pLng);if(pickupMarker==null)pickupMarker=googleMap.addMarker(new MarkerOptions().position(position).title("Pickup").icon(BitmapDescriptorFactory.defaultMarker(premiumRideTrip() ? BitmapDescriptorFactory.HUE_ORANGE : BitmapDescriptorFactory.HUE_RED)));else pickupMarker.setPosition(position);}else if(pickupMarker!=null){pickupMarker.remove();pickupMarker=null;}
         if(valid(dLat,dLng)){LatLng position=new LatLng(dLat,dLng);if(deliveryMarker==null)deliveryMarker=googleMap.addMarker(new MarkerOptions().position(position).title("Tujuan Akhir").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)));else deliveryMarker.setPosition(position);}else if(deliveryMarker!=null){deliveryMarker.remove();deliveryMarker=null;}
         for(Marker m:waypointMarkers){ try{m.remove();}catch(Exception ignored){} } waypointMarkers.clear();
         DriverEcosystemFeatures eco=DriverEcosystemFeatures.from(order);

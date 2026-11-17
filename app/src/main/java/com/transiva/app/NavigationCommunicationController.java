@@ -37,9 +37,9 @@ public final class NavigationCommunicationController {
     private String messageLabel = "💬 Pesan";
     private String messageUnreadLabel = "💬 Pesan • Baru";
     private String callLabel = "☎ Telepon";
-    private String messageColor = "#D90B63CE";
-    private String messageUnreadColor = "#E69A5A00";
-    private String callColor = "#D90A8F55";
+    private String messageColor = "";
+    private String messageUnreadColor = "";
+    private String callColor = "";
 
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
@@ -86,11 +86,11 @@ public final class NavigationCommunicationController {
         }
         if (callButton != null) {
             callButton.setText(callLabel);
-            callButton.setTextColor(Color.WHITE);
+            callButton.setTextColor(DriverThemeTokens.textPrimary(activity));
             callButton.setTextSize(14);
             callButton.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
             callButton.setGravity(Gravity.CENTER);
-            callButton.setBackground(DriverNavigationUi.roundRect(Color.parseColor(callColor), 18));
+            callButton.setBackground(DriverNavigationUi.roundRect(actionBackground(callColor, DriverThemeTokens.isDark(activity) ? "#173C35" : "#D5F3E5"), dp(16)));
             callButton.setOnClickListener(v -> openCall());
         }
     }
@@ -118,7 +118,7 @@ public final class NavigationCommunicationController {
         if (callButton != null) callButton.setVisibility(pip ? TextView.GONE : TextView.VISIBLE);
     }
 
-    private void openChat() {
+    void openChat() {
         try {
             unread = false;
             renderMessageState();
@@ -169,12 +169,14 @@ public final class NavigationCommunicationController {
         int count = DriverMessageUnreadRepository.unreadCount(activity, orderId, roomId);
         unread = count > 0;
         messageButton.setText(unread ? (count > 1 ? messageUnreadLabel + " (" + count + ")" : messageUnreadLabel) : messageLabel);
-        messageButton.setTextColor(Color.WHITE);
+        messageButton.setTextColor(DriverThemeTokens.textPrimary(activity));
         messageButton.setTextSize(14);
         messageButton.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         messageButton.setGravity(Gravity.CENTER);
-        int color = Color.parseColor(unread ? messageUnreadColor : messageColor);
-        messageButton.setBackground(DriverNavigationUi.roundRect(color, 18));
+        int color = actionBackground(unread ? messageUnreadColor : messageColor, unread
+                ? (DriverThemeTokens.isDark(activity) ? "#4A3824" : "#FFF0CE")
+                : "#F2F7FF");
+        messageButton.setBackground(DriverNavigationUi.roundRect(color, dp(16)));
     }
 
     private void loadResourceConfig() {
@@ -191,6 +193,15 @@ public final class NavigationCommunicationController {
             TransivaDiagnostics.error(activity, "navigation", "NAV_ACTION_RESOURCE_CONFIG_FAILED", t);
         }
     }
+
+    private int actionBackground(String override, String fallback) {
+        int target = DriverThemeTokens.color(activity, fallback);
+        if (override.isEmpty()) return target;
+        return androidx.core.graphics.ColorUtils.blendARGB(target,
+                Color.parseColor(override) | 0xFF000000, .15f);
+    }
+
+    private int dp(int value) { return Math.round(value * activity.getResources().getDisplayMetrics().density); }
 
     private static String safeColor(String candidate, String fallback) {
         String value = clean(candidate);

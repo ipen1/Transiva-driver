@@ -68,7 +68,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected static final String LEAFLET_JS  = WEB_APP_URL + "js/leaflet.js";
     protected static final String PREF_NAME = "transiva";
     protected static final int TIMEOUT_MS = 20000;
-    protected static final float ARRIVE_RADIUS_METER = 100f;
+    protected static final float ARRIVE_RADIUS_METER = TripArrivalLocation.RADIUS_METERS;
     protected static final float MAP_ANIMATION_MIN_DISTANCE_METER = 5.0f;
     protected static final long GPS_PRIORITY_MS = 8000L;
     protected static final long MAX_LOCATION_AGE_MS = 30000L;
@@ -163,17 +163,31 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected long speedSampleCount = 0L;
     protected Location lastSpeedLocation = null;
 
+    protected boolean premiumRideTrip() { return false; }
+
     protected final class SlideActionView extends LinearLayout {
         private final TextView labelView;
         private final SeekBar slider;
         private final Runnable action;
         private final String idleLabel;
         private boolean fired = false;
+        private TripSwipeControl premium;
 
         SlideActionView(String label, Runnable action) {
             super(DriverTripActivityLayer1.this);
             this.action = action;
             this.idleLabel = label;
+            if (premiumRideTrip()) {
+                labelView = null;
+                slider = null;
+                int separator = label.indexOf(" • ");
+                String verb = separator >= 0 ? label.substring(separator + 3) : label;
+                premium = new TripSwipeControl(getContext(),
+                        "Geser untuk " + verb.toLowerCase(new Locale("id", "ID")), action);
+                premium.interaction(active -> tripInteraction(false, active));
+                addView(premium, new LinearLayout.LayoutParams(-1, -1));
+                return;
+            }
             setOrientation(HORIZONTAL);
             setGravity(Gravity.CENTER_VERTICAL);
             setPadding(dp(14), dp(7), dp(10), dp(7));
@@ -258,6 +272,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
         }
 
         @Override public void setEnabled(boolean enabled) {
+            if (premium != null) { super.setEnabled(enabled); premium.setEnabled(enabled); return; }
             if(isEnabled()==enabled&&slider!=null&&slider.isEnabled()==enabled)return;
             super.setEnabled(enabled);
             if (slider != null) slider.setEnabled(enabled);
@@ -277,7 +292,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
         if(collectingActions){desiredActions.put(b,enabled);return;}
         if(b.getVisibility()!=View.VISIBLE)b.setVisibility(View.VISIBLE);
         boolean desired=enabled&&!updatingStatus&&!waypointArrivalBusy&&tripStateReady()&&!tripCancelRunning;if(b.isEnabled()!=desired)b.setEnabled(desired);
-        float alpha=desired?1f:0.48f;if(b.getAlpha()!=alpha)b.setAlpha(alpha);
+        float alpha=desired || (premiumRideTrip() && b instanceof SlideActionView) ? 1f : 0.48f;if(b.getAlpha()!=alpha)b.setAlpha(alpha);
     }
 
     protected boolean isDeliveryPhase(String st){ return DriverOrderStateMachine.isDeliveryPhase(st); }
@@ -313,6 +328,18 @@ abstract class DriverTripActivityLayer1 extends Activity {
         if(("arrived_delivery".equals(next)||"finished".equals(next)||"completed".equals(next))&&!isPickupOrder()
                 && DriverEcosystemFeatures.from(order).nextPendingWaypoint()!=null){
             info("Persinggahan belum selesai","Tiba di persinggahan berikutnya melalui geser utama terlebih dahulu.");return;
+        }
+        if (premiumRideTrip() && ("arrived_pickup".equals(next) || "arrived_delivery".equals(next))) {
+            boolean pickup = "arrived_pickup".equals(next);
+            NavigationTargetPolicy.Target target = new NavigationTargetPolicy.Target(pickup ? "pickup" : "delivery",
+                    pickup ? coord("pickup_lat", "user_lat") : coord("delivery_lat", "destination_lat"),
+                    pickup ? coord("pickup_lng", "user_lng") : coord("delivery_lng", "destination_lng"));
+            float distance = TripArrivalLocation.distance(trustedArrivalFix(), target);
+            if (distance < 0 || distance > ARRIVE_RADIUS_METER) {
+                refreshButtons();
+                info("Lokasi belum terverifikasi", "Tunggu GPS akurat dalam radius 100 m dari titik tujuan.");
+                return;
+            }
         }
         tripMutationStarted();
         if (!DriverOrderStateGuard.canTransition(status(), next)) {
@@ -528,8 +555,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected double coord(String a, String b){ try{return Double.parseDouble(first(order.optString(a), order.optString(b), "0"));}catch(Exception e){return 0;} } protected double optDouble(String... keys){ for(String k: keys){ try{ if(order.has(k)) return Double.parseDouble(order.optString(k,"0")); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } } return 0; }
     protected String statusLabel(String s){ return DriverOrderStateMachine.label(s); }
     protected Location trustedArrivalFix(){
-        Location l=tripArrivalFix;if(l==null||!l.hasAccuracy()||!Float.isFinite(l.getAccuracy())||l.getAccuracy()<=0||l.getAccuracy()>35||!NavigationTargetPolicy.valid(l.getLatitude(),l.getLongitude()))return null;
-        long age=android.os.SystemClock.elapsedRealtimeNanos()-l.getElapsedRealtimeNanos();return l.getElapsedRealtimeNanos()>0&&age>=0&&age<=15000_000_000L?new Location(l):null;
+        return TripArrivalLocation.verified(tripArrivalFix);
     }
     protected float distanceTo(double lat, double lng){
         double a=lastDriverLat,b=lastDriverLng;Location fresh=trustedArrivalFix();

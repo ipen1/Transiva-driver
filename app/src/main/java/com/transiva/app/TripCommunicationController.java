@@ -142,9 +142,10 @@ public final class TripCommunicationController {
     public void refreshUnread() {
         if (chatButton == null) return;
         int count = DriverMessageUnreadRepository.unreadCount(host, orderId(), roomId());
-        chatButton.setText(count > 0 ? "Pelanggan · " + (count > 99 ? "99+" : count) : "Pelanggan");
+        String label = host.premiumRideTrip() ? "Hubungi" : "Pelanggan";
+        chatButton.setText(count > 0 ? label + " · " + (count > 99 ? "99+" : count) : label);
         chatButton.setContentDescription(count > 0 ? "Chat pelanggan, " + count + " pesan baru" : "Chat pelanggan");
-        if (count > 0) chatButton.setTextColor(Color.WHITE);
+        if (count > 0 && !host.premiumRideTrip()) chatButton.setTextColor(Color.WHITE);
     }
 
     private String orderId() { return first(order.optString("order_id"), order.optString("id"), "-"); }
