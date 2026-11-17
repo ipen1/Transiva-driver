@@ -44,6 +44,8 @@ def method(source,signature):
 activity=(app/'DriverNavigationActivity.java').read_text()
 files['com/transiva/app/HostMotionProbe.java']='''package com.transiva.app;import android.location.Location;import android.os.SystemClock;
 class HostMotionProbe extends DriverNavigationActivityLayer2{
+ static class ArrivalProbe{Location rawFix;void fix(Location raw){rawFix=raw;}}
+ final ArrivalProbe arrival=new ArrivalProbe();
  SnapPoint visualMatch;long lastNavigationUiAt;NavigationRenderedHeading renderedHeading=new NavigationRenderedHeading();NavigationMotionInterpolator vehicleMotion=new NavigationMotionInterpolator();long motionFixAt=-1,motionRevision=-1,routeVisualRevision=1,lastMapRenderAt,poseChangedAt,lastMatchRealtimeMs;double lastPoseLat=Double.NaN,lastPoseLng,lastPoseHeading,lastPoseSpeed,lastMatchedRawLat,lastMatchedRawLng,visualRouteProgressMeters;int visualRouteSegmentIndex,renders,routeFixes;Location lastLocation;double instructionProgress;
  void updateSpeed(Location l){currentSpeedKmh=l.getSpeed()*3.6;}void maybeRefreshRoute(Location l){routeFixes++;}void maybeUpdateRemainingRouteLine(){}void updateInstructionBanner(double p){instructionProgress=p;}void updateNativePosition(boolean b){renders++;}float meters(double a,double b,double x,double y){return (float)NavigationGeometry.meters(a,b,x,y);}double bearing(double a,double b,double x,double y){return NavigationMotionInterpolator.normalize(Math.toDegrees(Math.atan2((y-b)*Math.cos(Math.toRadians(a)),x-a)));}
 '''+method(activity,'protected void handleNavigationLocationFix(')+method(activity,'protected void animateTowardLatestFix(')+'}'
