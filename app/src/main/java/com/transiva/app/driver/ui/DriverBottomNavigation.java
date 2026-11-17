@@ -45,6 +45,12 @@ public final class DriverBottomNavigation {
         return dp(activity,Math.max(72,Math.round(52+14*font)));
     }
     public static View build(Activity activity, ActiveItem activeItem) {
+        return build(activity, activeItem, false);
+    }
+    public static View buildMenu(Activity activity) {
+        return build(activity, ActiveItem.HOME, true);
+    }
+    private static View build(Activity activity, ActiveItem activeItem, boolean menuStyle) {
         LinearLayout navigation = new LinearLayout(activity);
         navigation.setOrientation(LinearLayout.HORIZONTAL);
         navigation.setGravity(Gravity.CENTER);
@@ -53,15 +59,15 @@ public final class DriverBottomNavigation {
         navigation.setElevation(dp(activity, 8));
 
         add(navigation, navItem(activity, "Beranda", "ic_nav_home",
-                ActiveItem.HOME, activeItem, DriverDashboardActivity.class));
+                ActiveItem.HOME, activeItem, DriverDashboardActivity.class, menuStyle));
         add(navigation, navItem(activity, "Aktivitas", "ic_nav_activity",
-                ActiveItem.ACTIVITY, activeItem, DriverActivityHistoryActivity.class));
+                ActiveItem.ACTIVITY, activeItem, DriverActivityHistoryActivity.class, menuStyle));
         add(navigation, navItem(activity, "Pesan", "ic_nav_chat",
-                ActiveItem.CHAT, activeItem, DriverChatActivity.class));
+                ActiveItem.CHAT, activeItem, DriverChatActivity.class, menuStyle));
         add(navigation, navItem(activity, "Transaksi", "ic_nav_wallet",
-                ActiveItem.EARNINGS, activeItem, DriverEarningsActivity.class));
+                ActiveItem.EARNINGS, activeItem, DriverEarningsActivity.class, menuStyle));
         add(navigation, navItem(activity, "Akun", "ic_nav_profile",
-                ActiveItem.PROFILE, activeItem, DriverProfileActivity.class));
+                ActiveItem.PROFILE, activeItem, DriverProfileActivity.class, menuStyle));
 
         // LOW mode benar-benar menekan animasi UI untuk mengurangi render/GPU wakeups.
         DevicePerformanceProfile perf = DevicePerformanceProfile.get(activity);
@@ -96,7 +102,7 @@ public final class DriverBottomNavigation {
             String iconName,
             ActiveItem item,
             ActiveItem activeItem,
-            Class<?> target
+            Class<?> target, boolean menuStyle
     ) {
         boolean active = item == activeItem;
 
@@ -106,10 +112,10 @@ public final class DriverBottomNavigation {
         root.setPadding(dp(activity, 2), dp(activity, 4), dp(activity, 2), dp(activity, 4));
         root.setMinimumHeight(dp(activity,64));
         root.setContentDescription(label);
-        root.setClickable(!active);
-        root.setFocusable(!active);
+        root.setClickable(!active || menuStyle);
+        root.setFocusable(!active || menuStyle);
 
-        if (active) {
+        if (active && !menuStyle) {
             GradientDrawable bg = new GradientDrawable();
             bg.setColor(DriverThemeTokens.color(activity, ACTIVE_BG));
             bg.setCornerRadius(dp(activity, 18));
@@ -118,18 +124,32 @@ public final class DriverBottomNavigation {
             root.setScaleY(1.02f);
         }
 
-        ImageView icon = new ImageView(activity);
-        int drawableId = activity.getResources().getIdentifier(
-                iconName, "drawable", activity.getPackageName());
-        if (drawableId != 0) {
-            icon.setImageResource(drawableId);
-        } else {
-            icon.setImageResource(android.R.drawable.ic_menu_help);
-        }
-        icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        icon.setAlpha(active ? 1f : 0.62f);
         android.widget.FrameLayout iconBox=new android.widget.FrameLayout(activity);
-        iconBox.addView(icon,new android.widget.FrameLayout.LayoutParams(dp(activity,24),dp(activity,24),Gravity.CENTER));
+        if (menuStyle && active) {
+            View pill = new View(activity);
+            GradientDrawable shape = new GradientDrawable();
+            shape.setColor(DriverThemeTokens.surfaceAlt(activity));
+            shape.setCornerRadius(dp(activity, 20));
+            pill.setBackground(shape);
+            iconBox.addView(pill, new android.widget.FrameLayout.LayoutParams(dp(activity, 49), dp(activity, 29), Gravity.CENTER));
+        }
+        if (menuStyle) {
+            MenuNavigationIcon glyph = new MenuNavigationIcon(activity, item,
+                    active ? DriverThemeTokens.accent(activity) : DriverThemeTokens.textSecondary(activity));
+            iconBox.addView(glyph, new android.widget.FrameLayout.LayoutParams(dp(activity, 24), dp(activity, 24), Gravity.CENTER));
+        } else {
+            ImageView icon = new ImageView(activity);
+            int drawableId = activity.getResources().getIdentifier(
+                    iconName, "drawable", activity.getPackageName());
+            if (drawableId != 0) {
+                icon.setImageResource(drawableId);
+            } else {
+                icon.setImageResource(android.R.drawable.ic_menu_help);
+            }
+            icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+            icon.setAlpha(active ? 1f : 0.62f);
+            iconBox.addView(icon,new android.widget.FrameLayout.LayoutParams(dp(activity,24),dp(activity,24),Gravity.CENTER));
+        }
         if(item==ActiveItem.CHAT){
             TextView badge=new TextView(activity);badge.setTag("driver_nav_unread");badge.setTextSize(9);badge.setTextColor(android.graphics.Color.WHITE);badge.setGravity(Gravity.CENTER);
             GradientDrawable badgeBg=new GradientDrawable();badgeBg.setColor(android.graphics.Color.parseColor("#DC2626"));badgeBg.setCornerRadius(dp(activity,10));badge.setBackground(badgeBg);
@@ -151,7 +171,9 @@ public final class DriverBottomNavigation {
         titleParams.setMargins(0, dp(activity, 2), 0, 0);
         root.addView(title, titleParams);
 
-        if (!active) {
+        if (menuStyle && active) {
+            root.setOnClickListener(view -> activity.finish());
+        } else if (!active) {
             root.setOnClickListener(view -> {
                 DriverPageTransition.open(activity, target, pageIndex(activeItem), pageIndex(item));
             });
