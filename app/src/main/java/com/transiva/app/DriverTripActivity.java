@@ -1,5 +1,4 @@
 package com.transiva.app;
-
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -32,7 +31,6 @@ import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
-
 import com.transiva.app.driver.data.DriverApiClient;
 import com.transiva.app.driver.data.DriverNetworkRepository;
 import com.google.android.gms.maps.GoogleMap;
@@ -46,10 +44,8 @@ import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
-
 import org.json.JSONArray;
 import org.json.JSONObject;
-
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -69,6 +65,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     private TripMapChatPreview chatPreview;
     private int premiumTop = -1, premiumBottom = -1;
     private boolean mapFirstRide;
+    private PremiumFoodTripPanel foodPanel;
     @Override protected boolean premiumRideTrip() { return mapFirstRide; }
     private View retainedMapSlot;
     private NavigationFrameTelemetry frameTelemetry;
@@ -78,8 +75,6 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     private String realtimeSignature="";
     private DriverOrderSyncSignal orderSignal;
     private final Runnable realtimeTripPoll=new Runnable(){ public void run(){ if(!realtimeTripRunning||order==null||session==null)return; refreshButtons();refreshTripRealtime(); if(tripRecovery.due(android.os.SystemClock.elapsedRealtime()))requestStableRoute(true); mainHandler.postDelayed(this,3000L); } };
-
-
     @Override protected void onCreate(Bundle b){
         super.onCreate(b);
         // Keep navigation/trip information visible while this Activity is in front.
@@ -88,7 +83,6 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         try{
             DriverSystemBars.setStatusBarColor(this, DriverThemeTokens.background(this));
             DriverSystemBars.setNavigationBarColor(this, DriverThemeTokens.background(this));
-            
         }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_WINDOW_SETUP_FAILED",e); }
         session = new SessionManager(this);
         tripRouteScope = new DriverUiScope(this);
@@ -110,14 +104,13 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         if(order!=null)try{order.put("source",isPickupOrder()?"pickup_orders":"orders");if(!NavigationTargetPolicy.terminal(order)){session.put("current_order_source",isPickupOrder()?"pickup_orders":"orders");session.put("current_order_id",orderId());}}catch(org.json.JSONException e){NavigationDiagnostics.error(this,"TRIP_SOURCE_FAILED",e);}
         actionSession = TripActionSession.get(this, order);
         mapFirstRide = order != null && !isPickupOrder()
-                && (isRideService(order.optString("order_type")) || isRideService(order.optString("service_name")));
+                && (isFoodOrder() || isRideService(order.optString("order_type")) || isRideService(order.optString("service_name")));
         buildBase();
         if(order == null){ renderEmpty();
             renderEcosystemFeatures(); return; }
         renderOrder();
         // Realtime response includes the ecosystem atomically with the order.
         refreshButtons();
-
         // Warm StableRouteEngine cache before the driver taps Navigasi.
         // When a valid location already exists, native navigation can reuse it instantly.
         mainHandler.postDelayed(() -> {
@@ -130,7 +123,6 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     @Override protected void onPause(){ if(chatPreview!=null)chatPreview.stop(); if(orderSignal!=null)orderSignal.active(false); if(frameTelemetry!=null)frameTelemetry.close(); if(tripLiveRoutes!=null)tripLiveRoutes.active(false); if(tripVehicleMotion!=null)tripVehicleMotion.active(false); tripStateFresh=false;tripSliding=false;tripTouchingMap=false;realtimeGeneration++;realtimeBusy=false;if(realtimeClient!=null)realtimeClient.shutdown(); destinationExtension.close(); realtimeTripRunning=false; mainHandler.removeCallbacks(realtimeTripPoll); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView!=null) mapView.onPause(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_PAUSE_FAILED",e); } super.onPause(); }
     @Override protected void onDestroy(){ if(tripVehicleMotion!=null)tripVehicleMotion.close(); if(tripLiveRoutes!=null)tripLiveRoutes.close(); realtimeGeneration++;if(realtimeClient!=null)realtimeClient.shutdown(); tripRouteGeneration++; if(tripRequestOwner!=null)tripRequestOwner.close();if(tripRouteScope!=null)tripRouteScope.close(); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView != null) mapView.onDestroy(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_DESTROY_FAILED",e); } super.onDestroy(); }
     @Override public void onLowMemory(){ super.onLowMemory(); try{ if(mapView!=null) mapView.onLowMemory(); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } }
-
     private void adoptActionSession() {
         if (actionSession == null || order == null) return;
         JSONObject latest = actionSession.order();
@@ -143,7 +135,6 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         tripLastSync = actionSession.syncedAt();
         if (changed) renderOrder();
     }
-
     private SmartWaitingTextView waitingView;
     private String waitingActionKey(JSONObject snapshot){
         JSONObject waiting=snapshot.optJSONObject("smart_waiting"),active=waiting==null?null:waiting.optJSONObject("active");
@@ -185,7 +176,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
                         else if(fresh!=null){
                             String incoming=first(fresh.optString("order_id"),fresh.optString("id"));if(!key.equals(incoming)&&!internalId().equals(fresh.optString("id")))return;
                             JSONObject routeSnapshot=fresh.optJSONObject("server_route");
-                            String signature=fresh.optString("status")+"|"+fresh.optString("assignment_version")+"|"+fresh.optString("customer_received")+"|"+fresh.optString("price")+"|"+NavigationTargetPolicy.revision(fresh)+"|"+fresh.optString("delivery_lat")+"|"+fresh.optString("delivery_lng")+"|"+String.valueOf(fresh.optJSONObject("ecosystem"))+"|"+String.valueOf(fresh.optJSONObject("destination_extension"))+"|"+String.valueOf(fresh.optJSONObject("extra_fare_request"))+"|"+fresh.optString("price_change_status")+"|"+waitingActionKey(fresh)+"|"+(routeSnapshot==null?"":routeSnapshot.optString("route_hash")+":"+routeSnapshot.optLong("version"));
+                            String signature=fresh.optString("status")+"|"+fresh.optString("assignment_version")+"|"+fresh.optString("customer_received")+"|"+fresh.optString("price")+"|"+NavigationTargetPolicy.revision(fresh)+"|"+fresh.optString("delivery_lat")+"|"+fresh.optString("delivery_lng")+"|"+String.valueOf(fresh.optJSONObject("ecosystem"))+"|"+String.valueOf(fresh.optJSONObject("destination_extension"))+"|"+String.valueOf(fresh.optJSONObject("extra_fare_request"))+"|"+fresh.optString("price_change_status")+"|"+waitingActionKey(fresh)+"|"+(routeSnapshot==null?"":routeSnapshot.optString("route_hash")+":"+routeSnapshot.optLong("version"))+(isFoodOrder()?fresh.optString("note"):"");
                             JSONObject waiting=fresh.optJSONObject("smart_waiting");order.put("smart_waiting",waiting);if(waitingView!=null)waitingView.bind(waiting);
                             if(signature.equals(realtimeSignature)){refreshButtons();return;}realtimeSignature=signature;
                             order=fresh;saveActiveOrder();renderOrder();refreshButtons();requestStableRoute(false);
@@ -209,7 +200,6 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         });
         if(!queued){realtimeBusy=false;client.shutdown();}
     }
-
     private void showTripEnded(String status) {
         if (order == null || NavigationTargetPolicy.terminal(order)) return;
         try { order.put("status", status); }
@@ -229,7 +219,6 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         PremiumDialogs.builder(this).setTitle("Perjalanan Berakhir").setMessage(message)
                 .setCancelable(false).setPositiveButton("Kembali", (dialog, button) -> finish()).show();
     }
-
     protected void loadSession(){
         try{
             SessionManager s = new SessionManager(this);
@@ -245,7 +234,6 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         if(value.equals("bike") || value.equals("motorcycle") || value.equals("moto") || value.equals("driver_motor") || value.equals("transbike")) return "motor";
         return value.contains("car") || value.contains("mobil") ? "car" : "motor";
     }
-
     protected String resolveDriverTypeFromOrder(){
         if(order == null) return normalizeDriverType(driverType);
         String value = first(
@@ -261,15 +249,12 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         );
         return normalizeDriverType(value);
     }
-
     protected String vehicleEmoji(){
         return "car".equals(resolveDriverTypeFromOrder()) ? "🚘" : "🏍️";
     }
-
     protected String vehicleLabel(){
         return "car".equals(resolveDriverTypeFromOrder()) ? "Mobil / Car" : "Motor / Bike";
     }
-
     protected void loadOrder(){
         try{
             String raw = first(getIntent().getStringExtra("order_json"), getIntent().getStringExtra("active_order_json"), pref("driver_active_order_json"), pref("active_order_json"), pref("activeOrder"));
@@ -300,7 +285,6 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         return java.util.Arrays.asList("transride", "transbike", "transcar", "ride", "bike", "car")
                 .stream().anyMatch(type -> name.equals(type) || (type.startsWith("trans") && name.startsWith(type)));
     }
-
     protected void buildBase(){
         if (premiumRideTrip()) { buildPremiumBase(); return; }
         FrameLayout page = new FrameLayout(this); page.setBackgroundColor(DriverThemeTokens.color(this, "#F3F8FF"));
@@ -322,7 +306,6 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         actionDock = layout.actionDock;
         pickupLine = layout.pickupLine;
         deliveryLine = layout.deliveryLine;
-
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(12), dp(8), dp(12), dp(12));
@@ -330,16 +313,12 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         progressBar.setElevation(dp(8));
         progressBar.setVisibility(View.GONE);
         premiumMap.addView(progressBar, new FrameLayout.LayoutParams(dp(42), dp(42), Gravity.CENTER));
-        chatPreview = new TripMapChatPreview(this, premiumMap, () -> order, () -> {
-            if (googleMap == null || pickupMarker == null || !itinerary.isShown()) return null;
-            android.graphics.Point pt = googleMap.getProjection().toScreenLocation(pickupMarker.getPosition());
-            return new android.graphics.PointF(pt.x, pt.y);
-        }, () -> itinerary.getBottom(), () -> actionDock.getTop() - dp(52),
-                () -> { if (communicationController != null) communicationController.openCustomerChat(); });
+        chatPreview = FoodTripChatFactory.trip(this, premiumMap, () -> order,
+                () -> itinerary.getBottom(), () -> actionDock.getTop() - dp(46));
+        if (isFoodOrder()) foodPanel = new PremiumFoodTripPanel(this, premiumMap, actionDock);
         setContentView(premiumMap);
         DriverAppSettings.apply(this);
     }
-
     void showPremiumDetails() {
         if (order == null || NavigationTargetPolicy.terminal(order) || isFinishing()) return;
         Intent details = new Intent(this, DriverTripDetailsActivity.class)
@@ -348,7 +327,6 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         startActivity(details);
     }
-
     void updatePremiumMapInsets() {
         if (tripSliding || googleMap == null || itinerary == null || actionDock.getTop() <= 0) return;
         int topInset = itinerary.getBottom() + dp(4);
@@ -360,7 +338,6 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         googleMap.setPadding(dp(5), topInset, dp(5), bottomInset);
         fitNativeOverview();
     }
-
     protected void renderEmpty(){
         if (premiumMap != null) {
             if (chatPreview != null) chatPreview.stop();
@@ -413,15 +390,16 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         if (tripDetailsScreen()) addFoodOrNoteCard();
         addActions();
         if("arrived_delivery".equals(status()) && !extensionNeedsArrival())addMapCard();
-        if (!tripDetailsScreen()) addFoodOrNoteCard();
+        if (!tripDetailsScreen() && !(premiumRideTrip() && isFoodOrder())) addFoodOrNoteCard();
         } finally {
             LinearLayout fresh=root;root=displayRoot;
             TripMapContent.apply(displayRoot,fresh,retainedMapCard,retainedMapSlot);
         }
         if (premiumRideTrip() && !tripDetailsScreen()) {
-            pickupLine.setText(pickupAddress());
+            pickupLine.setText(isFoodOrder() ? FoodTripPresentation.restaurant(order) : pickupAddress());
             deliveryLine.setText(deliveryAddress());
         }
+        if(foodPanel!=null)foodPanel.bind();
         if(mapReady){initNativeTripMarkers();applyPendingRoute();updateMap();}
     }
     protected void top(String title, String sub){
@@ -452,7 +430,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             tripLiveSummary.setEllipsize(android.text.TextUtils.TruncateAt.END);
             tripLiveSummary.setTextColor(DriverThemeTokens.textPrimary(this));
             tripLiveSummary.setPadding(dp(8), dp(5), dp(8), dp(5));
-            tripLiveSummary.setBackground(round("#F2F7FF", dp(12)));
+            tripLiveSummary.setBackground(DriverNavigationUi.roundRect(DriverThemeTokens.surfaceAlt(this), dp(12)));
             LinearLayout.LayoutParams summary = new LinearLayout.LayoutParams(-1, -2);
             summary.topMargin = dp(4);
             itinerary.addView(tripLiveSummary, summary);
@@ -486,7 +464,6 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             c.setPadding(0, 0, 0, 0);
             c.setElevation(0);
         } else c.addView(text("Peta perjalanan", 15, "#0B3A78", true));
-        
         mapView = new MapView(this);
         mapView.onCreate(null);
         try { MapsInitializer.initialize(getApplicationContext(), MapsInitializer.Renderer.LATEST, null); } catch (Throwable ignored) { TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
@@ -535,25 +512,22 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         c.addView(mapFrame, mp);
         if(realtimeTripRunning){mapView.onStart();mapView.onResume();}
     }
-
     protected void initNativeTripMarkers(){
         if(googleMap==null) return;
         double pLat=coord("pickup_lat","user_lat"), pLng=coord("pickup_lng","user_lng");
         double dLat=coord("delivery_lat","destination_lat"), dLng=coord("delivery_lng","destination_lng");
-        if(valid(pLat,pLng)){LatLng position=new LatLng(pLat,pLng);if(pickupMarker==null)pickupMarker=googleMap.addMarker(new MarkerOptions().position(position).title("Pickup").icon(BitmapDescriptorFactory.defaultMarker(premiumRideTrip() ? BitmapDescriptorFactory.HUE_ORANGE : BitmapDescriptorFactory.HUE_RED)));else pickupMarker.setPosition(position);}else if(pickupMarker!=null){pickupMarker.remove();pickupMarker=null;}
-        if(valid(dLat,dLng)){LatLng position=new LatLng(dLat,dLng);if(deliveryMarker==null)deliveryMarker=googleMap.addMarker(new MarkerOptions().position(position).title("Tujuan Akhir").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)));else deliveryMarker.setPosition(position);}else if(deliveryMarker!=null){deliveryMarker.remove();deliveryMarker=null;}
+        if(valid(pLat,pLng)){LatLng position=new LatLng(pLat,pLng);if(pickupMarker==null)pickupMarker=googleMap.addMarker(new MarkerOptions().position(position).title("Pickup").icon(isFoodOrder() ? BitmapDescriptorFactory.fromBitmap(FoodTripMarker.bitmap(this,true)) : BitmapDescriptorFactory.defaultMarker(premiumRideTrip() ? BitmapDescriptorFactory.HUE_ORANGE : BitmapDescriptorFactory.HUE_RED)));else pickupMarker.setPosition(position);}else if(pickupMarker!=null){pickupMarker.remove();pickupMarker=null;}
+        if(valid(dLat,dLng)){LatLng position=new LatLng(dLat,dLng);if(deliveryMarker==null)deliveryMarker=googleMap.addMarker(new MarkerOptions().position(position).title("Tujuan Akhir").icon(isFoodOrder() ? BitmapDescriptorFactory.fromBitmap(FoodTripMarker.bitmap(this,false)) : BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)));else deliveryMarker.setPosition(position);}else if(deliveryMarker!=null){deliveryMarker.remove();deliveryMarker=null;}
         for(Marker m:waypointMarkers){ try{m.remove();}catch(Exception ignored){} } waypointMarkers.clear();
         DriverEcosystemFeatures eco=DriverEcosystemFeatures.from(order);
         for(int i=0;i<eco.waypoints.length();i++){ JSONObject w=eco.waypoints.optJSONObject(i); if(w==null)continue; double wl=w.optDouble("latitude",0),wn=w.optDouble("longitude",0); if(!valid(wl,wn))continue; int seq=w.optInt("sequence",i+1); String note=first(w.optString("note"),w.optString("address"),""); Marker m=googleMap.addMarker(new MarkerOptions().position(new LatLng(wl,wn)).title("Stop "+seq+(note.isEmpty()?"":" • "+note)).icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE))); if(m!=null)waypointMarkers.add(m); }
         fitNativeOverview();
     }
-
     protected java.util.List<LatLng> parseRoutePoints(String json){
         java.util.ArrayList<LatLng> out=new java.util.ArrayList<>();
         try{ JSONArray a=new JSONArray(first(json,"[]")); for(int i=0;i<a.length();i++){ JSONArray q=a.optJSONArray(i); if(q!=null && q.length()>=2){ double lat=q.optDouble(0),lng=q.optDouble(1); if(valid(lat,lng)) out.add(new LatLng(lat,lng)); } } }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
         return out;
     }
-
     protected void fitNativeOverview(){
         if(googleMap==null||tripSliding||tripCameraBrowsing||tripCameraFollowing) return;
         try{
@@ -569,13 +543,11 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             else if(n==1){ LatLng x=driverMarker!=null?driverMarker.getPosition():(pickupMarker!=null?pickupMarker.getPosition():deliveryMarker.getPosition()); googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(x,15f)); }
         }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
     }
-
     protected String routeTargetMode(){
         String st = status();
         if(st.equals("arrived_pickup") || st.equals("on_delivery") || st.equals("arrived_delivery")) return "delivery";
         return "pickup";
     }
-
     protected double bearing(double lat1, double lng1, double lat2, double lng2){
         double dLng = Math.toRadians(lng2 - lng1);
         lat1 = Math.toRadians(lat1);
@@ -584,11 +556,9 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         double x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
         return (Math.toDegrees(Math.atan2(y, x)) + 360) % 360;
     }
-
     protected void addFoodOrNoteCard(){
         JSONObject shoppingPlan=DriverShoppingPlanView.plan(order);
         if(shoppingPlan!=null){add(DriverShoppingPlanView.view(this,shoppingPlan,false),0,0,0,dp(10));return;}
-
         JSONObject food = parseFoodNote();
         if(food == null){ addPlainNoteCard(); return; }
         LinearLayout c = card(); c.setPadding(dp(16), dp(13), dp(16), dp(13));
@@ -653,7 +623,6 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         }
         add(c,0,0,0,dp(12));
     }
-
     protected String merchantStatusLabel(String raw){
         String s = first(raw, "").toLowerCase(Locale.US).trim();
         if(s.equals("merchant_accepted") || s.equals("accepted")) return "Pesanan diterima";
@@ -662,7 +631,6 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         if(s.equals("merchant_rejected") || s.equals("rejected")) return "Ditolak merchant";
         return raw;
     }
-
     protected String foodItemOptions(JSONObject item){
         if(item == null) return "";
         String direct = first(item.optString("options_text"), item.optString("selected_options_text"), "");
@@ -686,9 +654,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         }
         return b.toString();
     }
-
     protected void renderEcosystemFeatures(){ if(order==null)return; DriverEcosystemFeatures f=DriverEcosystemFeatures.from(order); if(distanceHint!=null && !f.summary().isEmpty()){String old=String.valueOf(distanceHint.getText()); if(!old.contains("Guardian")) distanceHint.setText(old+f.summary());} }
-
     protected void loadEcosystemFeatures(){
         if(order==null||session==null)return; final String oid=orderId();
         DriverEcosystemApi.load(session,oid,e->{ if(e==null)return; try{order.put("ecosystem",e);}catch(Exception ignored){} renderEcosystemFeatures(); if(googleMap!=null){initNativeTripMarkers();} });

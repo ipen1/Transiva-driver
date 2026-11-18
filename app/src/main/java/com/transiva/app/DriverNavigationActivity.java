@@ -332,14 +332,8 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         attrLp.bottomMargin = dp(5);
         page.addView(attribution, attrLp);
 
-        mapChatPreview = new TripMapChatPreview(this, page, () -> order, () -> {
-            if (map == null || !styleReady || inPictureInPicture) return null;
-            double lat = NavigationTargetPolicy.coord(order, "pickup_lat", "user_lat");
-            double lng = NavigationTargetPolicy.coord(order, "pickup_lng", "user_lng");
-            return NavigationTargetPolicy.valid(lat, lng)
-                    ? map.getProjection().toScreenLocation(new org.maplibre.android.geometry.LatLng(lat, lng)) : null;
-        }, () -> guidanceHeader.getBottom(), () -> bottomActions.getTop() - dp(49),
-                () -> { if (communicationController != null) communicationController.openChat(); });
+        mapChatPreview = FoodTripChatFactory.navigation(this, page,
+                () -> guidanceHeader.getBottom(), () -> bottomActions.getTop() - dp(49));
 
         setContentView(page);
         DriverAppSettings.apply(this);

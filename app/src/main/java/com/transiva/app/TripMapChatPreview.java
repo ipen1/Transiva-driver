@@ -39,14 +39,19 @@ final class TripMapChatPreview {
     private final Runnable openRoom;
     private final Handler main = new Handler(Looper.getMainLooper());
     private static final class Message {
-        final long id; final String text;
-        Message(long id, String text) { this.id = id; this.text = text; }
+        final long id; final String text; final boolean merchant;
+        Message(long id, String text, boolean merchant) { this.id = id; this.text = text; this.merchant = merchant; }
     }
     private final ArrayDeque<Message> messages = new ArrayDeque<>();
     private Message currentMessage;
     private boolean claimed;
     private final LinearLayout bubble;
     private final TextView message;
+    private TextView headingTitle;
+    private Supplier<PointF> merchantPin;
+    private Runnable openMerchant;
+    private boolean nextMerchant;
+    private long merchantLastId;
     private final TextView pageBadge;
     private final ArrayList<String> pages = new ArrayList<>();
     private DriverUiScope scope;
@@ -81,7 +86,7 @@ final class TripMapChatPreview {
         bubble.setElevation(dp(6));
         LinearLayout heading = new LinearLayout(activity);
         heading.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title = new TextView(activity);
+        TextView title = new TextView(activity); headingTitle = title;
         title.setText("●  Pesan pelanggan");
         title.setTextSize(11);
         title.setTypeface(null, Typeface.BOLD);
@@ -104,23 +109,32 @@ final class TripMapChatPreview {
         mapLayer.addView(bubble, new FrameLayout.LayoutParams(dp(216), -2, Gravity.TOP | Gravity.LEFT));
         bubble.setOnClickListener(view -> {
             if (scope == null || !scope.alive()) return;
-            clear();
-            openRoom.run();
+            boolean merchant=currentMessage!=null && currentMessage.merchant;
+            messages.removeIf(pending -> pending.merchant == merchant);
+            pages.clear();currentMessage=null;claimed=false;
+            main.removeCallbacks(position);hideBubble();
+            if(merchant && openMerchant!=null)openMerchant.run();else openRoom.run();
         });
     }
 
+    TripMapChatPreview merchant(Supplier<PointF> anchor, Runnable open) {
+        merchantPin=anchor;openMerchant=open;return this;
+    }
     private final BroadcastReceiver updates = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
             JSONObject current = order.get();
             if (current == null) return;
             String type = String.valueOf(intent.getStringExtra("type")).toLowerCase(java.util.Locale.US);
             if ((!type.contains("chat") && !type.contains("message"))
-                    || type.contains("merchant") || type.contains("global") || type.contains("mention")) return;
+                    || type.contains("global") || type.contains("mention")) return;
+            boolean merchant=type.equals("merchant_driver_chat");
+            if(type.contains("merchant") && (!merchant || merchantPin==null))return;
             String incomingOrder = intent.getStringExtra("order_id");
             String incomingRoom = intent.getStringExtra("room_id");
             if (NavigationTargetPolicy.id(current).equalsIgnoreCase(incomingOrder)
                     || room(current).equalsIgnoreCase(incomingRoom)) {
                 main.removeCallbacks(poll);
+                nextMerchant=merchant;
                 if (!busy) main.postDelayed(poll, 220);
             }
         }
@@ -176,14 +190,16 @@ final class TripMapChatPreview {
         String key = NavigationTargetPolicy.identity(current);
         if (!key.equals(identity)) {
             identity = key;
-            lastId = 0;
+            lastId = 0; merchantLastId=0;
             clear();
         }
-        long after = lastId;
-        String endpoint = Uri.parse("https://transiva.my.id/server/getChat.php").buildUpon()
+        final boolean merchant=nextMerchant && merchantPin!=null && FoodTripPresentation.isFood(current);
+        long after = merchant ? merchantLastId : lastId;
+        String endpoint = Uri.parse("https://transiva.my.id/server/"+(merchant?"getMerchantDriverChat.php":"getChat.php")).buildUpon()
+                .appendQueryParameter("chat_ui", "1")
                 .appendQueryParameter("order_id", NavigationTargetPolicy.id(current))
                 .appendQueryParameter("order_db_id", current.optString("id"))
-                .appendQueryParameter("room_id", room(current))
+                .appendQueryParameter("room_id", merchant ? "ROOM-MD-"+NavigationTargetPolicy.id(current).toUpperCase(java.util.Locale.US).replaceAll("[^A-Z0-9\\-]", "") : room(current))
                 .appendQueryParameter("source", NavigationTargetPolicy.source(current))
                 .appendQueryParameter("page_mode", after == 0 ? "latest" : "newer")
                 .appendQueryParameter("limit", "24")
@@ -192,14 +208,14 @@ final class TripMapChatPreview {
         if (!request.execute(() -> {
             try {
                 JSONObject result = DriverMessageApi.get(new SessionManager(activity), endpoint, request.owner);
-                request.post(() -> delivered(request, key, after, result));
+                request.post(() -> delivered(request, key, after, merchant, result));
             } catch (Exception e) {
-                request.post(() -> delivered(request, key, after, null));
+                request.post(() -> delivered(request, key, after, merchant, null));
             }
-        })) delivered(request, key, after, null);
+        })) delivered(request, key, after, merchant, null);
     }
 
-    private void delivered(DriverUiScope request, String key, long after, JSONObject result) {
+    private void delivered(DriverUiScope request, String key, long after, boolean merchant, JSONObject result) {
         if (scope != request) return;
         busy = false;
         boolean success = result != null && result.optBoolean("success");
@@ -209,36 +225,40 @@ final class TripMapChatPreview {
             return;
         }
         boolean truncated = false;
+        long cursor=merchant?merchantLastId:lastId;
         if (success && "driver".equalsIgnoreCase(result.optString("viewer_type", "driver"))) {
             JSONArray rows = result.optJSONArray("messages");
             if (rows != null) for (int i = 0; i < rows.length(); i++) {
                 JSONObject row = rows.optJSONObject(i);
                 if (row == null) continue;
                 long id = row.optLong("id");
-                if (id <= lastId) continue;
+                if (id <= cursor) continue;
                 boolean unreadCustomer = "customer".equalsIgnoreCase(row.optString("sender_type"))
                         && row.optInt("is_read") == 0 && !row.optBoolean("is_read");
-                String value = unreadCustomer && !TripChatDisplayStore.shown(activity, order.get(), id)
-                        ? preview(row.optString("message").trim()) : "";
+                String value = unreadCustomer && !TripChatDisplayStore.shown(activity, order.get(), id, merchant)
+                        ? preview(row.optString("message").trim(),merchant) : "";
                 if (!value.isEmpty()) {
                     if (messages.size() >= MAX_QUEUED) { truncated = true; break; }
-                    messages.addLast(new Message(id, value));
+                    messages.addLast(new Message(id, value, merchant));
                 }
-                lastId = id;
+                cursor = id;
             }
         }
+        if(merchant)merchantLastId=cursor;else lastId=cursor;
         failures = success ? 0 : Math.min(failures + 1, 3);
-        moreWaiting = truncated || (success && after > 0 && lastId > after && result.optBoolean("has_more"));
+        moreWaiting = truncated || (success && after > 0 && cursor > after && result.optBoolean("has_more"));
         if (pages.isEmpty()) showNext();
         updatePageBadge();
         main.removeCallbacks(poll);
-        if (!truncated) main.postDelayed(poll, moreWaiting ? 350 : 7000L << failures);
+        nextMerchant = moreWaiting ? merchant : !merchant;
+        if (!truncated) main.postDelayed(poll, moreWaiting ? 350 : (!merchant && merchantPin!=null && FoodTripPresentation.isFood(order.get())) ? 250 : 7000L << failures);
     }
 
-    private static String preview(String raw) {
-        if (raw.startsWith("[[IMAGE")) return "Pelanggan mengirim foto";
-        if (raw.startsWith("[[STICKER]]")) return "Pelanggan mengirim stiker";
-        if (raw.startsWith("[[VOICE")) return "Pelanggan mengirim pesan suara";
+    private static String preview(String raw,boolean merchant) {
+        String sender=merchant?"Merchant":"Pelanggan";
+        if (raw.startsWith("[[IMAGE")) return sender+" mengirim foto";
+        if (raw.startsWith("[[STICKER]]")) return sender+" mengirim stiker";
+        if (raw.startsWith("[[VOICE")) return sender+" mengirim pesan suara";
         return raw;
     }
 
@@ -251,10 +271,11 @@ final class TripMapChatPreview {
     private void showNext() {
         Message next;
         do { next = messages.pollFirst(); }
-        while (next != null && TripChatDisplayStore.shown(activity, order.get(), next.id));
+        while (next != null && TripChatDisplayStore.shown(activity, order.get(), next.id, next.merchant));
         if (next == null) { clear(); return; }
         currentMessage = next;
         claimed = false;
+        headingTitle.setText(next.merchant ? "●  Pesan merchant" : "●  Pesan pelanggan");
         String text = next.text;
         if (moreWaiting && messages.size() <= MAX_QUEUED / 2 && !busy) {
             main.removeCallbacks(poll);
@@ -282,7 +303,7 @@ final class TripMapChatPreview {
         String value = pages.get(page);
         message.setText(value);
         updatePageBadge();
-        bubble.setContentDescription("Pesan pelanggan. " + value + ". Buka chat.");
+        bubble.setContentDescription((currentMessage!=null && currentMessage.merchant?"Pesan merchant. ":"Pesan pelanggan. ") + value + ". Buka chat.");
         pageVisibleMs = 0;
         pageLimitMs = (int) Math.min(Integer.MAX_VALUE, TripChatDisplayStore.duration(value));
         pageStarted = android.os.SystemClock.elapsedRealtime();
@@ -299,7 +320,7 @@ final class TripMapChatPreview {
     private final Runnable position = new Runnable() {
         @Override public void run() {
             if (pages.isEmpty() || scope == null || !scope.alive()) return;
-            PointF point = pickup.get();
+            PointF point = currentMessage!=null && currentMessage.merchant && merchantPin!=null ? merchantPin.get() : pickup.get();
             int width = bubble.getWidth(), height = bubble.getHeight();
             int top = Math.max(dp(4), visibleTop.getAsInt()) + dp(7);
             int bottom = Math.min(mapLayer.getHeight(), visibleBottom.getAsInt()) - dp(6);
@@ -309,7 +330,7 @@ final class TripMapChatPreview {
                     && mapLayer.getWidth() >= width + dp(12);
             if (visible) {
                 if (!claimed) {
-                    if (currentMessage == null || !TripChatDisplayStore.claim(activity, order.get(), currentMessage.id)) {
+                    if (currentMessage == null || !TripChatDisplayStore.claim(activity, order.get(), currentMessage.id, currentMessage.merchant)) {
                         showNext();
                         return;
                     }

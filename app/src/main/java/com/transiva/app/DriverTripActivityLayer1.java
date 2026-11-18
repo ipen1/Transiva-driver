@@ -521,9 +521,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
     }
 
     protected boolean isFoodOrder(){
-        if(order == null) return false;
-        String type = first(order.optString("order_type"), order.optString("service_name"), "").toLowerCase(Locale.US);
-        return type.contains("food") || type.contains("transfood");
+        return FoodTripPresentation.isFood(order);
     }
 
 

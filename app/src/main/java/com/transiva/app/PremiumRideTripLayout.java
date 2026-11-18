@@ -28,7 +28,9 @@ final class PremiumRideTripLayout {
         back.setContentDescription("Kembali");
         back.setOnClickListener(v -> host.finish());
         toolbar.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
-        toolbar.addView(text("Driver Trip", 20, "#0B3A78", true), new LinearLayout.LayoutParams(0, -2, 1));
+        TextView heading = text(host.isFoodOrder() ? "Driver Trip · Transfood" : "Driver Trip", host.isFoodOrder() ? 17 : 20, "#0B3A78", true);
+        heading.setMaxLines(2);
+        toolbar.addView(heading, new LinearLayout.LayoutParams(0, -2, 1));
         TextView online = text("• Online", 12, "#059669", true);
         online.setGravity(Gravity.CENTER);
         online.setPadding(dp(9), dp(5), dp(9), dp(5));
@@ -45,8 +47,8 @@ final class PremiumRideTripLayout {
         itinerary = host.card();
         itinerary.setPadding(dp(10), dp(6), dp(10), dp(6));
         itinerary.setBackground(round("#FFFFFF", dp(20)));
-        pickupLine = itineraryLine("Jemput", "#C66200", host::pickupAddress);
-        deliveryLine = itineraryLine("Pengantaran", "#059669", host::deliveryAddress);
+        pickupLine = itineraryLine(host.isFoodOrder() ? "Jemput • Resto" : "Jemput", "#C66200", host::pickupAddress);
+        deliveryLine = itineraryLine(host.isFoodOrder() ? "Antar • Pelanggan" : "Pengantaran", "#059669", host::deliveryAddress);
         LinearLayout.LayoutParams itineraryParams = new LinearLayout.LayoutParams(-1, -2);
         itineraryParams.setMargins(dp(10), dp(7), dp(10), 0);
         overlay.addView(itinerary, itineraryParams);
@@ -70,13 +72,18 @@ final class PremiumRideTripLayout {
         row.setGravity(Gravity.CENTER_VERTICAL);
         TextView pin = text("●", 18, color, true);
         pin.setGravity(Gravity.CENTER);
-        row.addView(pin, new LinearLayout.LayoutParams(dp(34), dp(36)));
+        if (host.isFoodOrder()) {
+            android.widget.ImageView icon = new android.widget.ImageView(host);
+            icon.setImageBitmap(FoodTripMarker.bitmap(host, color.equals("#C66200")));
+            icon.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+            row.addView(icon, new LinearLayout.LayoutParams(dp(30),dp(34)));
+        } else row.addView(pin, new LinearLayout.LayoutParams(dp(34), dp(36)));
         LinearLayout copy = new LinearLayout(host);
         copy.setOrientation(LinearLayout.VERTICAL);
         copy.setPadding(0, dp(2), 0, dp(2));
         copy.addView(text(label, 11, "#64748B", false));
         TextView place = text("", 14, "#0B3A78", true);
-        place.setMaxLines(2);
+        place.setMaxLines(host.isFoodOrder() ? 1 : 2);
         place.setEllipsize(android.text.TextUtils.TruncateAt.END);
         copy.addView(place);
         row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));

@@ -30,14 +30,20 @@ final class TripChatDisplayStore {
     }
 
     static synchronized boolean shown(Context context, JSONObject order, long id) {
+        return shown(context, order, id, false);
+    }
+    static synchronized boolean shown(Context context, JSONObject order, long id, boolean merchant) {
         SharedPreferences prefs = context.getSharedPreferences("trip_chat_preview_receipts_v1", Context.MODE_PRIVATE);
-        return read(prefs, key(context, order)).contains(id);
+        return read(prefs, key(context, order)+(merchant?"_merchant":"")).contains(id);
     }
 
     static synchronized boolean claim(Context context, JSONObject order, long id) {
+        return claim(context, order, id, false);
+    }
+    static synchronized boolean claim(Context context, JSONObject order, long id, boolean merchant) {
         if (id <= 0) return false;
         SharedPreferences prefs = context.getSharedPreferences("trip_chat_preview_receipts_v1", Context.MODE_PRIVATE);
-        String key = key(context, order);
+        String key = key(context, order)+(merchant?"_merchant":"");
         LinkedHashSet<Long> ids = read(prefs, key);
         if (!ids.add(id)) return false;
         // IDs are ordered by display, not server watermark, so delayed and out-of-order

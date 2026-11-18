@@ -122,7 +122,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         header.addView(text("Perjalanan",16,"#0F172A",true),new LinearLayout.LayoutParams(0,-2,1));
         c.addView(header);
 
-        arrivedPickupBtn = slideAction("📍 Geser • Tiba di Penjemputan", () -> updateStatus("arrived_pickup")); actionDock.addView(arrivedPickupBtn, slideLp(0));
+        arrivedPickupBtn = slideAction(isFoodOrder() ? "📍 Geser • Tiba di resto" : "📍 Geser • Tiba di Penjemputan", () -> updateStatus("arrived_pickup")); actionDock.addView(arrivedPickupBtn, slideLp(0));
         startDeliveryBtn = slideAction(orderKind.equals("pickup") ? "📦 Geser • Paket Diambil, Mulai Antar" : vehicleEmoji() + " Geser • Mulai Perjalanan", () -> updateStatus("on_delivery")); actionDock.addView(startDeliveryBtn, slideLp(0));
         JSONObject pendingStop=DriverEcosystemFeatures.from(order).nextPendingWaypoint();
         final int stopSequence=pendingStop==null?0:pendingStop.optInt("sequence",1);
@@ -172,23 +172,27 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
 
         if (communicationController != null) communicationController.onStop();
         LinearLayout quick = new LinearLayout(this); quick.setOrientation(LinearLayout.HORIZONTAL);
-        customerChatBtn = premiumRideTrip() ? outline("Hubungi") : primary("Pelanggan");
+        customerChatBtn = premiumRideTrip() ? outline(isFoodOrder() ? "Pelanggan" : "Hubungi") : primary("Pelanggan");
         customerChatBtn.setContentDescription("Chat pelanggan");
+        FoodTripButtons.decorate(this,customerChatBtn,"customer");
         compactTripAction(customerChatBtn);
         communicationController = new TripCommunicationController(this, order, driverUsername, customerChatBtn);
         communicationController.onStart();
         customerChatBtn.setOnClickListener(v -> communicationController.openCustomerChat());
         quick.addView(customerChatBtn, new LinearLayout.LayoutParams(0, dp(48), 1));
         Button nav = premiumRideTrip() ? primary("Navigasi") : outline("Navigasi"); compactTripAction(nav); nav.setOnClickListener(v -> communicationController.openNavigation(!isDeliveryPhase(status()), lastDriverLat, lastDriverLng));
+        FoodTripButtons.decorate(this,nav,"navigation");
         LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(0, dp(48), 1); np.setMarginStart(dp(6)); quick.addView(nav, np);
         LinearLayout.LayoutParams qp = new LinearLayout.LayoutParams(-1,-2); qp.setMargins(0,dp(1),0,0); c.addView(quick, qp);
         if (isFoodOrder()) {
             Button merchantChat = outline("Merchant");
             compactTripAction(merchantChat);
             merchantChat.setContentDescription("Chat Merchant");
+            FoodTripButtons.decorate(this,merchantChat,"merchant");
             merchantChat.setOnClickListener(v -> communicationController.openMerchantChat());
             LinearLayout.LayoutParams merchantParams=new LinearLayout.LayoutParams(0,dp(48),1);
             merchantParams.setMarginStart(dp(6));
+            merchantChat.setBackground(round(DriverThemeTokens.isDark(this)?"#16382E":"#DCFCE7",dp(14)));
             quick.addView(merchantChat,merchantParams);
         }
         if (premiumRideTrip()) {
@@ -197,7 +201,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
             quick.addView(nav, 0, new LinearLayout.LayoutParams(0, dp(48), 1));
             LinearLayout.LayoutParams contact = (LinearLayout.LayoutParams) customerChatBtn.getLayoutParams();
             contact.setMarginStart(dp(7));
-            customerChatBtn.setBackground(round("#F2F7FF", dp(16)));
+            customerChatBtn.setBackground(DriverNavigationUi.roundRect(DriverThemeTokens.surfaceAlt(this), dp(16)));
             nav.setBackground(DriverNavigationUi.roundRect(android.graphics.Color.rgb(0, 93, 222), dp(16)));
             actionDock.addView(quick, 0, new LinearLayout.LayoutParams(-1, -2));
             dockHint.setGravity(Gravity.CENTER);

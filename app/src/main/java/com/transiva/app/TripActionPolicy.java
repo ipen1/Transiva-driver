@@ -46,6 +46,7 @@ final class TripActionPolicy {
                     reason = "Menunggu konfirmasi pelanggan";
             }
         }
+        if ("arrived_pickup".equals(next) && FoodTripPresentation.isFood(order)) label = "Geser untuk tiba di resto";
         if (arrival) {
             Location fix = session.fix();
             float distance = TripArrivalLocation.distance(fix, target);
