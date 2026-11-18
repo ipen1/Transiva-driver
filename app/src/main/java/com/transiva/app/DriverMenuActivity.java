@@ -70,7 +70,7 @@ public final class DriverMenuActivity extends DriverDashboardActivity {
         add(homeSections, orderSections, 0, dp(8), 0, 0);
 
         bottomNavigationView = DriverBottomNavigation.buildMenu(this);
-        screen.addView(bottomNavigationView, new LinearLayout.LayoutParams(-1, DriverBottomNavigation.height(this)));
+        screen.addView(bottomNavigationView, new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT));
         loading = new ProgressBar(this);
         loading.setVisibility(View.GONE);
         page.addView(loading, new FrameLayout.LayoutParams(dp(42), dp(42), Gravity.CENTER));
@@ -152,12 +152,15 @@ public final class DriverMenuActivity extends DriverDashboardActivity {
         LinearLayout headline = new LinearLayout(this);
         headline.setGravity(Gravity.CENTER_VERTICAL);
         balanceText = walletText("Rp0", 30, true);
-        headline.addView(balanceText, new LinearLayout.LayoutParams(0, -2, 1));
+        headline.addView(balanceText, new LinearLayout.LayoutParams(0, -2, 2));
         TextView manage = walletText("Kelola saldo ›", 12, true);
         manage.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-        headline.addView(manage);
+        headline.addView(manage, new LinearLayout.LayoutParams(0, -2, 1));
         wallet.addView(headline);
-        add(wallet, divider(0x66FFFFFF), 0, dp(6), 0, dp(6));
+        View walletDivider = divider(0x66FFFFFF);
+        LinearLayout.LayoutParams dividerParams = (LinearLayout.LayoutParams) walletDivider.getLayoutParams();
+        dividerParams.setMargins(0, dp(6), 0, dp(6));
+        wallet.addView(walletDivider);
         LinearLayout stats = new LinearLayout(this);
         earningText = walletMetric(stats, "Pendapatan hari ini", "Rp0");
         tripText = walletMetric(stats, "Order selesai", "0");

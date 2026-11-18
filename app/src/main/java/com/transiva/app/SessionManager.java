@@ -261,6 +261,7 @@ public class SessionManager {
 
             SecureTokenStore.clear(appContext);
             DriverChatNotificationPoller.stop();
+            DriverBubbleController.stopForOffline(appContext);
             DriverServiceController.stopAll(appContext);
             clearLegacyOnlineFlags();
             TransivaSession.logout(appContext, safe(reason));

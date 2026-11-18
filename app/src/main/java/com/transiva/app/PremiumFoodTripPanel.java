@@ -10,8 +10,10 @@ final class PremiumFoodTripPanel {
     private final FrameLayout page;
     private final LinearLayout dock;
     private final TextView kitchen;
-    PremiumFoodTripPanel(DriverTripActivity host,FrameLayout page,LinearLayout dock){
-        this.host=host;this.page=page;this.dock=dock;
+    PremiumFoodTripPanel(DriverTripActivity host, FrameLayout page, View dockPanel) {
+        this.host = host;
+        this.page = page;
+        this.dock = host.actionDock;
         kitchen=host.text("",12,"#047857",true);
         kitchen.setGravity(Gravity.CENTER);kitchen.setMaxLines(2);
         kitchen.setPadding(host.dp(12),host.dp(7),host.dp(12),host.dp(7));
@@ -19,7 +21,7 @@ final class PremiumFoodTripPanel {
         kitchen.setOnClickListener(v->host.showPremiumDetails());
         FrameLayout.LayoutParams p=new FrameLayout.LayoutParams(-2,-2,Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);
         p.setMargins(host.dp(64),0,host.dp(64),host.dp(210));page.addView(kitchen,p);
-        dock.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{
+        dockPanel.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{
             FrameLayout.LayoutParams lp=(FrameLayout.LayoutParams)kitchen.getLayoutParams();
             int bottom=page.getHeight()-t+host.dp(7);
             if(lp.bottomMargin!=bottom){lp.bottomMargin=bottom;kitchen.setLayoutParams(lp);}

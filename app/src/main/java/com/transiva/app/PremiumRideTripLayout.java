@@ -4,12 +4,14 @@ import android.graphics.Color;
 import android.view.Gravity;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 final class PremiumRideTripLayout {
     private final DriverTripActivity host;
     final FrameLayout premiumMap;
     final LinearLayout itinerary, actionDock;
+    final ScrollView headerPanel, dockPanel;
     final TextView pickupLine, deliveryLine;
 
     PremiumRideTripLayout(DriverTripActivity host) {
@@ -52,7 +54,10 @@ final class PremiumRideTripLayout {
         LinearLayout.LayoutParams itineraryParams = new LinearLayout.LayoutParams(-1, -2);
         itineraryParams.setMargins(dp(10), dp(7), dp(10), 0);
         overlay.addView(itinerary, itineraryParams);
-        premiumMap.addView(overlay, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP));
+        headerPanel = DriverResponsiveUi.mapPanelScroll(host, .42f);
+        headerPanel.setElevation(dp(7));
+        headerPanel.addView(overlay, new ScrollView.LayoutParams(-1, -2));
+        premiumMap.addView(headerPanel, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP));
 
         actionDock = host.card();
         actionDock.setElevation(dp(7));
@@ -61,10 +66,13 @@ final class PremiumRideTripLayout {
         actionDock.setPadding(dp(9), dp(8), dp(9), dp(6));
         FrameLayout.LayoutParams bottom = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
         bottom.setMargins(dp(10), 0, dp(10), dp(8));
-        premiumMap.addView(actionDock, bottom);
+        dockPanel = DriverResponsiveUi.mapPanelScroll(host, .45f);
+        dockPanel.setElevation(dp(7));
+        dockPanel.addView(actionDock, new ScrollView.LayoutParams(-1, -2));
+        premiumMap.addView(dockPanel, bottom);
 
-        overlay.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> host.updatePremiumMapInsets());
-        actionDock.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> host.updatePremiumMapInsets());
+        headerPanel.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> host.updatePremiumMapInsets());
+        dockPanel.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> host.updatePremiumMapInsets());
     }
 
     private TextView itineraryLine(String label, String color, java.util.function.Supplier<String> address) {

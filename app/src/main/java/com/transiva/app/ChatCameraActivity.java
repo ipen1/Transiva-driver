@@ -89,10 +89,10 @@ public class ChatCameraActivity
         controls.setGravity(Gravity.CENTER);
 
         controls.setPadding(
-                20,
-                18,
-                20,
-                26
+                DriverResponsiveUi.dp(this, 12),
+                DriverResponsiveUi.dp(this, 10),
+                DriverResponsiveUi.dp(this, 12),
+                DriverResponsiveUi.dp(this, 14)
         );
 
         captureButton = new Button(this);
@@ -128,7 +128,8 @@ public class ChatCameraActivity
             menu.show();
         });
         FrameLayout.LayoutParams flashLp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.END);
-        flashLp.setMargins(12, 24, 16, 0);
+        flashLp.topMargin = DriverResponsiveUi.dp(this, 12);
+        flashLp.setMarginEnd(DriverResponsiveUi.dp(this, 10));
         root.addView(flashButton, flashLp);
 
         FrameLayout.LayoutParams controlsLp =

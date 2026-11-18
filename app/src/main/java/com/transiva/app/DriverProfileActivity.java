@@ -133,7 +133,7 @@ public class DriverProfileActivity extends DriverProfileActivityLayer1 {
 
         shell.addView(
                 DriverBottomNavigation.build(this, DriverBottomNavigation.ActiveItem.PROFILE),
-                new LinearLayout.LayoutParams(-1, DriverBottomNavigation.height(this))
+                new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT)
         );
 
         loading = new ProgressBar(this);

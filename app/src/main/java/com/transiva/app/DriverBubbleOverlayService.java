@@ -3,14 +3,16 @@ package com.transiva.app;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
+import android.graphics.Point;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import android.provider.Settings;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -26,9 +28,6 @@ import androidx.annotation.Nullable;
  * Does not own GPS/polling and deliberately is NOT a second foreground service.
  */
 public final class DriverBubbleOverlayService extends Service {
-    public static final String ACTION_START = "com.transiva.app.BUBBLE_START";
-    public static final String ACTION_STOP = "com.transiva.app.BUBBLE_STOP";
-    public static final String ACTION_OFFLINE = "com.transiva.app.BUBBLE_OFFLINE";
     private static final String PENDING_PREF = "transiva_bubble_pending";
     private static final long DEFAULT_PREVIEW_MS = 4200L;
     private static volatile DriverBubbleOverlayService instance;
@@ -53,6 +52,8 @@ public final class DriverBubbleOverlayService extends Service {
                                boolean newOrder) {
         if (context == null) return;
         Context app = context.getApplicationContext();
+        if (!DriverBubbleController.enabled(app) || !DriverBubbleController.canOverlay(app)
+                || !DriverBubbleController.driverOnline(app)) return;
         // Simpan event singkat terlebih dahulu. Jika proses baru saja dihidupkan
         // oleh FCM, event tetap dapat ditampilkan setelah service overlay hidup.
         try {
@@ -79,42 +80,37 @@ public final class DriverBubbleOverlayService extends Service {
         return value == null ? "" : value.trim();
     }
 
+    static void clearPending(Context context) {
+        SharedPreferences pending = context.getSharedPreferences(PENDING_PREF, MODE_PRIVATE);
+        if (pending.contains("type")) pending.edit().clear().apply();
+    }
+
     @Override public void onCreate() {
         super.onCreate();
         instance = this;
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-        if (!canOverlay() || !DriverBubbleController.enabled(this)
-                || !DriverBubbleController.driverOnline(this)) {
-            stopSelf();
-            return;
-        }
-        createViews();
-        consumePendingEvent();
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null && ACTION_STOP.equals(intent.getAction())) {
-            getSharedPreferences("transiva_bubble", MODE_PRIVATE).edit().putBoolean("enabled", false).apply();
+        if (wm == null || !DriverBubbleController.eligible(this)) {
             stopSelf();
             return START_NOT_STICKY;
         }
-        if (intent != null && ACTION_OFFLINE.equals(intent.getAction())) {
+        try {
+            if (bubbleRoot == null) createViews();
+            consumePendingEvent();
+            return START_STICKY;
+        } catch (WindowManager.BadTokenException | SecurityException error) {
+            NavigationDiagnostics.error(this, "BUBBLE_WINDOW_FAILED", error);
             stopSelf();
             return START_NOT_STICKY;
         }
-        if (!canOverlay() || !DriverBubbleController.enabled(this)
-                || !DriverBubbleController.driverOnline(this)) {
-            stopSelf();
-            return START_NOT_STICKY;
-        }
-        if (bubbleRoot == null) createViews();
-        consumePendingEvent();
-        return START_STICKY;
     }
 
     private void consumePendingEvent() {
         try {
-            android.content.SharedPreferences p = getSharedPreferences(PENDING_PREF, MODE_PRIVATE);
+            if (bubbleRoot == null || !DriverBubbleController.eligible(this)) return;
+            SharedPreferences p = getSharedPreferences(PENDING_PREF, MODE_PRIVATE);
             if (!p.getBoolean("has_event", false)) return;
             String type = p.getString("type", "");
             String text = p.getString("text", "");
@@ -125,10 +121,6 @@ public final class DriverBubbleOverlayService extends Service {
             p.edit().putBoolean("has_event", false).apply();
             main.post(() -> showEvent(type, text, orderId, roomId, mentionId, newOrder));
         } catch (Throwable ignored) {}
-    }
-
-    private boolean canOverlay() {
-        return Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(this);
     }
 
     private void createViews() {
@@ -163,12 +155,11 @@ public final class DriverBubbleOverlayService extends Service {
         bubbleRoot.addView(badge, badgeLp);
 
         bubbleLp = new WindowManager.LayoutParams(dp(68), dp(68), type,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                PixelFormat.TRANSLUCENT);
-        bubbleLp.gravity = Gravity.TOP | Gravity.START;
-        bubbleLp.x = dp(10);
-        bubbleLp.y = dp(180);
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT);
+        bubbleLp.gravity = Gravity.TOP | Gravity.LEFT;
+        Point screen = screenSize();
+        bubbleLp.x = clampPosition(dp(10), screen.x, bubbleLp.width);
+        bubbleLp.y = clampPosition(dp(180), screen.y, bubbleLp.height);
         wm.addView(bubbleRoot, bubbleLp);
 
         preview = new TextView(this);
@@ -176,12 +167,13 @@ public final class DriverBubbleOverlayService extends Service {
         preview.setTextSize(13);
         preview.setGravity(Gravity.CENTER_VERTICAL);
         preview.setMaxLines(2);
+        preview.setEllipsize(android.text.TextUtils.TruncateAt.END);
         preview.setPadding(dp(14), dp(9), dp(14), dp(9));
         preview.setBackground(round("#E91B2533", 18));
         previewLp = new WindowManager.LayoutParams(dp(245), WindowManager.LayoutParams.WRAP_CONTENT,
                 type, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
                 PixelFormat.TRANSLUCENT);
-        previewLp.gravity = Gravity.TOP | Gravity.START;
+        previewLp.gravity = Gravity.TOP | Gravity.LEFT;
         previewLp.x = dp(80);
         previewLp.y = bubbleLp.y + dp(8);
         preview.setVisibility(View.GONE);
@@ -228,8 +220,9 @@ public final class DriverBubbleOverlayService extends Service {
                         float dx = e.getRawX() - downRawX;
                         float dy = e.getRawY() - downRawY;
                         if (Math.abs(dx) > dp(4) || Math.abs(dy) > dp(4)) dragging = true;
-                        bubbleLp.x = startX + Math.round(dx);
-                        bubbleLp.y = Math.max(0, startY + Math.round(dy));
+                        Point bounds = screenSize();
+                        bubbleLp.x = clampPosition(startX + Math.round(dx), bounds.x, bubbleLp.width);
+                        bubbleLp.y = clampPosition(startY + Math.round(dy), bounds.y, bubbleLp.height);
                         try { wm.updateViewLayout(bubbleRoot, bubbleLp); } catch (Throwable ignored) {}
                         boolean hit = dragging && isOverClose(e);
                         closeTarget.setAlpha(hit ? 1f : .72f);
@@ -240,7 +233,7 @@ public final class DriverBubbleOverlayService extends Service {
                         if (close) {
                             hidePreviewNow();
                             bubbleRoot.setVisibility(View.GONE);
-                            DriverBubbleController.disable(DriverBubbleOverlayService.this);
+                            DriverBubbleController.dismiss(DriverBubbleOverlayService.this);
                             return true;
                         }
                         if (!dragging) v.performClick();
@@ -267,17 +260,60 @@ public final class DriverBubbleOverlayService extends Service {
         });
     }
 
+    @Override public void onConfigurationChanged(Configuration configuration) {
+        super.onConfigurationChanged(configuration);
+        main.post(() -> {
+            if (bubbleRoot == null) return;
+            hidePreviewNow();
+            snapToEdge();
+        });
+    }
+
+    private Point screenSize() {
+        Point point = new Point();
+        wm.getDefaultDisplay().getSize(point);
+        return point;
+    }
+
+    private static int clampPosition(int value, int available, int size) {
+        return Math.max(0, Math.min(value, available - size));
+    }
+
     private void snapToEdge() {
-        android.graphics.Point p = new android.graphics.Point();
-        wm.getDefaultDisplay().getSize(p);
-        int mid = p.x / 2;
-        bubbleLp.x = bubbleLp.x + dp(34) < mid ? dp(8) : Math.max(dp(8), p.x - dp(76));
-        try { wm.updateViewLayout(bubbleRoot, bubbleLp); } catch (Throwable ignored) {}
+        Point screen = screenSize();
+        boolean left = bubbleLp.x + bubbleLp.width / 2 < screen.x / 2;
+        int x = left ? dp(8) : screen.x - bubbleLp.width - dp(8);
+        bubbleLp.x = clampPosition(x, screen.x, bubbleLp.width);
+        bubbleLp.y = clampPosition(bubbleLp.y, screen.y, bubbleLp.height);
+        try { wm.updateViewLayout(bubbleRoot, bubbleLp); } catch (IllegalArgumentException ignored) {}
+    }
+
+    private void positionPreview() {
+        Point screen = screenSize();
+        int gap = dp(6);
+        int left = Math.max(0, bubbleLp.x - 2 * gap);
+        int right = Math.max(0, screen.x - bubbleLp.x - bubbleLp.width - 2 * gap);
+        int width = Math.min(dp(245), Math.max(left, right));
+        boolean beside = width >= dp(125);
+        previewLp.width = beside ? width : Math.max(1, Math.min(dp(245), screen.x - 2 * gap));
+        int x = !beside ? bubbleLp.x
+                : right >= left ? bubbleLp.x + bubbleLp.width + gap : bubbleLp.x - width - gap;
+        preview.measure(View.MeasureSpec.makeMeasureSpec(previewLp.width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        int height = preview.getMeasuredHeight();
+        int y = bubbleLp.y + dp(8);
+        if (!beside) {
+            y = bubbleLp.y + bubbleLp.height + gap;
+            if (y + height > screen.y) y = bubbleLp.y - height - gap;
+        }
+        previewLp.x = clampPosition(x, screen.x, previewLp.width);
+        previewLp.y = clampPosition(y, screen.y, height);
+        try { wm.updateViewLayout(preview, previewLp); } catch (IllegalArgumentException ignored) {}
     }
 
     private void showEvent(String type, String text, String orderId, String roomId,
                            long mentionId, boolean newOrder) {
-        if (bubbleRoot == null || !DriverBubbleController.enabled(this)) return;
+        if (bubbleRoot == null || !DriverBubbleController.eligible(this)) return;
         lastType = safe(type);
         lastOrderId = safe(orderId);
         lastRoomId = safe(roomId);
@@ -289,9 +325,7 @@ public final class DriverBubbleOverlayService extends Service {
         String message = safe(text);
         if (message.isEmpty()) return;
         preview.setText(message);
-        previewLp.x = bubbleLp.x < dp(100) ? bubbleLp.x + dp(70) : Math.max(dp(8), bubbleLp.x - dp(252));
-        previewLp.y = bubbleLp.y + dp(8);
-        try { wm.updateViewLayout(preview, previewLp); } catch (Throwable ignored) {}
+        positionPreview();
         preview.setAlpha(0f);
         preview.setVisibility(View.VISIBLE);
         preview.animate().alpha(1f).setDuration(160L).start();

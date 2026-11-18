@@ -245,8 +245,12 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         LinearLayout header=new LinearLayout(this);header.setOrientation(LinearLayout.VERTICAL);header.setPadding(dp(14),dp(10),dp(14),dp(10));
         header.setBackground(roundRect(DriverThemeTokens.surface(this),22));header.setElevation(dp(6));
         FrameLayout.LayoutParams headLp=new FrameLayout.LayoutParams(-1,-2,Gravity.TOP);headLp.setMargins(dp(12),dp(12),dp(12),0);
-        android.widget.ScrollView headerScroll=new android.widget.ScrollView(this);headerScroll.setTag("navigation_header_container");headerScroll.setVerticalScrollBarEnabled(false);headerScroll.setElevation(dp(6));guidanceHeader=headerScroll;headerScroll.addView(header,new android.widget.ScrollView.LayoutParams(-1,-2));page.addView(headerScroll,headLp);
-        page.addOnLayoutChangeListener((v,l,t,rr,b,ol,ot,orr,ob)->{int desired=header.getMeasuredHeight(),limit=Math.max(dp(100),page.getHeight()-dp(130));int height=Math.min(desired,limit);FrameLayout.LayoutParams hp=(FrameLayout.LayoutParams)headerScroll.getLayoutParams();if(height>0&&hp.height!=height){hp.height=height;headerScroll.setLayoutParams(hp);}});
+        android.widget.ScrollView headerScroll = DriverResponsiveUi.mapPanelScroll(this, .42f);
+        headerScroll.setTag("navigation_header_container");
+        headerScroll.setElevation(dp(6));
+        guidanceHeader = headerScroll;
+        headerScroll.addView(header, new android.widget.ScrollView.LayoutParams(-1, -2));
+        page.addView(headerScroll, headLp);
         LinearLayout titleRow=new LinearLayout(this);titleRow.setGravity(Gravity.CENTER_VERTICAL);header.addView(titleRow,new LinearLayout.LayoutParams(-1,-2));
         backButton=new TextView(this);backButton.setText("‹");backButton.setTextSize(32);backButton.setGravity(Gravity.CENTER);backButton.setTextColor(DriverThemeTokens.textPrimary(this));backButton.setContentDescription("Kembali dari navigasi");backButton.setOnClickListener(v->finish());titleRow.addView(backButton,new LinearLayout.LayoutParams(dp(48),dp(48)));
         routeBadge=new TextView(this);routeBadge.setText("Menyiapkan rute…");routeBadge.setTextColor(DriverThemeTokens.textPrimary(this));routeBadge.setTextSize(14);routeBadge.setTypeface(Typeface.DEFAULT,Typeface.BOLD);routeBadge.setMaxLines(3);routeBadge.setPadding(dp(6),0,0,0);titleRow.addView(routeBadge,new LinearLayout.LayoutParams(0,-2,1));
@@ -262,7 +266,6 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         titleRow.addView(more, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
         LinearLayout bottomActions = new LinearLayout(this);
-        navigationDock = bottomActions;
         bottomActions.setOrientation(LinearLayout.VERTICAL);
         bottomActions.setPadding(dp(8), dp(8), dp(8), dp(7));
         bottomActions.setBackground(roundRect(DriverThemeTokens.surface(this), 22));
@@ -270,15 +273,21 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         LinearLayout communication = new LinearLayout(this);
         bottomActions.addView(communication, new LinearLayout.LayoutParams(-1, -2));
         messageButton = new TextView(this);
-        communication.addView(messageButton, new LinearLayout.LayoutParams(0, dp(48), 1));
+        messageButton.setMinHeight(dp(48));
+        communication.addView(messageButton, new LinearLayout.LayoutParams(0, -2, 1));
         callButton = new TextView(this);
-        LinearLayout.LayoutParams callLp = new LinearLayout.LayoutParams(0, dp(48), 1);
+        callButton.setMinHeight(dp(48));
+        LinearLayout.LayoutParams callLp = new LinearLayout.LayoutParams(0, -2, 1);
         callLp.setMarginStart(dp(7));
         communication.addView(callButton, callLp);
         if (!NavigationTargetPolicy.id(order).isEmpty()) arrival = new NavigationArrivalController(this, bottomActions);
         FrameLayout.LayoutParams bottomLp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
         bottomLp.setMargins(dp(10), 0, dp(10), dp(20));
-        page.addView(bottomActions, bottomLp);
+        android.widget.ScrollView dockScroll = DriverResponsiveUi.mapPanelScroll(this, .45f);
+        dockScroll.setElevation(dp(7));
+        dockScroll.addView(bottomActions, new android.widget.ScrollView.LayoutParams(-1, -2));
+        navigationDock = dockScroll;
+        page.addView(dockScroll, bottomLp);
         communicationController = new NavigationCommunicationController(this, order, messageButton, callButton);
 
         speedBadge = new TextView(this);
@@ -307,7 +316,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         followLp.rightMargin = dp(10);
         page.addView(recenterButton, followLp);
         recenterButton.setVisibility(cameraController != null && !cameraController.following() ? View.VISIBLE : View.GONE);
-        bottomActions.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,orr,ob) -> {
+        dockScroll.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,orr,ob) -> {
             int margin = page.getHeight() - t + dp(8);
             updateBottomMargin(recenterButton, margin);
             updateBottomMargin(speedBadge, margin);
@@ -333,7 +342,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         page.addView(attribution, attrLp);
 
         mapChatPreview = FoodTripChatFactory.navigation(this, page,
-                () -> guidanceHeader.getBottom(), () -> bottomActions.getTop() - dp(49));
+                () -> guidanceHeader.getBottom(), () -> dockScroll.getTop() - dp(49));
 
         setContentView(page);
         DriverAppSettings.apply(this);

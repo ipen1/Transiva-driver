@@ -179,10 +179,11 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         communicationController = new TripCommunicationController(this, order, driverUsername, customerChatBtn);
         communicationController.onStart();
         customerChatBtn.setOnClickListener(v -> communicationController.openCustomerChat());
-        quick.addView(customerChatBtn, new LinearLayout.LayoutParams(0, dp(48), 1));
+        quick.setGravity(Gravity.CENTER_VERTICAL);
+        quick.addView(customerChatBtn, new LinearLayout.LayoutParams(0, -2, 1));
         Button nav = premiumRideTrip() ? primary("Navigasi") : outline("Navigasi"); compactTripAction(nav); nav.setOnClickListener(v -> communicationController.openNavigation(!isDeliveryPhase(status()), lastDriverLat, lastDriverLng));
         FoodTripButtons.decorate(this,nav,"navigation");
-        LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(0, dp(48), 1); np.setMarginStart(dp(6)); quick.addView(nav, np);
+        LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(0, -2, 1); np.setMarginStart(dp(6)); quick.addView(nav, np);
         LinearLayout.LayoutParams qp = new LinearLayout.LayoutParams(-1,-2); qp.setMargins(0,dp(1),0,0); c.addView(quick, qp);
         if (isFoodOrder()) {
             Button merchantChat = outline("Merchant");
@@ -190,7 +191,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
             merchantChat.setContentDescription("Chat Merchant");
             FoodTripButtons.decorate(this,merchantChat,"merchant");
             merchantChat.setOnClickListener(v -> communicationController.openMerchantChat());
-            LinearLayout.LayoutParams merchantParams=new LinearLayout.LayoutParams(0,dp(48),1);
+            LinearLayout.LayoutParams merchantParams=new LinearLayout.LayoutParams(0,-2,1);
             merchantParams.setMarginStart(dp(6));
             merchantChat.setBackground(round(DriverThemeTokens.isDark(this)?"#16382E":"#DCFCE7",dp(14)));
             quick.addView(merchantChat,merchantParams);
@@ -198,11 +199,11 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         if (premiumRideTrip()) {
             if(DeliveryTripPresentation.shop(order)){
                 Button list=outline("Daftar");compactTripAction(list);FoodTripButtons.decorate(this,list,"list");list.setOnClickListener(v->((DriverTripActivity)this).showPremiumDetails());
-                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(48),1);lp.setMarginStart(dp(6));quick.addView(list,lp);
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.setMarginStart(dp(6));quick.addView(list,lp);
             }
             c.removeView(quick);
             quick.removeView(nav);
-            quick.addView(nav, 0, new LinearLayout.LayoutParams(0, dp(48), 1));
+            quick.addView(nav, 0, new LinearLayout.LayoutParams(0, -2, 1));
             LinearLayout.LayoutParams contact = (LinearLayout.LayoutParams) customerChatBtn.getLayoutParams();
             contact.setMarginStart(dp(7));
             customerChatBtn.setBackground(DriverNavigationUi.roundRect(DriverThemeTokens.surfaceAlt(this), dp(16)));
@@ -222,6 +223,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         button.setPadding(dp(3),0,dp(3),0);
         button.setMinimumWidth(0);
         button.setMinWidth(0);
+        button.setMinHeight(dp(48));
         button.setElevation(0);
     }
     protected LinearLayout.LayoutParams slideLp(int top) {

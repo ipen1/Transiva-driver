@@ -15,6 +15,8 @@ public class TransivaDriverApplication extends Application implements Applicatio
     private static volatile Context appContext;
     private static volatile WeakReference<Activity> currentActivity = new WeakReference<>(null);
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    private int startedActivities;
+    private boolean restoreBubbleOnStart = true;
 
     static boolean hasResumedActivity() { return currentActivity.get() != null; }
 
@@ -90,13 +92,24 @@ public class TransivaDriverApplication extends Application implements Applicatio
         // bottom navigation/action controls never sit behind 3-button or gesture navigation.
         try { DriverResponsiveUi.apply(a); } catch (Throwable ignored) { }
     }
-    public void onActivityStarted(Activity a) {}
+    public void onActivityStarted(Activity activity) {
+        startedActivities++;
+        if (restoreBubbleOnStart) {
+            restoreBubbleOnStart = false;
+            DriverBubbleController.onAppReopened();
+        }
+    }
     public void onActivityPaused(Activity a) {
         FcmReadinessBanner.detach(a);
         Activity current = currentActivity.get();
         if (current == a) currentActivity = new WeakReference<>(null);
     }
-    public void onActivityStopped(Activity a) {}
+    public void onActivityStopped(Activity activity) {
+        startedActivities--;
+        if (startedActivities == 0 && !activity.isChangingConfigurations()) {
+            restoreBubbleOnStart = true;
+        }
+    }
     public void onActivitySaveInstanceState(Activity a, Bundle b) {}
     public void onActivityDestroyed(Activity a) {DriverAppSettings.release(a);FcmReadinessBanner.detach(a);}
     @Override

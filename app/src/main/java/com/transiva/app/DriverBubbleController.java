@@ -1,94 +1,89 @@
 package com.transiva.app;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
-import android.net.Uri;
-import android.os.Build;
 import android.provider.Settings;
 
-/** One-time permission UX + safe service lifecycle. */
+/** Persists the Settings switch separately from a temporary overlay dismissal. */
 public final class DriverBubbleController {
     private static final String PREF = "transiva_bubble";
+    private static final String ENABLED = "enabled";
+    private static volatile boolean dismissed;
+
     private DriverBubbleController() {}
 
-    public static boolean canOverlay(Context c) {
-        return Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(c);
+    public static boolean canOverlay(Context context) {
+        return Settings.canDrawOverlays(context);
     }
 
-    public static boolean enabled(Context c) {
-        return c.getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean("enabled", false);
+    public static boolean enabled(Context context) {
+        return context.getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean(ENABLED, true);
     }
 
-    public static boolean driverOnline(Context c) {
+    public static boolean driverOnline(Context context) {
         try {
-            SessionManager session = new SessionManager(c.getApplicationContext());
-            return session.isLoggedIn()
-                    && "driver".equals(session.normalizeRole(session.getRole()))
-                    && ("1".equals(session.get("driver_server_online"))
-                        || "1".equals(session.get("driver_is_online")));
-        } catch (Throwable ignored) {
+            SessionManager session = new SessionManager(context.getApplicationContext());
+            if (!session.isLoggedIn() || !"driver".equals(session.normalizeRole(session.getRole()))) return false;
+            String serverOnline = session.get("driver_server_online");
+            return "1".equals(serverOnline.isEmpty() ? session.get("driver_is_online") : serverOnline);
+        } catch (ClassCastException error) {
+            NavigationDiagnostics.error(context, "BUBBLE_SESSION_INVALID", error);
             return false;
         }
     }
 
-    public static void onActivityResumed(Activity a) {
-        if (a == null || a.isFinishing() || a instanceof SplashActivity || a instanceof LoginActivity || a instanceof PinActivity) return;
-        if (canOverlay(a) && enabled(a)) start(a);
+    static void onAppReopened() {
+        dismissed = false;
     }
 
-    public static void requestOnce(Activity a) {
-        if (a == null || Build.VERSION.SDK_INT < 23 || canOverlay(a)) { onActivityResumed(a); return; }
-        boolean asked = a.getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean("permission_asked_v1", false);
-        if (asked) return;
-        a.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putBoolean("permission_asked_v1", true).apply();
-        PremiumDialogs.builder(a)
-                .setTitle("Aktifkan Bubble Transiva")
-                .setMessage("Bubble menampilkan order baru, pesan customer, dan mention di atas aplikasi lain. Bubble bisa digeser ke tanda × untuk ditutup kapan saja.")
-                .setNegativeButton("Nanti", null)
-                .setPositiveButton("Aktifkan", (d, w) -> {
-                    try {
-                        Intent i = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + a.getPackageName()));
-                        a.startActivity(i);
-                    } catch (Throwable ignored) {}
-                }).show();
+    public static void onActivityResumed(Activity activity) {
+        if (activity.isFinishing() || activity instanceof SplashActivity
+                || activity instanceof LoginActivity || activity instanceof PinActivity) return;
+        if (eligible(activity)) start(activity);
+        else stopService(activity);
     }
 
-    public static void start(Context c) {
-        if (!canOverlay(c) || !enabled(c) || !driverOnline(c)) return;
+    static boolean eligible(Context context) {
+        return !dismissed && enabled(context) && canOverlay(context) && driverOnline(context);
+    }
+
+    public static void start(Context context) {
+        if (!eligible(context)) return;
         try {
-            Intent i = new Intent(c, DriverBubbleOverlayService.class).setAction(DriverBubbleOverlayService.ACTION_START);
-            c.startService(i);
-        } catch (Throwable ignored) {}
+            context.startService(new Intent(context, DriverBubbleOverlayService.class));
+        } catch (IllegalStateException | SecurityException error) {
+            NavigationDiagnostics.error(context, "BUBBLE_START_FAILED", error);
+        }
     }
 
-    public static void enable(Context c) {
-        c.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putBoolean("enabled", true).apply();
-        start(c);
+    public static void enable(Context context) {
+        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putBoolean(ENABLED, true).apply();
+        dismissed = false;
+        start(context);
     }
 
-    public static void disable(Context c) {
-        c.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putBoolean("enabled", false).apply();
-        stopService(c, true);
+    public static void disable(Context context) {
+        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putBoolean(ENABLED, false).apply();
+        stopForOffline(context);
     }
 
-    /** Hide karena status driver OFFLINE, tanpa mengubah pilihan Bubble di Settings. */
-    public static void stopForOffline(Context c) {
-        stopService(c, false);
+    static void dismiss(Context context) {
+        dismissed = true;
+        stopService(context);
     }
 
-    private static void stopService(Context c, boolean userDisabled) {
-        if (c == null) return;
+    /** Stop on sign-out or offline without changing the Settings switch. */
+    public static void stopForOffline(Context context) {
+        DriverBubbleOverlayService.clearPending(context);
+        stopService(context);
+    }
+
+    private static void stopService(Context context) {
         try {
-            Intent i = new Intent(c, DriverBubbleOverlayService.class)
-                    .setAction(userDisabled
-                            ? DriverBubbleOverlayService.ACTION_STOP
-                            : DriverBubbleOverlayService.ACTION_OFFLINE);
-            c.startService(i);
-        } catch (Throwable ignored) {
-            try { c.stopService(new Intent(c, DriverBubbleOverlayService.class)); }
-            catch (Throwable ignoredAgain) {}
+            context.stopService(new Intent(context, DriverBubbleOverlayService.class));
+        } catch (IllegalStateException | SecurityException error) {
+            NavigationDiagnostics.error(context, "BUBBLE_STOP_FAILED", error);
         }
     }
 }

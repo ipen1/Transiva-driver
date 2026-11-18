@@ -39,7 +39,7 @@ public class DriverSettingsActivity extends Activity {
     private TextView deviceMetaView;
     private TextView resetDeviceButton;
     private volatile boolean resettingDevice = false;
-    private TextView overlayStatusView,callStatusView;
+    private TextView overlayStatusView, callStatusView, bubbleStatusView;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -54,6 +54,7 @@ public class DriverSettingsActivity extends Activity {
         DriverAppSettings.apply(this);
         if(overlayStatusView!=null)overlayStatusView.setText(overlayStatusText());
         if(callStatusView!=null)callStatusView.setText(fullScreenCallStatusText());
+        if (bubbleStatusView != null) bubbleStatusView.setText(bubbleStatusText());
         if (!resettingDevice && deviceNameView != null) loadDeviceStatus();
     }
 
@@ -164,23 +165,29 @@ public class DriverSettingsActivity extends Activity {
         LinearLayout bubbleLabels = new LinearLayout(this);
         bubbleLabels.setOrientation(LinearLayout.VERTICAL);
         bubbleLabels.addView(text("Bubble Transiva", 15, "#0B3A78", true));
-        String bubbleState = DriverBubbleController.enabled(this) ? "Aktif • order, pesan customer, dan mention" : "Nonaktif • ketuk untuk mengaktifkan kembali";
-        bubbleLabels.addView(text(bubbleState, 11, "#64748B", false));
+        bubbleStatusView = text(bubbleStatusText(), 11, "#64748B", false);
+        bubbleLabels.addView(bubbleStatusView);
+        bubbleRow.setMinimumHeight(dp(48));
         bubbleRow.addView(bubbleLabels, new LinearLayout.LayoutParams(0, -2, 1));
-        bubbleRow.addView(text("›", 30, "#0B7CFF", true));
-        bubbleRow.setOnClickListener(v -> {
-            if (DriverBubbleController.enabled(this)) {
+        Switch bubbleToggle = new Switch(this);
+        bubbleToggle.setMinHeight(dp(48));
+        bubbleToggle.setContentDescription("Bubble Transiva");
+        bubbleToggle.setChecked(DriverBubbleController.enabled(this));
+        bubbleRow.addView(bubbleToggle);
+        bubbleToggle.setOnCheckedChangeListener((button, enabled) -> {
+            if (enabled) {
+                DriverBubbleController.enable(this);
+                if (!DriverBubbleController.canOverlay(this)) explainAndOpenOverlaySettings();
+            } else {
                 DriverBubbleController.disable(this);
-                Toast.makeText(this, "Bubble Transiva dinonaktifkan", Toast.LENGTH_SHORT).show();
-                recreate();
-                return;
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            bubbleStatusView.setText(bubbleStatusText());
+        });
+        bubbleLabels.setOnClickListener(v -> {
+            if (bubbleToggle.isChecked() && !DriverBubbleController.canOverlay(this)) {
                 explainAndOpenOverlaySettings();
             } else {
-                DriverBubbleController.enable(this);
-                Toast.makeText(this, "Bubble Transiva diaktifkan", Toast.LENGTH_SHORT).show();
-                recreate();
+                bubbleToggle.toggle();
             }
         });
         callCard.addView(bubbleRow);
@@ -350,6 +357,12 @@ public class DriverSettingsActivity extends Activity {
                     }
                 })
                 .show();
+    }
+
+    private String bubbleStatusText() {
+        if (!DriverBubbleController.enabled(this)) return "Nonaktif";
+        if (!DriverBubbleController.canOverlay(this)) return "Ketuk untuk memberi izin tampil di atas aplikasi lain";
+        return "Aktif saat online • order, pesan customer, dan mention";
     }
 
     private String overlayStatusText() {

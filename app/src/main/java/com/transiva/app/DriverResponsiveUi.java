@@ -4,7 +4,10 @@ import android.app.Activity;
 import android.content.Context;
 import android.os.Build;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.widget.ScrollView;
+import android.widget.TextView;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -14,6 +17,8 @@ import java.util.WeakHashMap;
 public final class DriverResponsiveUi {
     public enum Profile { COMPACT, SMALL, NORMAL, LARGE, TABLET }
     private static final WeakHashMap<View, int[]> BASE_PADDING = new WeakHashMap<>();
+    private static final String CHAT_BUBBLE = "transiva_chat_bubble";
+    private static final String MERCHANT_CHAT_BUBBLE = "transiva_merchant_chat_bubble";
     private DriverResponsiveUi() { }
 
     public static int availableWidth(Context context) {
@@ -59,7 +64,16 @@ public final class DriverResponsiveUi {
             ViewCompat.setOnApplyWindowInsetsListener(content, createInsetsListener(activity, base));
             content.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
                 if (r - l != or - ol || b - t != ob - ot) ViewCompat.requestApplyInsets(v);
-                if (r - l != or - ol) resizeBubbles(activity, v);
+            });
+            content.getViewTreeObserver().addOnGlobalLayoutListener(new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+                private int lastWidth;
+
+                @Override public void onGlobalLayout() {
+                    int width = availableWidth(activity);
+                    if (width == lastWidth) return;
+                    lastWidth = width;
+                    resizeBubbles(activity, content, width);
+                }
             });
         }
         ViewCompat.requestApplyInsets(content);
@@ -88,13 +102,38 @@ public final class DriverResponsiveUi {
         };
     }
 
-    private static void resizeBubbles(Activity activity, View view) {
-        if (view instanceof android.widget.TextView && "transiva_chat_bubble".equals(view.getTag()))
-            ((android.widget.TextView)view).setMaxWidth(Math.min(dp(activity,520), Math.round(availableWidth(activity)*.75f)));
-        if (view instanceof android.view.ViewGroup) {
-            android.view.ViewGroup group=(android.view.ViewGroup)view;
-            for(int i=0;i<group.getChildCount();i++) resizeBubbles(activity,group.getChildAt(i));
+    static void configureChatBubble(Activity activity, TextView bubble, boolean merchant) {
+        bubble.setTag(merchant ? MERCHANT_CHAT_BUBBLE : CHAT_BUBBLE);
+        sizeChatBubble(activity, bubble, availableWidth(activity));
+    }
+
+    private static void sizeChatBubble(Activity activity, TextView bubble, int width) {
+        Object tag = bubble.getTag();
+        boolean merchant = MERCHANT_CHAT_BUBBLE.equals(tag);
+        if (!merchant && !CHAT_BUBBLE.equals(tag)) return;
+        int maxWidth = Math.min(dp(activity, merchant ? 420 : 520),
+                Math.max(1, Math.round(width * (merchant ? .74f : .75f))));
+        if (bubble.getMaxWidth() != maxWidth) bubble.setMaxWidth(maxWidth);
+    }
+
+    private static void resizeBubbles(Activity activity, View view, int width) {
+        if (view instanceof TextView) sizeChatBubble(activity, (TextView) view, width);
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) resizeBubbles(activity, group.getChildAt(i), width);
         }
+    }
+
+    static ScrollView mapPanelScroll(Context context, float maxHeightRatio) {
+        return new ScrollView(context) {
+            @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                if (View.MeasureSpec.getMode(heightMeasureSpec) == View.MeasureSpec.AT_MOST) {
+                    int limit = Math.round(View.MeasureSpec.getSize(heightMeasureSpec) * maxHeightRatio);
+                    heightMeasureSpec = View.MeasureSpec.makeMeasureSpec(limit, View.MeasureSpec.AT_MOST);
+                }
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            }
+        };
     }
 
     private static boolean fullWidth(Activity activity) {

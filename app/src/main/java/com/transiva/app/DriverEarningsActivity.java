@@ -461,7 +461,7 @@ public class DriverEarningsActivity extends DriverEarningsActivityLayer1 {
                 ),
                 new LinearLayout.LayoutParams(
                         -1,
-                        DriverBottomNavigation.height(this)
+                        LinearLayout.LayoutParams.WRAP_CONTENT
                 )
         );
 

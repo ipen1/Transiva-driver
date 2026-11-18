@@ -112,7 +112,10 @@ public class SplashActivity extends Activity {
         FrameLayout.LayoutParams cardLp = new FrameLayout.LayoutParams(-1, -2);
         cardLp.gravity = Gravity.BOTTOM;
         cardLp.setMargins(dp(20), 0, dp(20), dp(26));
-        root.addView(updateCard, cardLp);
+        android.widget.ScrollView cardScroll = new android.widget.ScrollView(this);
+        cardScroll.setVerticalScrollBarEnabled(false);
+        cardScroll.addView(updateCard, new android.widget.ScrollView.LayoutParams(-1, -2));
+        root.addView(cardScroll, cardLp);
         setContentView(root);
     }
 

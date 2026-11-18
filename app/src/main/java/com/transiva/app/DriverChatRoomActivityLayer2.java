@@ -416,8 +416,7 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
                     false);
             bubble.setTextSize(14);
             bubble.setTextColor(mine ? Color.WHITE : chatChrome.textColor());
-            bubble.setMaxWidth(Math.min(dp(520), (int)(DriverResponsiveUi.availableWidth(this) * 0.75)));
-            bubble.setTag("transiva_chat_bubble");
+            DriverResponsiveUi.configureChatBubble(this, bubble, false);
             wrapper.addView(
                     bubble,
                     new LinearLayout.LayoutParams(-2, -2));

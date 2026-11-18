@@ -104,7 +104,7 @@ public class DriverActivityHistoryActivity extends Activity {
         listBox=new LinearLayout(this);listBox.setOrientation(LinearLayout.VERTICAL);content.addView(listBox);
         moreButton=text("Muat 10 aktivitas berikutnya  ↓",13,"#0B7CFF",true);moreButton.setGravity(Gravity.CENTER);moreButton.setPadding(dp(8),dp(12),dp(8),dp(12));moreButton.setVisibility(View.GONE);
         moreButton.setOnClickListener(v->{visibleCount+=10;renderList();});content.addView(moreButton,sectionLp());
-        shell.addView(DriverBottomNavigation.build(this, DriverBottomNavigation.ActiveItem.ACTIVITY),new LinearLayout.LayoutParams(-1,DriverBottomNavigation.height(this)));
+        shell.addView(DriverBottomNavigation.build(this, DriverBottomNavigation.ActiveItem.ACTIVITY),new LinearLayout.LayoutParams(-1,LinearLayout.LayoutParams.WRAP_CONTENT));
         return page;
     }
 

@@ -267,7 +267,7 @@ public class DriverMerchantChatActivity extends Activity {
         wrapper.setGravity(mine?Gravity.END:Gravity.START);
         TextView bubble=text(message.optString("message",""),14,mine?"#FFFFFF":"#0F172A",false);
         if(mine)bubble.setTextColor(Color.WHITE);
-        bubble.setMaxWidth(Math.min(dp(420),Math.round(getResources().getDisplayMetrics().widthPixels*.74f)));
+        DriverResponsiveUi.configureChatBubble(this, bubble, true);
         wrapper.addView(bubble);
         TextView timestamp=text("",10,"#64748B",false);
         chatStyle.receipt(timestamp,message,mine);

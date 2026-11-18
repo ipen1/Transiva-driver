@@ -68,6 +68,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     private PremiumFoodTripPanel foodPanel;
     @Override protected boolean premiumRideTrip() { return mapFirstRide; }
     private View retainedMapSlot;
+    private ScrollView premiumHeaderPanel, premiumDockPanel;
     private NavigationFrameTelemetry frameTelemetry;
     private boolean realtimeTripRunning=false,realtimeBusy;
     private long realtimeGeneration;
@@ -288,14 +289,21 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     protected void buildBase(){
         if (premiumRideTrip()) { buildPremiumBase(); return; }
         FrameLayout page = new FrameLayout(this); page.setBackgroundColor(DriverThemeTokens.color(this, "#F3F8FF"));
-        ScrollView scroll = new NavigationTripScrollView(this); FrameLayout.LayoutParams scrollLp=new FrameLayout.LayoutParams(-1,-1);scrollLp.bottomMargin=dp(112);page.addView(scroll,scrollLp);
+        LinearLayout screen = new LinearLayout(this);
+        screen.setOrientation(LinearLayout.VERTICAL);
+        page.addView(screen, new FrameLayout.LayoutParams(-1, -1));
+        ScrollView scroll = new NavigationTripScrollView(this);
+        screen.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(14), dp(12), dp(14), dp(16));
         scroll.addView(root, new ScrollView.LayoutParams(-1,-2));
-        progressBar = new ProgressBar(this); progressBar.setVisibility(View.GONE);
-        FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(dp(48), dp(48)); pp.gravity = Gravity.CENTER; page.addView(progressBar, pp);
-        actionDock=new LinearLayout(this);actionDock.setOrientation(LinearLayout.VERTICAL);
-        actionDock.setPadding(dp(14),dp(8),dp(14),dp(10));actionDock.setBackgroundColor(DriverThemeTokens.surface(this));
-        FrameLayout.LayoutParams dockLp=new FrameLayout.LayoutParams(-1,-2);dockLp.gravity=Gravity.BOTTOM;page.addView(actionDock,dockLp);
+        actionDock = new LinearLayout(this);
+        actionDock.setOrientation(LinearLayout.VERTICAL);
+        actionDock.setPadding(dp(14), dp(8), dp(14), dp(10));
+        actionDock.setBackgroundColor(DriverThemeTokens.surface(this));
+        screen.addView(actionDock, new LinearLayout.LayoutParams(-1, -2));
+        progressBar = new ProgressBar(this);
+        progressBar.setVisibility(View.GONE);
+        page.addView(progressBar, new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.CENTER));
         setContentView(page);
         DriverAppSettings.apply(this);
     }
@@ -304,6 +312,8 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         premiumMap = layout.premiumMap;
         itinerary = layout.itinerary;
         actionDock = layout.actionDock;
+        premiumHeaderPanel = layout.headerPanel;
+        premiumDockPanel = layout.dockPanel;
         pickupLine = layout.pickupLine;
         deliveryLine = layout.deliveryLine;
         root = new LinearLayout(this);
@@ -314,8 +324,8 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         progressBar.setVisibility(View.GONE);
         premiumMap.addView(progressBar, new FrameLayout.LayoutParams(dp(42), dp(42), Gravity.CENTER));
         chatPreview = FoodTripChatFactory.trip(this, premiumMap, () -> order,
-                () -> itinerary.getBottom(), () -> actionDock.getTop() - dp(46));
-        if (isFoodOrder()) foodPanel = new PremiumFoodTripPanel(this, premiumMap, actionDock);
+                () -> premiumHeaderPanel.getBottom(), () -> premiumDockPanel.getTop() - dp(46));
+        if (isFoodOrder()) foodPanel = new PremiumFoodTripPanel(this, premiumMap, premiumDockPanel);
         setContentView(premiumMap);
         DriverAppSettings.apply(this);
     }
@@ -328,9 +338,9 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         startActivity(details);
     }
     void updatePremiumMapInsets() {
-        if (tripSliding || googleMap == null || itinerary == null || actionDock.getTop() <= 0) return;
-        int topInset = itinerary.getBottom() + dp(4);
-        int bottomInset = premiumMap.getHeight() - actionDock.getTop() + dp(5);
+        if (tripSliding || googleMap == null || premiumHeaderPanel == null || premiumDockPanel.getTop() <= 0) return;
+        int topInset = premiumHeaderPanel.getBottom() + dp(4);
+        int bottomInset = premiumMap.getHeight() - premiumDockPanel.getTop() + dp(5);
         if (topInset + bottomInset + dp(46) >= premiumMap.getHeight()) return;
         if (topInset == premiumTop && bottomInset == premiumBottom) return;
         premiumTop = topInset;
@@ -459,7 +469,12 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     }
     protected void addMapCard(){
         if (premiumRideTrip() && retainedMapCard != null) return;
-        if(retainedMapCard!=null){retainedMapSlot=new View(this);add(retainedMapSlot,0,0,0,0);return;}
+        if (retainedMapCard != null) {
+            retainedMapSlot = new View(this);
+            retainedMapSlot.setVisibility(View.GONE);
+            root.addView(retainedMapSlot, new LinearLayout.LayoutParams(-1, 0));
+            return;
+        }
         LinearLayout c = card();retainedMapCard=c; c.setPadding(dp(9), dp(8), dp(9), dp(9));
         if (premiumRideTrip()) {
             c.setPadding(0, 0, 0, 0);
@@ -501,7 +516,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             tripFollowButton.setTextColor(DriverThemeTokens.textPrimary(this));
             tripFollowButton.setBackground(round("#FFFFFF", dp(24)));
             flp.width = dp(48);
-            actionDock.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            premiumDockPanel.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
                 int margin = premiumMap.getHeight() - t + dp(8);
                 if (flp.bottomMargin != margin) {
                     flp.bottomMargin = margin;

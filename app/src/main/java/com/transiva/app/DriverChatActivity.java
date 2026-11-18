@@ -165,7 +165,7 @@ public class DriverChatActivity extends DriverChatActivityLayer1 {
                         this,
                         DriverBottomNavigation.ActiveItem.CHAT
                 ),
-                new LinearLayout.LayoutParams(-1, DriverBottomNavigation.height(this))
+                new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT)
         );
 
         progress = new ProgressBar(this);

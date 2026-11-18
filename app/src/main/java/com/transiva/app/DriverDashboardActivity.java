@@ -296,7 +296,7 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
 
         bottomNavigationView = DriverBottomNavigation.build(
                 this, DriverBottomNavigation.ActiveItem.HOME);
-        content.addView(bottomNavigationView, 0, new LinearLayout.LayoutParams(-1, DriverBottomNavigation.height(this)));
+        content.addView(bottomNavigationView, 0, new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT));
         mapPanel = new DashboardMapPanel(this, page, mapSavedState);
         mapSavedState = null;
 
@@ -386,14 +386,15 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
                 .setPositiveButton("KIRIM SOS", (d, w) -> sendEmergency())
                 .show());
 
-        LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, DriverBottomNavigation.height(this), 1.6f);
-        LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(0, DriverBottomNavigation.height(this), 0.8f);
+        status.setMinimumHeight(dp(72));
+        sosButton.setMinimumHeight(dp(72));
+        LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, -2, 1.6f);
+        LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(0, -1, 0.8f);
         right.setMargins(dp(9), 0, 0, 0);
         row.addView(status, left);
         row.addView(sosButton, right);
         add(homeSections, row, 0, dp(10), 0, 0);
     }
-
 
     protected void buildDriverLocationMenu() {
         LinearLayout card = card();
@@ -483,7 +484,6 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         parent.addView(box, lp);
         return number;
     }
-
 
     protected void buildDriverGrowth() {
         LinearLayout card = card();
