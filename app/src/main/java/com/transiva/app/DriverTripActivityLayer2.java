@@ -122,7 +122,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         header.addView(text("Perjalanan",16,"#0F172A",true),new LinearLayout.LayoutParams(0,-2,1));
         c.addView(header);
 
-        arrivedPickupBtn = slideAction(isFoodOrder() ? "📍 Geser • Tiba di resto" : "📍 Geser • Tiba di Penjemputan", () -> updateStatus("arrived_pickup")); actionDock.addView(arrivedPickupBtn, slideLp(0));
+        arrivedPickupBtn = slideAction(isFoodOrder() ? "📍 Geser • Tiba di resto" : DeliveryTripPresentation.shop(order) ? "📍 Geser • Tiba di toko" : "📍 Geser • Tiba di Penjemputan", () -> updateStatus("arrived_pickup")); actionDock.addView(arrivedPickupBtn, slideLp(0));
         startDeliveryBtn = slideAction(orderKind.equals("pickup") ? "📦 Geser • Paket Diambil, Mulai Antar" : vehicleEmoji() + " Geser • Mulai Perjalanan", () -> updateStatus("on_delivery")); actionDock.addView(startDeliveryBtn, slideLp(0));
         JSONObject pendingStop=DriverEcosystemFeatures.from(order).nextPendingWaypoint();
         final int stopSequence=pendingStop==null?0:pendingStop.optInt("sequence",1);
@@ -172,7 +172,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
 
         if (communicationController != null) communicationController.onStop();
         LinearLayout quick = new LinearLayout(this); quick.setOrientation(LinearLayout.HORIZONTAL);
-        customerChatBtn = premiumRideTrip() ? outline(isFoodOrder() ? "Pelanggan" : "Hubungi") : primary("Pelanggan");
+        customerChatBtn = premiumRideTrip() ? outline(isFoodOrder()||DeliveryTripPresentation.shop(order) ? "Pelanggan" : "Hubungi") : primary("Pelanggan");
         customerChatBtn.setContentDescription("Chat pelanggan");
         FoodTripButtons.decorate(this,customerChatBtn,"customer");
         compactTripAction(customerChatBtn);
@@ -196,6 +196,10 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
             quick.addView(merchantChat,merchantParams);
         }
         if (premiumRideTrip()) {
+            if(DeliveryTripPresentation.shop(order)){
+                Button list=outline("Daftar");compactTripAction(list);FoodTripButtons.decorate(this,list,"list");list.setOnClickListener(v->((DriverTripActivity)this).showPremiumDetails());
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(48),1);lp.setMarginStart(dp(6));quick.addView(list,lp);
+            }
             c.removeView(quick);
             quick.removeView(nav);
             quick.addView(nav, 0, new LinearLayout.LayoutParams(0, dp(48), 1));

@@ -47,6 +47,7 @@ final class TripActionPolicy {
             }
         }
         if ("arrived_pickup".equals(next) && FoodTripPresentation.isFood(order)) label = "Geser untuk tiba di resto";
+        if ("arrived_pickup".equals(next) && DeliveryTripPresentation.shop(order)) label = "Geser untuk tiba di toko";
         if (arrival) {
             Location fix = session.fix();
             float distance = TripArrivalLocation.distance(fix, target);

@@ -103,8 +103,8 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         loadOrder();
         if(order!=null)try{order.put("source",isPickupOrder()?"pickup_orders":"orders");if(!NavigationTargetPolicy.terminal(order)){session.put("current_order_source",isPickupOrder()?"pickup_orders":"orders");session.put("current_order_id",orderId());}}catch(org.json.JSONException e){NavigationDiagnostics.error(this,"TRIP_SOURCE_FAILED",e);}
         actionSession = TripActionSession.get(this, order);
-        mapFirstRide = order != null && !isPickupOrder()
-                && (isFoodOrder() || isRideService(order.optString("order_type")) || isRideService(order.optString("service_name")));
+        mapFirstRide = order != null
+                && (DeliveryTripPresentation.special(order) || isFoodOrder() || isRideService(order.optString("order_type")) || isRideService(order.optString("service_name")));
         buildBase();
         if(order == null){ renderEmpty();
             renderEcosystemFeatures(); return; }
@@ -176,7 +176,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
                         else if(fresh!=null){
                             String incoming=first(fresh.optString("order_id"),fresh.optString("id"));if(!key.equals(incoming)&&!internalId().equals(fresh.optString("id")))return;
                             JSONObject routeSnapshot=fresh.optJSONObject("server_route");
-                            String signature=fresh.optString("status")+"|"+fresh.optString("assignment_version")+"|"+fresh.optString("customer_received")+"|"+fresh.optString("price")+"|"+NavigationTargetPolicy.revision(fresh)+"|"+fresh.optString("delivery_lat")+"|"+fresh.optString("delivery_lng")+"|"+String.valueOf(fresh.optJSONObject("ecosystem"))+"|"+String.valueOf(fresh.optJSONObject("destination_extension"))+"|"+String.valueOf(fresh.optJSONObject("extra_fare_request"))+"|"+fresh.optString("price_change_status")+"|"+waitingActionKey(fresh)+"|"+(routeSnapshot==null?"":routeSnapshot.optString("route_hash")+":"+routeSnapshot.optLong("version"))+(isFoodOrder()?fresh.optString("note"):"");
+                            String signature=fresh.optString("status")+"|"+fresh.optString("assignment_version")+"|"+fresh.optString("customer_received")+"|"+fresh.optString("price")+"|"+NavigationTargetPolicy.revision(fresh)+"|"+fresh.optString("delivery_lat")+"|"+fresh.optString("delivery_lng")+"|"+String.valueOf(fresh.optJSONObject("ecosystem"))+"|"+String.valueOf(fresh.optJSONObject("destination_extension"))+"|"+String.valueOf(fresh.optJSONObject("extra_fare_request"))+"|"+fresh.optString("price_change_status")+"|"+waitingActionKey(fresh)+"|"+(routeSnapshot==null?"":routeSnapshot.optString("route_hash")+":"+routeSnapshot.optLong("version"))+(isFoodOrder()||DeliveryTripPresentation.special(order)?fresh.optString("note")+String.valueOf(fresh.optJSONObject("shopping_plan")):"");
                             JSONObject waiting=fresh.optJSONObject("smart_waiting");order.put("smart_waiting",waiting);if(waitingView!=null)waitingView.bind(waiting);
                             if(signature.equals(realtimeSignature)){refreshButtons();return;}realtimeSignature=signature;
                             order=fresh;saveActiveOrder();renderOrder();refreshButtons();requestStableRoute(false);
@@ -390,7 +390,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         if (tripDetailsScreen()) addFoodOrNoteCard();
         addActions();
         if("arrived_delivery".equals(status()) && !extensionNeedsArrival())addMapCard();
-        if (!tripDetailsScreen() && !(premiumRideTrip() && isFoodOrder())) addFoodOrNoteCard();
+        if (!tripDetailsScreen() && !premiumRideTrip()) addFoodOrNoteCard();
         } finally {
             LinearLayout fresh=root;root=displayRoot;
             TripMapContent.apply(displayRoot,fresh,retainedMapCard,retainedMapSlot);
@@ -400,6 +400,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             deliveryLine.setText(deliveryAddress());
         }
         if(foodPanel!=null)foodPanel.bind();
+        if(premiumRideTrip() && DeliveryTripPresentation.special(order) && !tripDetailsScreen())PremiumParcelTripPanel.bind(this,actionDock);
         if(mapReady){initNativeTripMarkers();applyPendingRoute();updateMap();}
     }
     protected void top(String title, String sub){
@@ -516,8 +517,8 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         if(googleMap==null) return;
         double pLat=coord("pickup_lat","user_lat"), pLng=coord("pickup_lng","user_lng");
         double dLat=coord("delivery_lat","destination_lat"), dLng=coord("delivery_lng","destination_lng");
-        if(valid(pLat,pLng)){LatLng position=new LatLng(pLat,pLng);if(pickupMarker==null)pickupMarker=googleMap.addMarker(new MarkerOptions().position(position).title("Pickup").icon(isFoodOrder() ? BitmapDescriptorFactory.fromBitmap(FoodTripMarker.bitmap(this,true)) : BitmapDescriptorFactory.defaultMarker(premiumRideTrip() ? BitmapDescriptorFactory.HUE_ORANGE : BitmapDescriptorFactory.HUE_RED)));else pickupMarker.setPosition(position);}else if(pickupMarker!=null){pickupMarker.remove();pickupMarker=null;}
-        if(valid(dLat,dLng)){LatLng position=new LatLng(dLat,dLng);if(deliveryMarker==null)deliveryMarker=googleMap.addMarker(new MarkerOptions().position(position).title("Tujuan Akhir").icon(isFoodOrder() ? BitmapDescriptorFactory.fromBitmap(FoodTripMarker.bitmap(this,false)) : BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)));else deliveryMarker.setPosition(position);}else if(deliveryMarker!=null){deliveryMarker.remove();deliveryMarker=null;}
+        if(valid(pLat,pLng)){LatLng position=new LatLng(pLat,pLng);if(pickupMarker==null)pickupMarker=googleMap.addMarker(new MarkerOptions().position(position).title("Pickup").icon((isFoodOrder()||DeliveryTripPresentation.special(order)) ? BitmapDescriptorFactory.fromBitmap(FoodTripMarker.bitmap(this,true,DeliveryTripPresentation.kind(order))) : BitmapDescriptorFactory.defaultMarker(premiumRideTrip() ? BitmapDescriptorFactory.HUE_ORANGE : BitmapDescriptorFactory.HUE_RED)));else pickupMarker.setPosition(position);}else if(pickupMarker!=null){pickupMarker.remove();pickupMarker=null;}
+        if(valid(dLat,dLng)){LatLng position=new LatLng(dLat,dLng);if(deliveryMarker==null)deliveryMarker=googleMap.addMarker(new MarkerOptions().position(position).title("Tujuan Akhir").icon((isFoodOrder()||DeliveryTripPresentation.special(order)) ? BitmapDescriptorFactory.fromBitmap(FoodTripMarker.bitmap(this,false,DeliveryTripPresentation.kind(order))) : BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)));else deliveryMarker.setPosition(position);}else if(deliveryMarker!=null){deliveryMarker.remove();deliveryMarker=null;}
         for(Marker m:waypointMarkers){ try{m.remove();}catch(Exception ignored){} } waypointMarkers.clear();
         DriverEcosystemFeatures eco=DriverEcosystemFeatures.from(order);
         for(int i=0;i<eco.waypoints.length();i++){ JSONObject w=eco.waypoints.optJSONObject(i); if(w==null)continue; double wl=w.optDouble("latitude",0),wn=w.optDouble("longitude",0); if(!valid(wl,wn))continue; int seq=w.optInt("sequence",i+1); String note=first(w.optString("note"),w.optString("address"),""); Marker m=googleMap.addMarker(new MarkerOptions().position(new LatLng(wl,wn)).title("Stop "+seq+(note.isEmpty()?"":" • "+note)).icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE))); if(m!=null)waypointMarkers.add(m); }

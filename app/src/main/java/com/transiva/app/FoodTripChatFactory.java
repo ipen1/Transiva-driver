@@ -13,7 +13,7 @@ final class FoodTripChatFactory {
                                    IntSupplier top,IntSupplier bottom){
         Supplier<PointF> restaurant=()->googlePoint(host,true);
         TripMapChatPreview preview=new TripMapChatPreview(host,page,order,
-                ()->googlePoint(host,!FoodTripPresentation.isFood(order.get())),top,bottom,
+                ()->googlePoint(host,DeliveryTripPresentation.customerAtPickup(order.get())),top,bottom,
                 ()->{if(host.communicationController!=null)host.communicationController.openCustomerChat();});
         if(FoodTripPresentation.isFood(order.get()))preview.merchant(restaurant,
                 ()->{if(host.communicationController!=null)host.communicationController.openMerchantChat();});
@@ -29,7 +29,7 @@ final class FoodTripChatFactory {
     }
     static TripMapChatPreview navigation(DriverNavigationActivity host,FrameLayout page,IntSupplier top,IntSupplier bottom){
         TripMapChatPreview preview=new TripMapChatPreview(host,page,()->host.order,
-                ()->nativePoint(host,!FoodTripPresentation.isFood(host.order)),top,bottom,
+                ()->nativePoint(host,DeliveryTripPresentation.customerAtPickup(host.order)),top,bottom,
                 ()->{if(host.communicationController!=null)host.communicationController.openChat();});
         if(FoodTripPresentation.isFood(host.order))preview.merchant(()->nativePoint(host,true),()->{
             Intent intent=new Intent(host,DriverMerchantChatActivity.class);

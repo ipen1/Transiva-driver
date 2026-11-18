@@ -33,14 +33,14 @@ public final class NavigationMarkerController {
             double lat = coord("pickup_lat", "user_lat"), lng = coord("pickup_lng", "user_lng");
             if (valid(lat, lng) && pickupMarker == null) {
                 pickupMarker = map.addMarker(new MarkerOptions().position(new LatLng(lat, lng))
-                        .icon(FoodTripPresentation.isFood(order) ? f.fromBitmap(FoodTripMarker.bitmap(activity,true)) : icon(f, "map_pickup_pin", android.R.drawable.ic_menu_mylocation, 34, 34)));
+                        .icon((FoodTripPresentation.isFood(order)||DeliveryTripPresentation.special(order)) ? f.fromBitmap(FoodTripMarker.bitmap(activity,true,DeliveryTripPresentation.kind(order))) : icon(f, "map_pickup_pin", android.R.drawable.ic_menu_mylocation, 34, 34)));
             }
         } catch (Throwable t) { TransivaDiagnostics.error(activity, "navigation", "NAV_PICKUP_MARKER_FAILED", t); }
         try {
             double lat = coord("delivery_lat", "destination_lat"), lng = coord("delivery_lng", "destination_lng");
             if (valid(lat, lng) && deliveryMarker == null) {
                 deliveryMarker = map.addMarker(new MarkerOptions().position(new LatLng(lat, lng))
-                        .icon(FoodTripPresentation.isFood(order) ? f.fromBitmap(FoodTripMarker.bitmap(activity,false)) : icon(f, "map_destination_pin", android.R.drawable.ic_menu_mylocation, 34, 34)));
+                        .icon((FoodTripPresentation.isFood(order)||DeliveryTripPresentation.special(order)) ? f.fromBitmap(FoodTripMarker.bitmap(activity,false,DeliveryTripPresentation.kind(order))) : icon(f, "map_destination_pin", android.R.drawable.ic_menu_mylocation, 34, 34)));
             }
         } catch (Throwable t) { TransivaDiagnostics.error(activity, "navigation", "NAV_DELIVERY_MARKER_FAILED", t); }
         try {
