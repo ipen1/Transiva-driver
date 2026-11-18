@@ -40,10 +40,28 @@ public class ActionSyncProbe{
  meal.put("payment_method","qris");check(FoodTripPresentation.payment(meal).equals("QRIS"),"QRIS never falls back to cash label");meal.put("payment_method","transpay");check(FoodTripPresentation.payment(meal).equals("TransPay"),"wallet uses noncash collection label");
  check(FoodTripPresentation.kitchen(meal).equals("Sedang disiapkan • ±10 menit"),"preparation estimate is based on merchant data");food.put("merchant_status","ready");meal.put("note",food.toString());check(FoodTripPresentation.kitchen(meal).equals("Siap diambil"),"ready orders stop displaying old cooking estimate");
  TripActionSession foodSession=TripActionSession.get(nav,meal);foodSession.synced(meal);foodSession.fix(gps);check(TripActionPolicy.resolve(foodSession).label.equals("Geser untuk tiba di resto")&&TripActionPolicy.resolve(foodSession).enabled,"food pickup shares action session and verified GPS");
- NavigationSessionStore.owner="account-b";check(!TripChatDisplayStore.shown(nav,order,51)&&TripActionSession.get(nav,order)!=a,"actions and display receipts are isolated by account");
+
+ JSONObject shop=new JSONObject().put("id",201).put("order_id","SHOP-201").put("order_type","TransShop").put("status","driver_accepted").put("pickup_lat",-.79).put("pickup_lng",120).put("note",new JSONObject().put("type","shop").put("shopping_plan",new JSONObject().put("version",1).put("pickup",new JSONObject().put("note","Belanja di Cii Shop\\n1x Setcel @ Rp 88.000\\nSubtotal referensi produk: Rp 88.000"))).toString());
+ check(DeliveryTripPresentation.shop(shop)&&!DeliveryTripPresentation.customerAtPickup(shop),"TransShop bubble anchors at customer destination");
+ check(DeliveryTripPresentation.reference(shop)==88000,"shop reference is separate from delivery fee");
+ TripActionSession shopSession=TripActionSession.get(trip,shop);shopSession.synced(shop);shopSession.fix(gps);check(TripActionPolicy.resolve(shopSession).label.equals("Geser untuk tiba di toko")&&TripActionPolicy.resolve(shopSession).enabled,"shop arrival uses shared verified action");
+ JSONObject send=new JSONObject(shop.toString()).put("id",202).put("order_id","SEND-202").put("order_type","TransSend").put("source","pickup_orders").put("note","antar kipas angin");
+ check(DeliveryTripPresentation.send(send)&&DeliveryTripPresentation.customerAtPickup(send),"TransSend bubble anchors at pickup");check(DeliveryTripPresentation.note(send).equals("antar kipas angin"),"parcel instructions remain intact");
+ TripBubbleStore.offer(trip,shop,100,"lama",false,false);check(TripBubbleStore.latest(nav,shop).raw.equals("lama"),"latest message survives screen handoff");
+ TripBubbleStore.offer(nav,shop,99,"terlambat",false,false);check(TripBubbleStore.latest(trip,shop).id==100,"old poll cannot replace new bubble");
+ TripBubbleStore.offer(nav,shop,101,"baru",false,false);check(TripBubbleStore.latest(trip,shop).raw.equals("baru"),"new incoming message replaces old bubble");
+ SystemClock.now+=120000;check(TripBubbleStore.latest(nav,shop).id==101,"bubble has no seconds-based expiration");
+ TripBubbleStore.ack(nav,shop,TripBubbleStore.latest(nav,shop));check(TripBubbleStore.latest(trip,shop).ack,"opening or playing acknowledges reminder across screens");
+ TripBubbleStore.offer(trip,shop,101,"baru",false,false);check(TripBubbleStore.latest(nav,shop).ack,"repeated polling cannot restart reminder");
+ TripBubbleStore.offer(nav,meal,120,"pesan merchant",true,false);TripBubbleStore.offer(trip,meal,121,"pesan pelanggan",false,false);check(!TripBubbleStore.latest(nav,meal).merchant,"newest incoming room wins one bubble without overlap");
+ TripBubbleStore.offer(trip,send,300,"sudah dibaca",false,true);check(TripBubbleStore.latest(nav,send)==null,"initial historical read messages do not resurface");
+ check(TripBubbleContent.image("[[IMAGE2]]uploads/a.webp|uploads/a.jpg")&&TripBubbleContent.mediaUrl("[[IMAGE2]]uploads/a.webp|uploads/a.jpg").equals("https://transiva.my.id/server/uploads/a.webp"),"image bubble uses lightweight preview encoding");
+ check(TripBubbleContent.voice("[[VOICE]]uploads/a.m4a|2000")&&TripBubbleContent.mediaUrl("[[VOICE]]uploads/a.m4a|2000").endsWith("/uploads/a.m4a"),"voice bubble separates playback URL from duration");
+ check(TripBubbleContent.mediaUrl("[[IMAGE]]http://example.com/a.jpg").isEmpty(),"insecure media URL is rejected");
+ NavigationSessionStore.owner="account-b";check(TripBubbleStore.latest(nav,shop)==null,"persistent bubble cannot leak to another account");check(!TripChatDisplayStore.shown(nav,order,51)&&TripActionSession.get(nav,order)!=a,"actions and display receipts are isolated by account");
  System.out.println("PASS "+checks+" shared trip and chat checks");
  }}'''
-production=['TripActionSession','FoodTripPresentation','TripActionPolicy','TripArrivalLocation','TripChatDisplayStore','NavigationTargetPolicy','NavigationGeometry','DriverEcosystemFeatures','DriverOrderStateMachine']
+production=['TripBubbleStore','TripBubbleContent','TripActionSession','DeliveryTripPresentation','FoodTripPresentation','TripActionPolicy','TripArrivalLocation','TripChatDisplayStore','NavigationTargetPolicy','NavigationGeometry','DriverEcosystemFeatures','DriverOrderStateMachine']
 with tempfile.TemporaryDirectory(prefix='trip-action-sync-') as tmp:
  d=Path(tmp)
  for name,value in files.items():
