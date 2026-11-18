@@ -229,6 +229,7 @@ final class NavigationLiveRouteController implements AutoCloseable {
         if(result.roadPolicy<2||x.optBoolean("needs_route")||System.currentTimeMillis()-x.optLong("saved")>120000)recovery.require(SystemClock.elapsedRealtime());
     }
     void refreshOrderState() { orderSync.refresh(); }
+    void actionConfirmed(org.json.JSONObject fresh) { applyOrderState(fresh, true); orderSync.refresh(); }
     private void adoptCheckpointOrder(){
         org.json.JSONObject x=NavigationSessionStore.read(host);if(x==null)return;
         try{org.json.JSONObject fresh=new org.json.JSONObject(x.optString("order"));if(NavigationTargetPolicy.same(host.order,fresh))applyOrderState(fresh,false);}

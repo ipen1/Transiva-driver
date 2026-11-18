@@ -38,7 +38,13 @@ final class TripMapChatPreview {
     private final IntSupplier visibleBottom;
     private final Runnable openRoom;
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final ArrayDeque<String> messages = new ArrayDeque<>();
+    private static final class Message {
+        final long id; final String text;
+        Message(long id, String text) { this.id = id; this.text = text; }
+    }
+    private final ArrayDeque<Message> messages = new ArrayDeque<>();
+    private Message currentMessage;
+    private boolean claimed;
     private final LinearLayout bubble;
     private final TextView message;
     private final TextView pageBadge;
@@ -152,6 +158,11 @@ final class TripMapChatPreview {
         busy = false;
         main.removeCallbacksAndMessages(null);
         hideBubble();
+        if (claimed) {
+            pages.clear();
+            currentMessage = null;
+            claimed = false;
+        }
     }
 
     private final Runnable poll = this::fetch;
@@ -207,10 +218,11 @@ final class TripMapChatPreview {
                 if (id <= lastId) continue;
                 boolean unreadCustomer = "customer".equalsIgnoreCase(row.optString("sender_type"))
                         && row.optInt("is_read") == 0 && !row.optBoolean("is_read");
-                String value = unreadCustomer ? preview(row.optString("message").trim()) : "";
+                String value = unreadCustomer && !TripChatDisplayStore.shown(activity, order.get(), id)
+                        ? preview(row.optString("message").trim()) : "";
                 if (!value.isEmpty()) {
                     if (messages.size() >= MAX_QUEUED) { truncated = true; break; }
-                    messages.addLast(value);
+                    messages.addLast(new Message(id, value));
                 }
                 lastId = id;
             }
@@ -237,8 +249,13 @@ final class TripMapChatPreview {
     }
 
     private void showNext() {
-        String next = messages.pollFirst();
+        Message next;
+        do { next = messages.pollFirst(); }
+        while (next != null && TripChatDisplayStore.shown(activity, order.get(), next.id));
         if (next == null) { clear(); return; }
+        currentMessage = next;
+        claimed = false;
+        String text = next.text;
         if (moreWaiting && messages.size() <= MAX_QUEUED / 2 && !busy) {
             main.removeCallbacks(poll);
             main.postDelayed(poll, 180L);
@@ -248,12 +265,12 @@ final class TripMapChatPreview {
             bubble.getLayoutParams().width = width;
             bubble.requestLayout();
         }
-        StaticLayout layout = StaticLayout.Builder.obtain(next, 0, next.length(), message.getPaint(), width - dp(24))
+        StaticLayout layout = StaticLayout.Builder.obtain(text, 0, text.length(), message.getPaint(), width - dp(24))
                 .setAlignment(Layout.Alignment.ALIGN_NORMAL).build();
         pages.clear();
         for (int line = 0; line < layout.getLineCount(); line += 3) {
             int end = Math.min(line + 2, layout.getLineCount() - 1);
-            pages.add(next.substring(layout.getLineStart(line), layout.getLineEnd(end)).trim());
+            pages.add(text.substring(layout.getLineStart(line), layout.getLineEnd(end)).trim());
         }
         page = 0;
         showPage();
@@ -267,7 +284,7 @@ final class TripMapChatPreview {
         updatePageBadge();
         bubble.setContentDescription("Pesan pelanggan. " + value + ". Buka chat.");
         pageVisibleMs = 0;
-        pageLimitMs = Math.max(3500, Math.min(8500, 1900 + value.length() * 46));
+        pageLimitMs = (int) Math.min(Integer.MAX_VALUE, TripChatDisplayStore.duration(value));
         pageStarted = android.os.SystemClock.elapsedRealtime();
     }
 
@@ -291,6 +308,13 @@ final class TripMapChatPreview {
             boolean visible = width > 0 && height > 0 && top + height <= bottom
                     && mapLayer.getWidth() >= width + dp(12);
             if (visible) {
+                if (!claimed) {
+                    if (currentMessage == null || !TripChatDisplayStore.claim(activity, order.get(), currentMessage.id)) {
+                        showNext();
+                        return;
+                    }
+                    claimed = true;
+                }
                 float x = onMap ? point.x - width / 2f : mapLayer.getWidth() - width - dp(10);
                 float y = top;
                 if (onMap) {
@@ -332,6 +356,8 @@ final class TripMapChatPreview {
     private void clear() {
         messages.clear();
         pages.clear();
+        currentMessage = null;
+        claimed = false;
         main.removeCallbacks(position);
         hideBubble();
     }

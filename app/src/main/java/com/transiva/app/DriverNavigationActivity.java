@@ -76,8 +76,8 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
     private View guidanceHeader;
 
     @Override protected void onResume() {
-        super.onResume();
         if (arrival != null) arrival.active(true);
+        super.onResume();
         if (mapChatPreview != null && !inPictureInPicture) mapChatPreview.start();
     }
 
@@ -122,6 +122,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
 
         session = new SessionManager(this);
         readOrder();
+        order = TripActionSession.merge(order, TripActionSession.get(this, order).order());
         readIdentity();
         applyNavigationResourceConfig();
         navProfile = NavigationCompatibilityProfile.resolve(this, navConfig != null ? navConfig.profile : "auto");

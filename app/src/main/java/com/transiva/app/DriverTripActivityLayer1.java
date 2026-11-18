@@ -82,6 +82,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected TripVehicleMotionController tripVehicleMotion;
     protected MapView mapView;
     protected Location tripArrivalFix;
+    protected TripActionSession actionSession;
     protected final TripArrivalGate arrivalGate=new TripArrivalGate();
     protected boolean collectingActions,tripTouchingMap,tripSliding,pendingTripRender;
     protected final java.util.LinkedHashMap<View,Boolean> desiredActions=new java.util.LinkedHashMap<>();
@@ -120,7 +121,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected boolean tripConnectionLost;
     boolean tripCancelRunning;
     protected long tripLastSync=-1,tripMutationVersion;
-    protected boolean tripStateReady(){return tripStateFresh&&tripLastSync>=0&&android.os.SystemClock.elapsedRealtime()-tripLastSync<=15000L;}
+    protected boolean tripStateReady(){if(actionSession!=null)return actionSession.fresh();return tripStateFresh&&tripLastSync>=0&&android.os.SystemClock.elapsedRealtime()-tripLastSync<=15000L;}
     protected void tripMutationStarted(){tripMutationVersion++;}
     protected void tripNeedsSync(){tripStateFresh=false;refreshButtons();}
     protected double lastDriverLat = 0, lastDriverLng = 0;
@@ -289,7 +290,6 @@ abstract class DriverTripActivityLayer1 extends Activity {
         }
     }
 
-
     protected String pendingFinishOtp = "";
 
     protected void showAction(View b, boolean enabled){
@@ -353,8 +353,12 @@ abstract class DriverTripActivityLayer1 extends Activity {
         }
         Location arrival=trustedArrivalFix();boolean arriving="arrived_pickup".equals(next)||"arrived_delivery".equals(next);
         final double statusLat=arriving&&arrival!=null?arrival.getLatitude():lastDriverLat,statusLng=arriving&&arrival!=null?arrival.getLongitude():lastDriverLng;
+        if (actionSession != null) {
+            TripActionPolicy.Action action = TripActionPolicy.resolve(actionSession);
+            if (!action.enabled || !DriverOrderStateMachine.normalize(next).equals(action.next) || !actionSession.begin()) return;
+        }
         updatingStatus = true; setLoading(true);refreshButtons();
-        DriverNetworkExecutor.execute(() -> { try{
+        boolean queued = DriverNetworkExecutor.executeOrderAction(() -> { try{
             JSONObject p = new JSONObject();
             p.put("id", internalId());
             p.put("order_id", orderId());
@@ -374,7 +378,8 @@ abstract class DriverTripActivityLayer1 extends Activity {
                 setLoading(false);
                 if(ok){
                     pendingFinishOtp = "";
-                    try{ order.put("status", next); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
+                    try{ order = TripActionSession.merge(order, r.optJSONObject("order")); order.put("status", next); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
+                    if (actionSession != null) actionSession.completed(order);
                     saveActiveOrder();
                     tripNeedsSync();
                     mainHandler.postDelayed(() -> updateMap(), 250);
@@ -405,12 +410,13 @@ abstract class DriverTripActivityLayer1 extends Activity {
                     } else {
                         info("Berhasil", m);
                     }
-                } else info("Gagal", m);
+                } else { if (actionSession != null) actionSession.failed(); info("Gagal", m); }
             });
         }catch(Exception e){
             final String errorMessage = e.getMessage() == null ? "" : e.getMessage().trim();
             mainHandler.post(() -> {
                 updatingStatus=false;
+                if (actionSession != null) actionSession.failed();
                 setLoading(false);
 
                 String lower = errorMessage.toLowerCase(Locale.US);
@@ -438,6 +444,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
                 );
             });
         }});
+        if(!queued){updatingStatus=false;if(actionSession!=null)actionSession.failed();setLoading(false);refreshButtons();info("Antrean penuh","Coba lagi sebentar.");}
     }
     protected String endpoint(String n){ return DriverOrderStateMachine.endpoint(n, isPickupOrder()); }
     protected boolean isPickupOrder(){
@@ -492,8 +499,6 @@ abstract class DriverTripActivityLayer1 extends Activity {
 
 
 
-
-
     protected void showUpdatePriceDialog(){
         if(order == null) return;
         final EditText input = new EditText(this); input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER); input.setHint("Total baru"); input.setText(String.valueOf((long)optDouble("price","fare","total")));
@@ -520,7 +525,6 @@ abstract class DriverTripActivityLayer1 extends Activity {
         String type = first(order.optString("order_type"), order.optString("service_name"), "").toLowerCase(Locale.US);
         return type.contains("food") || type.contains("transfood");
     }
-
 
 
     // Package-private controller bridge: business state remains owned by DriverTripActivity.
@@ -560,7 +564,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected double coord(String a, String b){ try{return Double.parseDouble(first(order.optString(a), order.optString(b), "0"));}catch(Exception e){return 0;} } protected double optDouble(String... keys){ for(String k: keys){ try{ if(order.has(k)) return Double.parseDouble(order.optString(k,"0")); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } } return 0; }
     protected String statusLabel(String s){ return DriverOrderStateMachine.label(s); }
     protected Location trustedArrivalFix(){
-        return TripArrivalLocation.verified(tripArrivalFix);
+        return actionSession == null ? TripArrivalLocation.verified(tripArrivalFix) : actionSession.fix();
     }
     protected float distanceTo(double lat, double lng){
         double a=lastDriverLat,b=lastDriverLng;Location fresh=trustedArrivalFix();
@@ -636,7 +640,6 @@ abstract class DriverTripActivityLayer1 extends Activity {
     protected abstract void applyPendingRoute();
     protected abstract void refreshButtons();
     protected abstract void hideAction(View b);
-
 
     protected void renderEcosystemFeatures(){ if(order==null)return; DriverEcosystemFeatures f=DriverEcosystemFeatures.from(order); if(distanceHint!=null && !f.summary().isEmpty()){String old=String.valueOf(distanceHint.getText()); if(!old.contains("Guardian")) distanceHint.setText(old+f.summary());} }
 

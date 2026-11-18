@@ -101,7 +101,7 @@ final class TripDestinationExtensionController {
         final long dialogVersion=generation,pointVersion=selectionVersion;
         quotePending=true;if(picker!=null)picker.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
         if(pickerStatus!=null)pickerStatus.setText("Server menghitung seluruh rute dan ongkir…");host.setLoading(true);
-        DriverNetworkExecutor.execute(() -> {
+        boolean queued = DriverNetworkExecutor.executeOrderAction(() -> {
             try {
                 JSONObject q=new JSONObject().put("id",Integer.parseInt(host.internalId())).put("action","quote")
                     .put("latitude",point.latitude).put("longitude",point.longitude).put("address",label);
@@ -131,9 +131,14 @@ final class TripDestinationExtensionController {
     private void send(String action,long requestId) {
         android.location.Location arrival=host.trustedArrivalFix();
         final double latitude=arrival==null?host.lastDriverLat:arrival.getLatitude(),longitude=arrival==null?host.lastDriverLng:arrival.getLongitude();
+        boolean owns = "arrive".equals(action) && host.actionSession != null;
+        if (owns) {
+            TripActionPolicy.Action next = TripActionPolicy.resolve(host.actionSession);
+            if (!next.enabled || !"extension".equals(next.next) || !host.actionSession.begin()) return;
+        }
         host.tripMutationStarted();host.tripNeedsSync();
         host.setLoading(true);
-        DriverNetworkExecutor.execute(() -> {
+        boolean queued = DriverNetworkExecutor.executeOrderAction(() -> {
             try {
                 JSONObject q=new JSONObject().put("id",Integer.parseInt(host.internalId())).put("action",action).put("request_id",requestId);
                 if("arrive".equals(action))q.put("driver_lat",latitude).put("driver_lng",longitude);
@@ -142,12 +147,14 @@ final class TripDestinationExtensionController {
                 try{fresh=new com.transiva.app.driver.data.DriverApiClient(host.session).post("driver_trip_realtime.php",new JSONObject().put("order_id",host.orderId())).body.optJSONObject("order");}catch(Exception ignored){}
                 final JSONObject snapshot=fresh;
                 host.mainHandler.post(() -> {
+                    if(host.actionSession!=null){if(snapshot!=null)host.actionSession.completed(snapshot);else host.actionSession.failed();}
                     if(!alive())return;host.setLoading(false);
                     if(snapshot!=null){host.order=snapshot;host.saveActiveOrder();host.renderOrder();host.refreshButtons();}
                     host.info("Tujuan tambahan",r.optString("message","Berhasil. Perjalanan akan diperbarui."));
                 });
-            }catch(Exception e){failed(e);}
+            }catch(Exception e){host.mainHandler.post(()->{if(host.actionSession!=null)host.actionSession.failed();});failed(e);}
         });
+        if(!queued){if(owns)host.actionSession.failed();host.setLoading(false);host.refreshButtons();}
     }
     private void failed(Exception e) {
         host.mainHandler.post(() -> {if(alive()){host.setLoading(false);host.info("Tujuan tambahan",host.first(e.getMessage(),"Koneksi bermasalah. Coba lagi."));}});

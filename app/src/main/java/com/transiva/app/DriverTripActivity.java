@@ -108,6 +108,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         orderSignal = new DriverOrderSyncSignal(this, () -> order, this::refreshTripRealtime);
         loadOrder();
         if(order!=null)try{order.put("source",isPickupOrder()?"pickup_orders":"orders");if(!NavigationTargetPolicy.terminal(order)){session.put("current_order_source",isPickupOrder()?"pickup_orders":"orders");session.put("current_order_id",orderId());}}catch(org.json.JSONException e){NavigationDiagnostics.error(this,"TRIP_SOURCE_FAILED",e);}
+        actionSession = TripActionSession.get(this, order);
         mapFirstRide = order != null && !isPickupOrder()
                 && (isRideService(order.optString("order_type")) || isRideService(order.optString("service_name")));
         buildBase();
@@ -125,10 +126,23 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     }
     @Override protected void onStart(){super.onStart();try{if(mapView!=null)mapView.onStart();}catch(RuntimeException e){NavigationDiagnostics.error(this,"TRIP_MAP_START_FAILED",e);}}
     @Override protected void onStop(){try{if(mapView!=null)mapView.onStop();}catch(RuntimeException e){NavigationDiagnostics.error(this,"TRIP_MAP_STOP_FAILED",e);}super.onStop();}
-    @Override protected void onResume(){ super.onResume(); NavigationDisplayPolicy.prefer(this,NavigationCompatibilityProfile.resolve(this,"auto").visualFrameMs); if(frameTelemetry==null)frameTelemetry=new NavigationFrameTelemetry(this,"trip");frameTelemetry.start(); if(tripLiveRoutes!=null)tripLiveRoutes.active(true); if(tripVehicleMotion!=null)tripVehicleMotion.active(true); realtimeTripRunning=true;if(orderSignal!=null)orderSignal.active(true);tripStateFresh=false;realtimeSignature="";refreshButtons(); mainHandler.removeCallbacks(realtimeTripPoll); mainHandler.post(realtimeTripPoll); try{ if(mapView!=null) mapView.onResume(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_RESUME_FAILED",e); } if(order != null) startLocationWatch(); if(communicationController!=null) communicationController.onStart(); if(chatPreview!=null && itinerary.isShown())chatPreview.start(); }
+    @Override protected void onResume(){ super.onResume(); adoptActionSession(); if(isFinishing())return; NavigationDisplayPolicy.prefer(this,NavigationCompatibilityProfile.resolve(this,"auto").visualFrameMs); if(frameTelemetry==null)frameTelemetry=new NavigationFrameTelemetry(this,"trip");frameTelemetry.start(); if(tripLiveRoutes!=null)tripLiveRoutes.active(true); if(tripVehicleMotion!=null)tripVehicleMotion.active(true); realtimeTripRunning=true;if(orderSignal!=null)orderSignal.active(true);tripStateFresh=actionSession!=null&&actionSession.fresh();refreshButtons(); mainHandler.removeCallbacks(realtimeTripPoll); mainHandler.post(realtimeTripPoll); try{ if(mapView!=null) mapView.onResume(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_RESUME_FAILED",e); } if(order != null) startLocationWatch(); if(communicationController!=null) communicationController.onStart(); if(chatPreview!=null && itinerary.isShown())chatPreview.start(); }
     @Override protected void onPause(){ if(chatPreview!=null)chatPreview.stop(); if(orderSignal!=null)orderSignal.active(false); if(frameTelemetry!=null)frameTelemetry.close(); if(tripLiveRoutes!=null)tripLiveRoutes.active(false); if(tripVehicleMotion!=null)tripVehicleMotion.active(false); tripStateFresh=false;tripSliding=false;tripTouchingMap=false;realtimeGeneration++;realtimeBusy=false;if(realtimeClient!=null)realtimeClient.shutdown(); destinationExtension.close(); realtimeTripRunning=false; mainHandler.removeCallbacks(realtimeTripPoll); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView!=null) mapView.onPause(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_PAUSE_FAILED",e); } super.onPause(); }
     @Override protected void onDestroy(){ if(tripVehicleMotion!=null)tripVehicleMotion.close(); if(tripLiveRoutes!=null)tripLiveRoutes.close(); realtimeGeneration++;if(realtimeClient!=null)realtimeClient.shutdown(); tripRouteGeneration++; if(tripRequestOwner!=null)tripRequestOwner.close();if(tripRouteScope!=null)tripRouteScope.close(); if(communicationController!=null) communicationController.onStop(); stopLocationWatch(); try{ if(mapView != null) mapView.onDestroy(); }catch(Exception e){ TransivaDiagnostics.error(this,"order","TRIP_MAP_DESTROY_FAILED",e); } super.onDestroy(); }
     @Override public void onLowMemory(){ super.onLowMemory(); try{ if(mapView!=null) mapView.onLowMemory(); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); } }
+
+    private void adoptActionSession() {
+        if (actionSession == null || order == null) return;
+        JSONObject latest = actionSession.order();
+        if (!NavigationTargetPolicy.same(order, latest)) return;
+        boolean changed = !NavigationTargetPolicy.revision(order).equals(NavigationTargetPolicy.revision(latest));
+        order = TripActionSession.merge(order, latest);
+        if (changed && NavigationTargetPolicy.terminal(latest) && !tripDetailsScreen()) { clearActiveOrder(); finish(); return; }
+        Location fix = actionSession.fix();
+        if (fix != null) { tripArrivalFix = fix; lastDriverLat = fix.getLatitude(); lastDriverLng = fix.getLongitude(); }
+        tripLastSync = actionSession.syncedAt();
+        if (changed) renderOrder();
+    }
 
     private SmartWaitingTextView waitingView;
     private String waitingActionKey(JSONObject snapshot){
@@ -139,6 +153,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         if(NavigationTargetPolicy.terminal(order)||tripCancelRunning||realtimeBusy||updatingStatus||waypointArrivalBusy||!realtimeTripRunning||tripRouteScope==null||!tripRouteScope.alive())return;
         final long dbId=order.optLong("id",0);
         final String key=orderId(),before=status();final boolean pickup=isPickupOrder();final long mutation=tripMutationVersion;
+        final long sharedVersion = actionSession == null ? -1 : actionSession.version();
         final long generation=++realtimeGeneration;final DriverApiClient client=new DriverApiClient(session,true);realtimeClient=client;realtimeBusy=true;
         boolean queued=tripRouteScope.execute(()->{
             try{
@@ -148,9 +163,11 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
                 tripRouteScope.post(()->{
                     if(mutation!=tripMutationVersion||tripCancelRunning||updatingStatus||waypointArrivalBusy||generation!=realtimeGeneration||!realtimeTripRunning||!key.equals(orderId())||pickup!=isPickupOrder()||!before.equals(status()))return;
                     try{
+                        if (actionSession != null && (actionSession.busy() || actionSession.version() != sharedVersion)) return;
                         if(fresh==null)return;
                         String freshId=first(fresh.optString("order_id"),fresh.optString("id"));
                         if(!key.equals(freshId)&&!internalId().equals(fresh.optString("id")))return;
+                        if(actionSession!=null)actionSession.synced(fresh);
                         tripConnectionLost=false;
                         if(NavigationTargetPolicy.terminal(fresh) && !DriverOrderStateMachine.normalize(fresh.optString("status")).equals("finished")){
                             showTripEnded(fresh.optString("status"));

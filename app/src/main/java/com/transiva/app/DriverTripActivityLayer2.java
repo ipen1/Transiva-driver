@@ -263,6 +263,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
 
 
     protected void onDriverLocationChanged(Location l){
+        if (actionSession != null) actionSession.fix(l);
         Location verified = TripArrivalLocation.verified(l);
         if (verified != null && (tripArrivalFix == null
                 || verified.getElapsedRealtimeNanos() >= tripArrivalFix.getElapsedRealtimeNanos())) {
@@ -472,6 +473,16 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
                             ? "Memproses perubahan order…" : distance < 0 ? "Menunggu lokasi terverifikasi"
                             : distance > ARRIVE_RADIUS_METER ? "Aktif dalam radius 100 m" : "Lokasi terverifikasi");
                 }
+                if (actionSession != null) {
+                    TripActionPolicy.Action action = TripActionPolicy.resolve(actionSession);
+                    for (View view : new View[]{arrivedPickupBtn, startDeliveryBtn, arrivedDeliveryBtn, waypointBtn, finishBtn}) hideAction(view);
+                    View selected = "arrived_pickup".equals(action.next) ? arrivedPickupBtn
+                            : "on_delivery".equals(action.next) ? startDeliveryBtn
+                            : "waypoint".equals(action.next) ? waypointBtn
+                            : "finished".equals(action.next) ? finishBtn : arrivedDeliveryBtn;
+                    if (!action.next.isEmpty()) showAction(selected, action.enabled);
+                    if (dockHint != null) dockHint.setText(action.hint);
+                }
                 endActionUpdate();
             }
     }
@@ -495,6 +506,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         final Location fix=trustedArrivalFix();
         if(fix==null){tripInfo("Multi Destination","Menunggu GPS terbaru yang akurat. Coba lagi sebentar.");return;}
         final String capturedOrder=orderId();final String capturedStatus=status();
+        if (actionSession != null && !actionSession.begin()) return;
         tripMutationStarted();waypointArrivalBusy=true;refreshButtons();if(progressBar!=null)progressBar.setVisibility(View.VISIBLE);
         boolean queued=tripRouteScope.execute(()->{
             try{
@@ -504,10 +516,11 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
                     waypointArrivalBusy=false;if(progressBar!=null)progressBar.setVisibility(View.GONE);
                     if(order==null||!capturedOrder.equals(orderId())||!capturedStatus.equals(status()))return;
                     try{if(response.optJSONObject("ecosystem")!=null)order.put("ecosystem",response.optJSONObject("ecosystem"));if(response.optJSONObject("smart_waiting")!=null)order.put("smart_waiting",response.optJSONObject("smart_waiting"));}catch(org.json.JSONException e){NavigationDiagnostics.error(this,"TRIP_WAYPOINT_RESPONSE",e);}
+                    if (actionSession != null) actionSession.completed(order);
                     saveActiveOrder();tripNeedsSync();renderOrder();refreshButtons();requestStableRoute(true);
                 });
-            }catch(Exception e){tripRouteScope.post(()->{waypointArrivalBusy=false;if(progressBar!=null)progressBar.setVisibility(View.GONE);if(order!=null&&capturedOrder.equals(orderId()))tripInfo("Multi Destination",first(e.getMessage(),"Gagal menandai pemberhentian. Coba lagi."));});}
+            }catch(Exception e){tripRouteScope.post(()->{waypointArrivalBusy=false;if(actionSession!=null)actionSession.failed();if(progressBar!=null)progressBar.setVisibility(View.GONE);if(order!=null&&capturedOrder.equals(orderId()))tripInfo("Multi Destination",first(e.getMessage(),"Gagal menandai pemberhentian. Coba lagi."));});}
         });
-        if(!queued){waypointArrivalBusy=false;if(progressBar!=null)progressBar.setVisibility(View.GONE);}
+        if(!queued){waypointArrivalBusy=false;if(actionSession!=null)actionSession.failed();if(progressBar!=null)progressBar.setVisibility(View.GONE);}
     }
 }

@@ -24,6 +24,7 @@ final class NavigationOrderSync implements AutoCloseable {
     private void poll(){
         if(closed||!active||busy||!owner.current())return;
         JSONObject order=callback.currentOrder();if(NavigationTargetPolicy.id(order).isEmpty())return;
+        final TripActionSession shared = TripActionSession.get(context, order); final long sharedVersion = shared.version();
         final String identity=NavigationTargetPolicy.identity(order),revision=NavigationTargetPolicy.revision(order);final long gen=++generation;
         final DriverApiClient call=new DriverApiClient(new SessionManager(context),true);client=call;busy=true;
         try{future=io.submit(()->{
@@ -41,8 +42,8 @@ final class NavigationOrderSync implements AutoCloseable {
             final JSONObject fresh=result;final Exception failed=error;
             main.post(()->{
                 if(closed||!active||gen!=generation||!owner.current())return;busy=false;
-                if(!revision.equals(NavigationTargetPolicy.revision(callback.currentOrder()))){main.postDelayed(tick,250);return;}
-                if(failed==null&&identity.equals(NavigationTargetPolicy.identity(callback.currentOrder()))&&NavigationTargetPolicy.same(callback.currentOrder(),fresh)){failures=0;try{owner.runIfCurrent(()->callback.updated(fresh));}catch(RuntimeException e){failures=1;TransivaDiagnostics.error(context,"navigation","ORDER_SYNC_APPLY_FAILED",e);}}
+                if(shared.busy() || shared.version()!=sharedVersion || !revision.equals(NavigationTargetPolicy.revision(callback.currentOrder()))){main.postDelayed(tick,250);return;}
+                if(failed==null&&identity.equals(NavigationTargetPolicy.identity(callback.currentOrder()))&&NavigationTargetPolicy.same(callback.currentOrder(),fresh)){failures=0;try{owner.runIfCurrent(()->{shared.synced(fresh);callback.updated(fresh);});}catch(RuntimeException e){failures=1;TransivaDiagnostics.error(context,"navigation","ORDER_SYNC_APPLY_FAILED",e);}}
                 else failures=Math.min(4,failures+1);
                 if(active&&!closed&&gen==generation)main.postDelayed(tick,Math.min(15000L,3500L*(1L<<failures)));
             });call.shutdown();
