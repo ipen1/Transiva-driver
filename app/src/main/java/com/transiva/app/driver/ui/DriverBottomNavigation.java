@@ -35,10 +35,6 @@ public final class DriverBottomNavigation {
     private DriverBottomNavigation() {
     }
 
-    public static int height(Activity activity){
-        float font=Math.max(1f,activity.getResources().getConfiguration().fontScale);
-        return dp(activity,Math.max(72,Math.round(52+14*font)));
-    }
     public static View build(Activity activity, ActiveItem activeItem) {
         return build(activity, activeItem, false);
     }
@@ -49,6 +45,7 @@ public final class DriverBottomNavigation {
         LinearLayout navigation = new LinearLayout(activity);
         navigation.setOrientation(LinearLayout.HORIZONTAL);
         navigation.setGravity(Gravity.CENTER);
+        navigation.setMinimumHeight(dp(activity, 72));
         navigation.setPadding(dp(activity, 5), dp(activity, 4), dp(activity, 5), dp(activity, 4));
         navigation.setBackgroundColor(DriverThemeTokens.surface(activity));
         navigation.setElevation(dp(activity, 8));
@@ -88,7 +85,7 @@ public final class DriverBottomNavigation {
     }
 
     private static void add(LinearLayout navigation, View item) {
-        navigation.addView(item, new LinearLayout.LayoutParams(0, -1, 1f));
+        navigation.addView(item, new LinearLayout.LayoutParams(0, -2, 1f));
     }
 
     private static View navItem(
@@ -133,7 +130,8 @@ public final class DriverBottomNavigation {
         TextView title = new TextView(activity);
         title.setText(label);
         title.setTextSize(11f);
-        title.setSingleLine(true);title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        title.setMaxLines(2);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
         title.setGravity(Gravity.CENTER);
         title.setIncludeFontPadding(false);
         title.setTextColor(active ? DriverThemeTokens.accent(activity) : DriverThemeTokens.textSecondary(activity));
