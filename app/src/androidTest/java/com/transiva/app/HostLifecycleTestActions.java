@@ -27,7 +27,17 @@ final class HostLifecycleTestActions {
         AtomicReference<TestHarnessActivity> original = new AtomicReference<>();
         scenario.onActivity(original::set);
         final int hostTaskId = original.get().getTaskId();
-        assertEquals(Lifecycle.State.RESUMED, scenario.getState());
+        // ActivityScenario.launch can return while the host is still stopped or transitioning.
+        // Establish a genuine foreground baseline before sending Home.
+        Lifecycle.State initial = pollForState(scenario, Lifecycle.State.RESUMED, 1500L);
+        if (initial != Lifecycle.State.RESUMED) {
+            if (initial == Lifecycle.State.DESTROYED) {
+                throw new AssertionError("Original host was destroyed before the background transition");
+            }
+            focusOriginalTask(instrumentation, hostTaskId);
+            awaitState(scenario, Lifecycle.State.RESUMED);
+        }
+        verifyOriginalHost(scenario, original.get(), hostTaskId);
         try {
             ParcelFileDescriptor descriptor = instrumentation.getUiAutomation()
                     .executeShellCommand("input keyevent KEYCODE_HOME");
@@ -40,11 +50,16 @@ final class HostLifecycleTestActions {
             throw new AssertionError("Could not send the host task to background", error);
         }
         awaitState(scenario, Lifecycle.State.CREATED);
+        focusOriginalTask(instrumentation, hostTaskId);
+        awaitState(scenario, Lifecycle.State.RESUMED);
+        verifyOriginalHost(scenario, original.get(), hostTaskId);
+    }
+
+    private static void focusOriginalTask(Instrumentation instrumentation, int hostTaskId) {
         instrumentation.waitForIdleSync();
         ActivityManager manager = (ActivityManager) instrumentation.getTargetContext()
                 .getSystemService(Context.ACTIVITY_SERVICE);
         if (manager == null) throw new AssertionError("ActivityManager is unavailable");
-        boolean restored = false;
         for (ActivityManager.AppTask task : manager.getAppTasks()) {
             ActivityManager.RecentTaskInfo info = task.getTaskInfo();
             if (info == null) continue;
@@ -69,19 +84,20 @@ final class HostLifecycleTestActions {
                     instrumentation.runOnMainSync(() -> task.startActivity(
                             instrumentation.getTargetContext(), resume, null));
                 }
-                restored = true;
-                break;
+                return;
             }
         }
-        if (!restored) throw new AssertionError("Original host task not found: " + hostTaskId);
-        awaitState(scenario, Lifecycle.State.RESUMED);
+        throw new AssertionError("Original host task not found: " + hostTaskId);
+    }
+
+    private static void verifyOriginalHost(ActivityScenario<TestHarnessActivity> scenario,
+                                           TestHarnessActivity original, int hostTaskId) {
         scenario.onActivity(activity -> {
-            assertSame("Foreground must restore the same host instance", original.get(), activity);
+            assertSame("Foreground must restore the same host instance", original, activity);
             assertEquals("Foreground must restore the original host task", hostTaskId, activity.getTaskId());
             assertFalse(activity.isFinishing());
             assertFalse(activity.isDestroyed());
         });
-        original.set(null);
     }
 
     private static String runShell(Instrumentation instrumentation, String command) {
@@ -102,15 +118,14 @@ final class HostLifecycleTestActions {
         }
     }
 
-    private static void awaitState(ActivityScenario<TestHarnessActivity> scenario,
-                                   Lifecycle.State expected) {
-        long deadline = SystemClock.elapsedRealtime() + 20000L;
+    private static Lifecycle.State pollForState(ActivityScenario<TestHarnessActivity> scenario,
+                                                 Lifecycle.State expected, long timeoutMs) {
+        long deadline = SystemClock.elapsedRealtime() + timeoutMs;
         Lifecycle.State last = null;
         while (SystemClock.elapsedRealtime() < deadline) {
             try {
                 last = scenario.getState();
-                if (last == expected) return;
-                if (last == Lifecycle.State.DESTROYED) break;
+                if (last == expected || last == Lifecycle.State.DESTROYED) return last;
             } catch (IllegalStateException transitionInProgress) {
                 // ActivityScenario may briefly have no steady state between callbacks.
             } catch (NullPointerException transitionInProgress) {
@@ -123,6 +138,13 @@ final class HostLifecycleTestActions {
             }
             SystemClock.sleep(50L);
         }
+        return last;
+    }
+
+    private static void awaitState(ActivityScenario<TestHarnessActivity> scenario,
+                                   Lifecycle.State expected) {
+        Lifecycle.State last = pollForState(scenario, expected, 20000L);
+        if (last == expected) return;
         Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
         String activityDump = runShell(instrumentation, "dumpsys activity activities");
         android.util.Log.e("HostLifecycleTest", "Transition " + last + " -> " + expected + " failed\n"
