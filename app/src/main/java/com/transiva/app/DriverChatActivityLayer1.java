@@ -213,6 +213,7 @@ abstract class DriverChatActivityLayer1 extends Activity {
         String value = clean(type).toLowerCase(Locale.US);
         if (value.contains("food")) return "TransFood";
         if (value.contains("car") || value.contains("mobil")) return "TransCar";
+        if (value.contains("simpel")) return "Trans Simpel";
         if (value.contains("pickup")) return "TransPickup";
         return "TransRide";
     }

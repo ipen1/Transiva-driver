@@ -162,6 +162,7 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
             boolean reset
     ) {
         orderStatus = response.optString("status", orderStatus);
+        if ("Trans Simpel".equals(response.optString("service_type"))) orderType = "Trans Simpel";
         String canonicalRoom = normalizeRoom(response.optString("room_id", ""));
         if (!canonicalRoom.isEmpty() && !canonicalRoom.equals(roomId)) {
             roomId = canonicalRoom;

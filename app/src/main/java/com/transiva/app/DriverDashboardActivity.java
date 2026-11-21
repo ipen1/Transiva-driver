@@ -284,7 +284,7 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         buildStatusAndEmergency();
         Button courierRequests = new Button(this);
         courierRequests.setAllCaps(false);
-        courierRequests.setText("Permintaan TransSend");
+        courierRequests.setText("Permintaan Trans Simpel");
         courierRequests.setOnClickListener(v -> startActivity(new Intent(this, DriverTransSendContactsActivity.class)));
         add(homeSections, courierRequests, 0, dp(6), 0, 0);
         orderSections = new LinearLayout(this);

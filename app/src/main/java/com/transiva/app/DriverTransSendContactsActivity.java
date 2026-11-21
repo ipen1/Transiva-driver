@@ -36,7 +36,7 @@ public final class DriverTransSendContactsActivity extends Activity {
         content.setPadding(dp(16), dp(12), dp(16), dp(16));
         content.setBackgroundColor(Color.parseColor("#F3F8FF"));
         scroll.addView(content);
-        content.addView(label("Permintaan TransSend", 22));
+        content.addView(label("Permintaan Trans Simpel", 22));
         state = label("Memuat permintaan…", 14);
         content.addView(state);
         LinearLayout actions = new LinearLayout(this);
@@ -108,6 +108,7 @@ public final class DriverTransSendContactsActivity extends Activity {
             if (entry == null) continue;
             boolean accepted = "accepted".equals(entry.optString("state"));
             String name = entry.optString("peer_name", "Customer");
+            String service = "trans_simpel".equals(entry.optString("service")) ? "Trans Simpel" : "TransSend";
             TextView title = label(name + (accepted ? " · Chat aktif" : " · Menunggu jawaban"), 16);
             title.setPadding(0, dp(12), 0, 0);
             rows.addView(title);
@@ -118,7 +119,7 @@ public final class DriverTransSendContactsActivity extends Activity {
             } else {
                 String id = entry.optString("id");
                 actions.addView(button("Terima", () -> new AlertDialog.Builder(this)
-                        .setTitle("Terima permintaan TransSend?")
+                        .setTitle("Terima permintaan " + service + "?")
                         .setMessage("Chat aktif selama 15 menit. Jika customer memesan saat Anda masih tersedia, pesanan langsung masuk ke pesanan aktif Anda.")
                         .setNegativeButton("Kembali", null)
                         .setPositiveButton("Terima & Buka Chat", (d,w) -> request("accept", id)).show()));
@@ -131,7 +132,7 @@ public final class DriverTransSendContactsActivity extends Activity {
     private void openChat(JSONObject entry) {
         startActivity(new Intent(this, DriverChatRoomActivity.class)
                 .putExtra("order_source", "pickup_orders")
-                .putExtra("order_type", "TransSend")
+                .putExtra("order_type", "trans_simpel".equals(entry.optString("service")) ? "Trans Simpel" : "TransSend")
                 .putExtra("order_status", "contact_accepted")
                 .putExtra("order_id", entry.optString("order_id"))
                 .putExtra("room_id", entry.optString("room_id"))

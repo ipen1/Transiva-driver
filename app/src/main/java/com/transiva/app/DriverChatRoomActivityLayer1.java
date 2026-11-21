@@ -381,6 +381,7 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
         if (value.contains("food")) return "TransFood";
         if (value.contains("shop") || value.contains("mart")) return "TransShop";
         if (value.contains("car") || value.contains("mobil")) return "TransCar";
+        if (value.contains("simpel")) return "Trans Simpel";
         if (value.contains("pickup")) return "TransPickup";
         return "TransRide";
     }

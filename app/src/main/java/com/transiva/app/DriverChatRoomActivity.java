@@ -53,6 +53,24 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
+    private TransSimpelRoutePanel simpelPanel;
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (simpelPanel!=null) simpelPanel.resume();
+    }
+    @Override protected void onPause() {
+        if (simpelPanel!=null) simpelPanel.pause();
+        super.onPause();
+    }
+    @Override protected void onDestroy() {
+        if (simpelPanel!=null) simpelPanel.close();
+        super.onDestroy();
+    }
+    @Override protected void onSaveInstanceState(Bundle out) {
+        super.onSaveInstanceState(out);
+        if (simpelPanel!=null) simpelPanel.save(out);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,6 +83,11 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
         chatScope=new DriverUiScope(this);
         if(!chatScope.alive()){finish();return;}
         readIntent();
+        String simpelId=TransSimpelRoutePanel.contactId(orderId,roomId);
+        if (!simpelId.isEmpty()) {
+            simpelPanel=new TransSimpelRoutePanel(this,simpelId);
+            simpelPanel.restore(savedInstanceState);
+        }
         DriverMessageUnreadRepository.markRead(this, orderId, roomId);
         setContentView(buildScreen());
         DriverResponsiveUi.apply(this);
@@ -174,6 +197,7 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
 
         root.addView(header);
         root.addView(new ActiveCallBanner(this),new LinearLayout.LayoutParams(-1,-2));
+        if (simpelPanel!=null) root.addView(simpelPanel.view(),new LinearLayout.LayoutParams(-1,-2));
 
         messagesScroll = new ScrollView(this);
         messagesScroll.setFillViewport(true);
@@ -311,6 +335,7 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
             int resultCode,
             Intent data
     ) {
+        if (simpelPanel!=null && simpelPanel.result(requestCode,resultCode,data)) return;
         super.onActivityResult(requestCode, resultCode, data);
 
         if (requestCode == REQUEST_INTERNAL_CAMERA) {

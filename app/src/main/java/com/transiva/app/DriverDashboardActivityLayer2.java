@@ -480,6 +480,7 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
                 order.raw == null ? "" : order.raw.optString("order_type"),
                 order.raw == null ? "" : order.raw.optString("service_type"),
                 order.source).toLowerCase(Locale.US);
+        if (raw.contains("simpel")) return "Trans Simpel";
         if (raw.contains("pickup") || raw.contains("send")) return "TransSend";
         if (raw.contains("shop") || raw.contains("mart")) return "TransShop";
         if (raw.contains("food")) return "TransFood";
