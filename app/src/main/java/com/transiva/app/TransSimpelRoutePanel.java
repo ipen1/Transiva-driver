@@ -37,6 +37,9 @@ final class TransSimpelRoutePanel {
     private final Button stop;
     private final Button clearStop;
     private final Button quoteRetry;
+    private final Button briefButton;
+    private final TextView purchaseHint;
+    private JSONObject tivaBrief;
     private final TextView pickupAddress;
     private final TextView stopAddress;
     private final TextView deliveryAddress;
@@ -75,6 +78,9 @@ final class TransSimpelRoutePanel {
             params.setMargins(dp(2),0,dp(2),0);
             actions.addView(point,params);
         }
+        briefButton=button("Percakapan Tiva AI",()->TivaSimpelBrief.show(activity,tivaBrief));
+        briefButton.setVisibility(View.GONE);
+        view.addView(briefButton,new LinearLayout.LayoutParams(-1,dp(44)));
         view.addView(actions);
         pickupAddress = routeLine();
         stopAddress = routeLine();
@@ -82,6 +88,12 @@ final class TransSimpelRoutePanel {
         summary = routeLine();
         summary.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         summary.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        purchaseHint=new TextView(activity);
+        purchaseHint.setTextColor(0xFF526E90);
+        purchaseHint.setTextSize(12);
+        purchaseHint.setText("Harga makanan atau belanja dibahas di chat.");
+        purchaseHint.setVisibility(View.GONE);
+        view.addView(purchaseHint);
         view.addView(clearStop,new LinearLayout.LayoutParams(-2,dp(44)));
         quoteRetry = button("Hitung Ulang Ongkir", () -> {
             quotedRevision = -1;
@@ -205,6 +217,12 @@ final class TransSimpelRoutePanel {
         deliveryAddress.setText("Antar  ·  "+address("delivery"));
         summary.setText(amount>0?(ordered?"Total":"Estimasi")+"  Rp "
                 +NumberFormat.getIntegerInstance(new Locale("id","ID")).format(amount)+" · Tunai":"");
+        boolean assistedPurchase=tivaBrief!=null
+                && ("food".equals(tivaBrief.optString("kind")) || "shop".equals(tivaBrief.optString("kind")));
+        purchaseHint.setVisibility(assistedPurchase?View.VISIBLE:View.GONE);
+        if (amount>0 && assistedPurchase) {
+            summary.setText("Ongkir  Rp "+NumberFormat.getIntegerInstance(new Locale("id","ID")).format(amount)+" · Tunai");
+        }
         summary.setVisibility(amount>0?View.VISIBLE:View.GONE);
         boolean both=route.optJSONObject("pickup")!=null && route.optJSONObject("delivery")!=null;
         quoteRetry.setVisibility(editable && both && amount==0 && quotedRevision==revision ? View.VISIBLE : View.GONE);
@@ -288,6 +306,10 @@ final class TransSimpelRoutePanel {
             available=false;
             view.setVisibility(View.GONE);
             return;
+        }
+        if (reply!=null && reply.has("tiva_brief")) {
+            tivaBrief=reply.optJSONObject("tiva_brief");
+            briefButton.setVisibility(tivaBrief!=null?View.VISIBLE:View.GONE);
         }
         if (reply != null && reply.optJSONObject("route") != null) render(reply.optJSONObject("route"));
         else if (route!=null) render(route);

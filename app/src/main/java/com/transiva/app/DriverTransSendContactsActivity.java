@@ -169,6 +169,18 @@ public final class DriverTransSendContactsActivity extends Activity {
             status.setTextColor(accepted?0xFF096749:0xFF164C9C);
             details.addView(status);
 
+            JSONObject brief=entry.optJSONObject("tiva_brief");
+            if (brief!=null) {
+                String detail=brief.optString("detail");
+                TextView request=label("Tiva AI · "+brief.optString("title")+(detail.isEmpty()?"":"\n"+detail),13);
+                request.setPadding(0,dp(8),0,0);
+                request.setMaxLines(3);
+                request.setEllipsize(TextUtils.TruncateAt.END);
+                card.addView(request);
+                LinearLayout history=new LinearLayout(this);
+                card.addView(history);
+                addAction(history,"Lihat percakapan",()->TivaSimpelBrief.show(this,brief),false);
+            }
             LinearLayout actions=new LinearLayout(this);
             actions.setGravity(Gravity.END);
             card.addView(actions);
