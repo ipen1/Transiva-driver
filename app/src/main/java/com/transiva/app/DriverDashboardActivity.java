@@ -282,6 +282,11 @@ public class DriverDashboardActivity extends DriverDashboardActivityLayer2 {
         content.addView(homeSections);
 
         buildStatusAndEmergency();
+        Button courierRequests = new Button(this);
+        courierRequests.setAllCaps(false);
+        courierRequests.setText("Permintaan TransSend");
+        courierRequests.setOnClickListener(v -> startActivity(new Intent(this, DriverTransSendContactsActivity.class)));
+        add(homeSections, courierRequests, 0, dp(6), 0, 0);
         orderSections = new LinearLayout(this);
         orderSections.setOrientation(LinearLayout.VERTICAL);
         orderSections.setVisibility(View.GONE);

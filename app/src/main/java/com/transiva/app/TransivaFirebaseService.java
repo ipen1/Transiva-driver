@@ -69,6 +69,13 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
 
         if(data!=null&&"webrtc_call".equalsIgnoreCase(data.get("type"))&&"incoming_call".equalsIgnoreCase(data.get("event")))CallDeliveryTrace.record(this,data,"PUSH_RECEIVED","");
         if(!FcmSessionTarget.accept(this,data))return;
+        if (data != null && "transsend_contact".equals(data.get("type"))) {
+            try {
+                if (Long.parseLong(data.get("contact_expires_epoch")) <= System.currentTimeMillis() / 1000L) return;
+            } catch (NumberFormatException error) {
+                return;
+            }
+        }
 
         // Validate before consuming the FCM dedupe receipt. Side effects remain inside the same session.
         if(!verifiedChat && data!=null && DriverChatNotificationPolicy.guarded(first(data.get("type"),data.get("notif_type"),data.get("category"),"general"))) {

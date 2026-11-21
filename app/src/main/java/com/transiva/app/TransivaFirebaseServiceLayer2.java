@@ -89,6 +89,12 @@ abstract class TransivaFirebaseServiceLayer2 extends TransivaFirebaseServiceLaye
             String url,
             Map<String, String> data
     ) {
+        if ("transsend_contact".equals(type) && data != null) {
+            if ("transsend_ordered".equals(data.get("event"))) {
+                return new Intent(this, DriverDashboardActivity.class).putExtra("from_fcm", true);
+            }
+            return new Intent(this, DriverTransSendContactsActivity.class);
+        }
         if ("webrtc_call".equals(type)) {
             Intent intent = new Intent(this, WebRtcCallActivity.class);
             intent.putExtra("call_id", data != null ? first(data.get("call_id"), "") : "");
@@ -138,6 +144,11 @@ abstract class TransivaFirebaseServiceLayer2 extends TransivaFirebaseServiceLaye
             return intent;
         }
 
+        if (isChat(type) && roomId != null && roomId.matches("ROOM-PUD[0-9A-F]{24}")) {
+            return new Intent(this, DriverChatRoomActivity.class)
+                    .putExtra("order_id", roomId.substring(5)).putExtra("room_id", roomId)
+                    .putExtra("order_source", "pickup_orders").putExtra("order_type", "TransSend");
+        }
         if (isChat(type)) {
             Intent intent = new Intent(this, DriverChatActivity.class);
             intent.putExtra("room_id", first(roomId, orderId));
@@ -365,7 +376,7 @@ abstract class TransivaFirebaseServiceLayer2 extends TransivaFirebaseServiceLaye
         }
         if ("driver_emergency".equals(type)) return CH_ORDER;
 
-        if (isChat(type)) {
+        if (isChat(type) || "transsend_contact".equals(type)) {
             return CH_CHAT;
         }
 

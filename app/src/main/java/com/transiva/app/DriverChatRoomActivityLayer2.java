@@ -177,7 +177,7 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
             main.removeCallbacks(refreshRunnable);
         } else {
             statusText.setText(serviceName(orderType) + " · "
-                    + DriverMessageStatus.orderLabel(orderStatus, orderType));
+                    + ("contact_accepted".equals(orderStatus) ? "Chat dengan customer" : DriverMessageStatus.orderLabel(orderStatus, orderType)));
         }
 
         JSONObject customer = response.optJSONObject("customer");
