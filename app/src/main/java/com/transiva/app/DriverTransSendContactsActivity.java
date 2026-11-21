@@ -4,6 +4,14 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.text.TextUtils;
+import android.view.Gravity;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import java.text.NumberFormat;
+import java.util.Locale;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -24,6 +32,7 @@ public final class DriverTransSendContactsActivity extends Activity {
     private TextView state;
     private boolean visible;
     private boolean busy;
+    private String rendered = "";
 
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
@@ -36,12 +45,14 @@ public final class DriverTransSendContactsActivity extends Activity {
         content.setPadding(dp(16), dp(12), dp(16), dp(16));
         content.setBackgroundColor(Color.parseColor("#F3F8FF"));
         scroll.addView(content);
-        content.addView(label("Permintaan Trans Simpel", 22));
+        TextView heading=label("Permintaan Trans Simpel",22);
+        heading.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        content.addView(heading);
         state = label("Memuat permintaan…", 14);
         content.addView(state);
         LinearLayout actions = new LinearLayout(this);
-        actions.addView(button("Kembali", this::finish));
-        actions.addView(button("Perbarui", this::refresh));
+        addAction(actions,"‹ Kembali",this::finish,false);
+        addAction(actions,"Perbarui",this::refresh,false);
         content.addView(actions);
         rows = new LinearLayout(this);
         rows.setOrientation(LinearLayout.VERTICAL);
@@ -100,30 +111,77 @@ public final class DriverTransSendContactsActivity extends Activity {
     }
 
     private void render(JSONArray entries) {
-        rows.removeAllViews();
         int count = entries == null ? 0 : entries.length();
         state.setText(count == 0 ? "Belum ada permintaan aktif." : count + " permintaan aktif");
+        String snapshot=entries==null?"":entries.toString();
+        if (rendered.equals(snapshot)) return;
+        rendered=snapshot;
+        rows.removeAllViews();
         for (int i = 0; i < count; i++) {
             JSONObject entry = entries.optJSONObject(i);
             if (entry == null) continue;
             boolean accepted = "accepted".equals(entry.optString("state"));
             String name = entry.optString("peer_name", "Customer");
             String service = "trans_simpel".equals(entry.optString("service")) ? "Trans Simpel" : "TransSend";
-            TextView title = label(name + (accepted ? " · Chat aktif" : " · Menunggu jawaban"), 16);
-            title.setPadding(0, dp(12), 0, 0);
-            rows.addView(title);
-            LinearLayout actions = new LinearLayout(this);
-            rows.addView(actions);
+            LinearLayout card=new LinearLayout(this);
+            card.setOrientation(LinearLayout.VERTICAL);
+            card.setPadding(dp(12),dp(11),dp(12),dp(8));
+            card.setBackground(surface(0xFFFFFFFF,0xFFD8E5F3,16));
+            LinearLayout.LayoutParams cardParams=new LinearLayout.LayoutParams(-1,-2);
+            cardParams.topMargin=dp(8);
+            rows.addView(card,cardParams);
+
+            LinearLayout identity=new LinearLayout(this);
+            identity.setGravity(Gravity.CENTER_VERTICAL);
+            card.addView(identity);
+            FrameLayout avatar=new FrameLayout(this);
+            avatar.setBackground(surface(0xFFE7F0FF,0xFFE7F0FF,23));
+            avatar.setClipToOutline(true);
+            identity.addView(avatar,new LinearLayout.LayoutParams(dp(46),dp(46)));
+            TextView initial=label(name.isEmpty()?"C":name.substring(0,name.offsetByCodePoints(0,1)).toUpperCase(Locale.ROOT),18);
+            initial.setGravity(Gravity.CENTER);
+            avatar.addView(initial,new FrameLayout.LayoutParams(-1,-1));
+            ImageView photo=new ImageView(this);
+            photo.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            avatar.addView(photo,new FrameLayout.LayoutParams(-1,-1));
+            String photoUrl=CallPeerIdentity.photoUrl(entry.optString("peer_photo"));
+            if (photoUrl.startsWith("https://")) RemoteImageLoader.loadCenterCrop(photo,photoUrl,0);
+
+            LinearLayout details=new LinearLayout(this);
+            details.setOrientation(LinearLayout.VERTICAL);
+            details.setPadding(dp(11),0,0,0);
+            identity.addView(details,new LinearLayout.LayoutParams(0,-2,1));
+            TextView title=label(name.isEmpty()?"Customer":name,16);
+            title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+            title.setSingleLine(true);
+            title.setEllipsize(TextUtils.TruncateAt.END);
+            details.addView(title);
+            int reviews=entry.optInt("peer_rating_count");
+            String rating="Belum ada rating";
+            if (reviews>0&&!entry.isNull("peer_rating")) {
+                NumberFormat format=NumberFormat.getNumberInstance(new Locale("id","ID"));
+                format.setMinimumFractionDigits(1);
+                format.setMaximumFractionDigits(2);
+                rating="★ "+format.format(entry.optDouble("peer_rating"))+" ("+reviews+")";
+            }
+            details.addView(label(rating,12));
+            TextView status=label(accepted?"Chat aktif":"Menunggu jawaban",12);
+            status.setTextColor(accepted?0xFF096749:0xFF164C9C);
+            details.addView(status);
+
+            LinearLayout actions=new LinearLayout(this);
+            actions.setGravity(Gravity.END);
+            card.addView(actions);
             if (accepted) {
-                actions.addView(button("Buka Chat", () -> openChat(entry)));
+                addAction(actions,"Buka Chat",()->openChat(entry),true);
             } else {
-                String id = entry.optString("id");
-                actions.addView(button("Terima", () -> new AlertDialog.Builder(this)
-                        .setTitle("Terima permintaan " + service + "?")
-                        .setMessage("Chat aktif selama 15 menit. Jika customer memesan saat Anda masih tersedia, pesanan langsung masuk ke pesanan aktif Anda.")
-                        .setNegativeButton("Kembali", null)
-                        .setPositiveButton("Terima & Buka Chat", (d,w) -> request("accept", id)).show()));
-                actions.addView(button("Tolak", () -> request("reject", id)));
+                String id=entry.optString("id");
+                addAction(actions,"Tolak",()->request("reject",id),false);
+                addAction(actions,"Terima",()->new AlertDialog.Builder(this)
+                        .setTitle("Terima permintaan "+service+"?")
+                        .setMessage("Jika customer memesan saat Anda tersedia, pesanan langsung masuk ke pesanan aktif.")
+                        .setNegativeButton("Kembali",null)
+                        .setPositiveButton("Terima & Buka Chat",(d,w)->request("accept",id)).show(),true);
             }
         }
         DriverAppSettings.apply(this);
@@ -162,11 +220,26 @@ public final class DriverTransSendContactsActivity extends Activity {
         return label;
     }
 
-    private Button button(String label, Runnable click) {
-        Button button = new Button(this);
+    private GradientDrawable surface(int fill,int stroke,int radius) {
+        GradientDrawable background=new GradientDrawable();
+        background.setColor(fill);
+        background.setCornerRadius(dp(radius));
+        background.setStroke(dp(1),stroke);
+        return background;
+    }
+
+    private void addAction(LinearLayout row,String label,Runnable click,boolean primary) {
+        Button button=new Button(this);
         button.setAllCaps(false);
         button.setText(label);
-        button.setOnClickListener(v -> click.run());
-        return button;
+        button.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        button.setTextColor(primary?0xFFFFFFFF:0xFF164C9C);
+        int fill=primary?0xFF075DCF:0xFFEAF2FE;
+        button.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x33087ADF),surface(fill,fill,11),null));
+        button.setOnClickListener(v->click.run());
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-2,dp(44));
+        params.setMargins(dp(6),dp(6),0,0);
+        row.addView(button,params);
     }
 }

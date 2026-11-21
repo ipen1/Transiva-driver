@@ -129,7 +129,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         waypointBtn=slideAction("📍 Geser • Tiba di Persinggahan "+stopSequence,()->markCurrentWaypointArrived(stopSequence));
         actionDock.addView(waypointBtn,slideLp(0));
         arrivedDeliveryBtn = slideAction("🏁 Geser • Tiba di Pengantaran", () -> { if(extensionNeedsArrival()) destinationExtension.arrive(); else updateStatus("arrived_delivery"); }); actionDock.addView(arrivedDeliveryBtn, slideLp(0));
-        finishBtn = slideAction("✅ Geser • Selesaikan Order", () -> { if (isPickupOrder()) showPickupOtpDialog(); else updateStatus("finished"); }); actionDock.addView(finishBtn, slideLp(0));
+        finishBtn = slideAction("✅ Geser • Selesaikan Order", () -> { if (requiresPickupOtp()) showPickupOtpDialog(); else updateStatus("finished"); }); actionDock.addView(finishBtn, slideLp(0));
         dockHint=text("Geser untuk melanjutkan perjalanan",12,"#64748B",false);actionDock.addView(dockHint);
         LinearLayout options=new LinearLayout(this);options.setOrientation(LinearLayout.VERTICAL);options.setVisibility(View.GONE);
         Button more=outline("Opsi  ▾");

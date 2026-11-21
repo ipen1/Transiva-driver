@@ -12,6 +12,7 @@ import android.view.Gravity;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
@@ -44,12 +45,17 @@ public final class DriverSimpelPointActivity extends Activity {
         content.addView(viewport,new LinearLayout.LayoutParams(-1,0,1));
         mapView=new MapView(this);
         viewport.addView(mapView,new FrameLayout.LayoutParams(-1,-1));
-        TextView pin=new TextView(this);
-        pin.setText("●");
-        pin.setTextSize(28);
-        pin.setTextColor(Color.rgb(8,105,226));
-        pin.setGravity(Gravity.CENTER);
-        viewport.addView(pin,new FrameLayout.LayoutParams(dp(42),dp(42),Gravity.CENTER));
+        String kind=getIntent().getStringExtra("point_kind");
+        ImageView pin=new ImageView(this);
+        if ("stop".equals(kind)) {
+            pin.setImageResource(R.drawable.map_destination_pin);
+            pin.setColorFilter(Color.rgb(174,104,12));
+        } else {
+            pin.setImageResource("delivery".equals(kind)?R.drawable.map_destination_pin:R.drawable.map_pickup_pin);
+        }
+        pin.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        pin.setTranslationY(-dp(20));
+        viewport.addView(pin,new FrameLayout.LayoutParams(dp(40),dp(40),Gravity.CENTER));
         use=new Button(this);
         use.setAllCaps(false);
         use.setText("Pakai Titik Ini");

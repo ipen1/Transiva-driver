@@ -368,7 +368,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
             p.put("source", isPickupOrder() ? "pickup_orders" : "orders");
             p.put("status", next);
             p.put("driver_lat",statusLat);p.put("driver_lng",statusLng);
-            if(isPickupOrder() && (next.equals("finished") || next.equals("completed"))) p.put("otp", pendingFinishOtp);
+            if(requiresPickupOtp() && (next.equals("finished") || next.equals("completed"))) p.put("otp", pendingFinishOtp);
             String endpoint = endpoint(next);
             JSONObject r = postJson(BASE_URL + endpoint, p);
             boolean ok = r.optBoolean("success", false);
@@ -447,6 +447,12 @@ abstract class DriverTripActivityLayer1 extends Activity {
         if(!queued){updatingStatus=false;if(actionSession!=null)actionSession.failed();setLoading(false);refreshButtons();info("Antrean penuh","Coba lagi sebentar.");}
     }
     protected String endpoint(String n){ return DriverOrderStateMachine.endpoint(n, isPickupOrder()); }
+    protected boolean requiresPickupOtp(){
+        if (!isPickupOrder() || order==null) return false;
+        return order.optInt("is_trans_simpel",0)==0
+                && !first(order.optString("service_type"),order.optString("service_name"),
+                        order.optString("order_type")).toLowerCase(Locale.US).contains("simpel");
+    }
     protected boolean isPickupOrder(){
         String source = first(order == null ? "" : order.optString("source"),
                 order == null ? "" : order.optString("source_table"), orderKind).toLowerCase(Locale.US);
