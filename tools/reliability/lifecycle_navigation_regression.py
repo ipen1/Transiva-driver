@@ -19,13 +19,13 @@ files={
 'android/content/Context.java':'package android.content;public class Context{public static final String ACTIVITY_SERVICE="activity";public Object getSystemService(String s){return new android.app.ActivityManager();}}',
 'android/content/Intent.java':'package android.content;public class Intent{public static final int FLAG_ACTIVITY_REORDER_TO_FRONT=0x20000,FLAG_ACTIVITY_SINGLE_TOP=0x20000000;public int flags;public Class<?> target;public Intent(Context c,Class<?> t){target=t;}public Intent addFlags(int f){flags|=f;return this;}}',
 'android/app/ActivityManager.java':'package android.app;public class ActivityManager{public static int starts;public static boolean missing;public static android.content.Intent intent;public static class RecentTaskInfo{public int id=1,taskId=1;}public static class AppTask{public RecentTaskInfo getTaskInfo(){return new RecentTaskInfo();}public void moveToFront(){throw new AssertionError("Legacy moveToFront cannot guarantee RESUMED");}public void startActivity(android.content.Context c,android.content.Intent i,Object options){if(!Instrumentation.onMain)throw new AssertionError("Not on main thread");starts++;intent=i;}}public java.util.List<AppTask> getAppTasks(){return missing?java.util.Collections.emptyList():java.util.Arrays.asList(new AppTask());}}',
-'android/app/Instrumentation.java':'package android.app;public class Instrumentation{public static boolean onMain;public static int idle,focus,dumps;public void waitForIdleSync(){idle++;}public void runOnMainSync(Runnable r){onMain=true;try{r.run();}finally{onMain=false;}}public android.content.Context getTargetContext(){return new android.content.Context();}public Automation getUiAutomation(){return new Automation();}public static class Automation{public android.os.ParcelFileDescriptor executeShellCommand(String s){android.os.ParcelFileDescriptor p=new android.os.ParcelFileDescriptor();if(s.startsWith("am task focus")){focus++;p.text="Setting focus to task 1";}if(s.startsWith("dumpsys"))dumps++;return p;}}}',
+'android/app/Instrumentation.java':'package android.app;public class Instrumentation{public static boolean onMain;public static int idle,focus,dumps,homes;public void waitForIdleSync(){idle++;}public void runOnMainSync(Runnable r){onMain=true;try{r.run();}finally{onMain=false;}}public android.content.Context getTargetContext(){return new android.content.Context();}public Automation getUiAutomation(){return new Automation();}public static class Automation{public android.os.ParcelFileDescriptor executeShellCommand(String s){android.os.ParcelFileDescriptor p=new android.os.ParcelFileDescriptor();if(s.startsWith("am task focus")){focus++;p.text="Setting focus to task 1";}if(s.equals("input keyevent KEYCODE_HOME"))homes++;if(s.startsWith("dumpsys"))dumps++;return p;}}}',
 'android/widget/TextView.java':'package android.widget;public class TextView{public String text;public void setText(String t){text=t;}}',
 'android/util/Log.java':'package android.util;public class Log{public static int i(String a,String b){return 0;}public static int e(String a,String b){return 0;}}',
 'androidx/lifecycle/Lifecycle.java':'package androidx.lifecycle;public class Lifecycle{public enum State{DESTROYED,INITIALIZED,CREATED,STARTED,RESUMED}}',
 'androidx/test/platform/app/InstrumentationRegistry.java':'package androidx.test.platform.app;public class InstrumentationRegistry{public static android.app.Instrumentation getInstrumentation(){return new android.app.Instrumentation();}}',
 'com/transiva/app/TestHarnessActivity.java':'package com.transiva.app;public class TestHarnessActivity{public int getTaskId(){return 1;}public boolean isFinishing(){return false;}public boolean isDestroyed(){return false;}}',
-'androidx/test/core/app/ActivityScenario.java':'''package androidx.test.core.app;import java.util.*;import androidx.lifecycle.Lifecycle;public class ActivityScenario<T>{public final Deque<Object> states=new ArrayDeque<>();public Object repeat;public T activity;public ActivityScenario(T a){activity=a;}public Lifecycle.State getState(){Object x=states.isEmpty()?repeat:states.removeFirst();if(x instanceof RuntimeException)throw (RuntimeException)x;return (Lifecycle.State)x;}public void onActivity(java.util.function.Consumer<T> action){action.accept(activity);}}''',
+'androidx/test/core/app/ActivityScenario.java':'''package androidx.test.core.app;import java.util.*;import androidx.lifecycle.Lifecycle;public class ActivityScenario<T>{public final Deque<Object> states=new ArrayDeque<>();public Object repeat;public java.util.function.Supplier<Lifecycle.State> stateProvider;public T activity;public ActivityScenario(T a){activity=a;}public Lifecycle.State getState(){if(stateProvider!=null)return stateProvider.get();Object x=states.isEmpty()?repeat:states.removeFirst();if(x instanceof RuntimeException)throw (RuntimeException)x;return (Lifecycle.State)x;}public void onActivity(java.util.function.Consumer<T> action){action.accept(activity);}}''',
 'com/transiva/app/TransivaDiagnostics.java':'package com.transiva.app;public class TransivaDiagnostics{public static void error(Object c,String a,String b,Exception e){throw new RuntimeException(e);}}',
 'com/transiva/app/NavigationDiagnostics.java':'package com.transiva.app;public class NavigationDiagnostics{public static void error(Object c,String s,Exception e){throw new RuntimeException(e);}}',
 'com/transiva/app/TargetProbe.java':'''package com.transiva.app;import org.json.JSONObject;import java.util.*;
@@ -71,6 +71,33 @@ public class RegressionProbe{
   try{HostLifecycleTestActions.backgroundAndReturn(scenario(State.RESUMED,State.CREATED));}catch(AssertionError e){failed=true;}
   check(failed&&android.app.ActivityManager.starts==starts,"missing original task fails without starting a replacement");
   android.app.ActivityManager.missing=false;android.os.Build.VERSION.SDK_INT=36;
+  int home=android.app.Instrumentation.homes, focus=android.app.Instrumentation.focus;
+  long opened=android.os.SystemClock.now;
+  ActivityScenario<TestHarnessActivity> opening=scenario();
+  opening.stateProvider=()->android.app.Instrumentation.homes==home
+       ?(android.os.SystemClock.now<opened+200?State.CREATED:State.RESUMED)
+       :(android.app.Instrumentation.focus==focus?State.CREATED:State.RESUMED);
+  HostLifecycleTestActions.backgroundAndReturn(opening);
+  check(android.app.Instrumentation.homes==home+1&&android.app.Instrumentation.focus==focus+1,
+        "API36 transient CREATED before Home waits for actual RESUMED without early refocus");
+
+  int stoppedHome=android.app.Instrumentation.homes, stoppedFocus=android.app.Instrumentation.focus;
+  ActivityScenario<TestHarnessActivity> initiallyStopped=scenario();
+  initiallyStopped.stateProvider=()->android.app.Instrumentation.homes==stoppedHome
+       ?(android.app.Instrumentation.focus==stoppedFocus?State.CREATED:State.RESUMED)
+       :(android.app.Instrumentation.focus==stoppedFocus+1?State.CREATED:State.RESUMED);
+  HostLifecycleTestActions.backgroundAndReturn(initiallyStopped);
+  check(android.app.Instrumentation.homes==stoppedHome+1&&android.app.Instrumentation.focus==stoppedFocus+2,
+        "API36 initially stopped task is refocused before Home and tested again after Home");
+
+  int stuckHome=android.app.Instrumentation.homes, stuckFocus=android.app.Instrumentation.focus;
+  ActivityScenario<TestHarnessActivity> cannotStart=scenario();
+  cannotStart.repeat=State.CREATED;
+  failed=false;
+  try{HostLifecycleTestActions.backgroundAndReturn(cannotStart);}catch(AssertionError e){failed=true;}
+  check(failed&&android.app.Instrumentation.homes==stuckHome&&android.app.Instrumentation.focus==stuckFocus+1,
+        "focus acknowledgement alone cannot pass; an unresumed host never receives Home");
+
   TargetProbe p=target("waypoint_2","on_delivery");check(p.targetMode.equals("waypoint_2")&&p.targetLat()==-1.1&&p.targetLng()==120.4,"Trip waypoint intent resolves to explicit stop, not final delivery");
   p=target(" WAYPOINT_3 ","driver_accepted");check(p.targetMode.equals("waypoint_3")&&p.targetLat()==-1.1,"waypoint remains explicit before pickup and ignores case/whitespace");
   p=target("pickup","on_delivery");check(p.targetMode.equals("pickup")&&p.targetLat()==-0.8&&p.targetLng()==120.1,"explicit pickup remains unchanged");
