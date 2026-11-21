@@ -179,7 +179,11 @@
             android:turnScreenOn="true"
             android:configChanges="density|fontScale|keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
             android:theme="@style/AppTheme" />
-        <activity android:name=".DriverTransSendContactsActivity" android:exported="false" android:theme="@style/AppTheme" />
+        <activity
+            android:name=".DriverTransSendContactsActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
         <activity android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" android:name=".DriverChatRoomActivity" android:exported="false" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize" />
         <activity android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" android:name=".DriverGlobalChatActivity" android:exported="false" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize" />
         <activity android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" android:name=".DriverMerchantChatActivity" android:exported="false" android:theme="@style/AppTheme" android:windowSoftInputMode="adjustResize" />
