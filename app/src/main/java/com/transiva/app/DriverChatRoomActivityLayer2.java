@@ -123,6 +123,7 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
         if (content.startsWith(TraviSivaStickers.PREFIX)) wrapper.addView(TraviSivaStickers.bubble(this, content));
         else { TextView bubble = text(content, 13, "#FFFFFF", false); bubble.setPadding(dp(13), dp(9), dp(13), dp(9)); bubble.setBackground(gradient("#086BFF", "#2EA2FF", 17)); wrapper.addView(bubble, new LinearLayout.LayoutParams(-2, -2)); }
         TextView state = text("Pending…", 9, "#94A3B8", false); state.setPadding(dp(7), dp(2), dp(7), 0); wrapper.addView(state, new LinearLayout.LayoutParams(-2, -2));
+        wrapper.setTag(ChatPhotoTile.PENDING_TEXT_TAG);
         animateMessage(wrapper, true);
         scrollBottom(); return new PendingText(wrapper, state);
     }
@@ -231,7 +232,12 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
             }
             if (id > lastId) lastId = id;
 
-            addBubble(message, !firstLoad);
+            View acknowledged=acknowledgedBubbles.get(id);
+            if (acknowledged!=null) {
+                messagesBox.removeView(acknowledged);
+                acknowledgedBubbles.remove(id);
+            }
+            addBubble(message,!firstLoad&&acknowledged==null);
             if (id > 0 && "customer".equalsIgnoreCase(message.optString("sender_type"))
                     && message.optInt("is_delivered") == 0 && message.optInt("is_read") == 0) {
                 receivedIds.put(id);

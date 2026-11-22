@@ -29,10 +29,16 @@ final class TripMapChatPreview {
         this.activity=activity;this.mapLayer=mapLayer;this.order=order;customerPin=customer;visibleTop=top;visibleBottom=bottom;openCustomer=open;
         bubble=new LinearLayout(activity);bubble.setOrientation(LinearLayout.VERTICAL);bubble.setPadding(dp(11),dp(8),dp(11),dp(8));bubble.setElevation(dp(6));
         int surface=DriverThemeTokens.surface(activity);
-        android.graphics.drawable.GradientDrawable glass=DriverNavigationUi.roundRect(Color.argb(245,Color.red(surface),Color.green(surface),Color.blue(surface)),dp(17));glass.setStroke(dp(1),DriverThemeTokens.border(activity));bubble.setBackground(glass);
+        android.graphics.drawable.GradientDrawable glass=DriverNavigationUi.roundRect(Color.argb(178,Color.red(surface),Color.green(surface),Color.blue(surface)),dp(17));glass.setStroke(dp(1),DriverThemeTokens.border(activity));bubble.setBackground(glass);
         LinearLayout row=new LinearLayout(activity);row.setGravity(Gravity.CENTER_VERTICAL);
         heading=new TextView(activity);heading.setTextSize(11);heading.setTypeface(null,Typeface.BOLD);heading.setTextColor(DriverThemeTokens.accent(activity));row.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
-        badge=new TextView(activity);badge.setTextSize(10);badge.setTextColor(DriverThemeTokens.textSecondary(activity));row.addView(badge);bubble.addView(row);
+        badge=new TextView(activity);badge.setTextSize(10);badge.setTextColor(DriverThemeTokens.textSecondary(activity));row.addView(badge);
+        TextView close=new TextView(activity);
+        close.setText("×");close.setGravity(Gravity.CENTER);close.setTextSize(20);
+        close.setTextColor(DriverThemeTokens.textPrimary(activity));close.setContentDescription("Tutup bubble pesan ini");
+        close.setOnClickListener(v->dismissCurrent());
+        row.addView(close,new LinearLayout.LayoutParams(dp(48),dp(40)));
+        bubble.addView(row);
         message=new TextView(activity);message.setTextSize(14);message.setMaxLines(3);message.setTextColor(DriverThemeTokens.textPrimary(activity));message.setPadding(0,dp(3),0,0);bubble.addView(message,new LinearLayout.LayoutParams(-1,-2));
         mediaBox=new LinearLayout(activity);mediaBox.setOrientation(LinearLayout.VERTICAL);bubble.addView(mediaBox,new LinearLayout.LayoutParams(-1,-2));media=new TripBubbleMedia(activity,mediaBox);
         mapLayer.addView(bubble,new FrameLayout.LayoutParams(dp(216),-2,Gravity.TOP|Gravity.LEFT));bubble.setVisibility(View.INVISIBLE);
@@ -40,7 +46,15 @@ final class TripMapChatPreview {
     }
     TripMapChatPreview merchant(Supplier<PointF> point,Runnable open){merchantPin=point;openMerchant=open;return this;}
     private void acknowledge(){if(current!=null){TripBubbleStore.ack(activity,order.get(),current);current=TripBubbleStore.latest(activity,order.get());bubble.setScaleX(1);bubble.setScaleY(1);}}
-    private void openRoom(){if(scope==null||!scope.alive()||current==null)return;boolean merchant=current.merchant;acknowledge();if(merchant&&openMerchant!=null)openMerchant.run();else openCustomer.run();}
+    private void openRoom(){if(scope==null||!scope.alive()||current==null)return;boolean merchant=current.merchant;dismissCurrent();if(merchant&&openMerchant!=null)openMerchant.run();else openCustomer.run();}
+    private void dismissCurrent(){
+        if(current==null)return;
+        TripBubbleStore.dismiss(activity,order.get(),current);
+        current=TripBubbleStore.latest(activity,order.get());
+        bubble.animate().cancel();
+        bubble.setVisibility(View.INVISIBLE);
+        media.close();
+    }
     void start(){
         if(scope!=null)return;scope=new DriverUiScope(activity);
         try{ContextCompat.registerReceiver(activity,updates,new IntentFilter(TransivaFirebaseService.ACTION_DRIVER_DATA_CHANGED),ContextCompat.RECEIVER_NOT_EXPORTED);registered=true;}catch(RuntimeException e){NavigationDiagnostics.error(activity,"MAP_CHAT_RECEIVER_FAILED",e);}
@@ -96,8 +110,12 @@ final class TripMapChatPreview {
         String id=NavigationTargetPolicy.identity(order.get());
         if(!identity.equals(id)){identity=id;shown="";media.close();}
         current=TripBubbleStore.latest(activity,order.get());
-        if(current==null||NavigationTargetPolicy.terminal(order.get())){bubble.setVisibility(View.INVISIBLE);media.close();return;}
-        if(shown.equals(current.key()))return;shown=current.key();page=0;pageAt=SystemClock.elapsedRealtime();lastBounce=pageAt;
+        if(current==null||current.dismissed||NavigationTargetPolicy.terminal(order.get())){bubble.setVisibility(View.INVISIBLE);media.close();return;}
+        if(shown.equals(current.key()))return;
+        bubble.animate().cancel();
+        bubble.setVisibility(View.INVISIBLE);
+        bubble.setRotation(0f);
+        shown=current.key();page=0;pageAt=SystemClock.elapsedRealtime();lastBounce=pageAt;
         heading.setText(current.merchant?"●  Pesan merchant":"●  Pesan pelanggan");pages.clear();media.close();
         String raw=current.raw;
         if(TripBubbleContent.image(raw)||TripBubbleContent.voice(raw)){
@@ -116,7 +134,7 @@ final class TripMapChatPreview {
     private void showPage(){if(pages.isEmpty())return;message.setText(pages.get(page));badge.setText(pages.size()>1?(page+1)+"/"+pages.size():"");pageAt=SystemClock.elapsedRealtime();}
     private final Runnable position=new Runnable(){@Override public void run(){
         if(scope==null||!scope.alive())return;restore();
-        if(current!=null&&!NavigationTargetPolicy.terminal(order.get())){
+        if(current!=null&&!current.dismissed&&!NavigationTargetPolicy.terminal(order.get())){
             PointF point=current.merchant&&merchantPin!=null?merchantPin.get():customerPin.get();
             int top=Math.max(dp(6),visibleTop.getAsInt()+dp(6)),bottom=Math.min(mapLayer.getHeight(),visibleBottom.getAsInt())-dp(6);
             int width=Math.min(dp(218),Math.max(dp(100),mapLayer.getWidth()-dp(18)));
@@ -128,7 +146,17 @@ final class TripMapChatPreview {
                 float x=onMap?point.x-width/2f:mapLayer.getWidth()-width-dp(9),y=top;
                 if(onMap){float above=point.y-height-dp(30);if(above>=top)y=above;else if(point.y+height+dp(10)<=bottom)y=point.y+dp(10);else x=point.x<mapLayer.getWidth()/2f?mapLayer.getWidth()-width-dp(9):dp(9);}
                 bubble.setTranslationX(Math.max(dp(8),Math.min(x,mapLayer.getWidth()-width-dp(8))));bubble.setTranslationY(y);
-                if(bubble.getVisibility()!=View.VISIBLE){bubble.setVisibility(View.VISIBLE);bubble.setAlpha(0);bubble.animate().alpha(1).setDuration(180).start();pageAt=SystemClock.elapsedRealtime();}
+                if(bubble.getVisibility()!=View.VISIBLE){
+                    bubble.setVisibility(View.VISIBLE);bubble.setPivotX(width/2f);bubble.setPivotY(height);
+                    if (Build.VERSION.SDK_INT<26 || android.animation.ValueAnimator.areAnimatorsEnabled()) {
+                        bubble.setScaleX(.28f);bubble.setScaleY(.28f);bubble.setAlpha(0);
+                        bubble.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(245)
+                                .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
+                    } else {
+                        bubble.setScaleX(1f);bubble.setScaleY(1f);bubble.setAlpha(1f);
+                    }
+                    pageAt=SystemClock.elapsedRealtime();
+                }
                 long now=SystemClock.elapsedRealtime();
                 if(pages.size()>1&&now-pageAt>=TripChatDisplayStore.duration(pages.get(page))){page=(page+1)%pages.size();showPage();}
                 if(!current.ack&&!media.busy()&&System.currentTimeMillis()-current.at>=15000&&now-lastBounce>=12000&&(Build.VERSION.SDK_INT<26 || android.animation.ValueAnimator.areAnimatorsEnabled())){

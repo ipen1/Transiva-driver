@@ -6,8 +6,8 @@ import org.json.*;
 /** Last incoming message survives screen handoff; reading never advances order state. */
 final class TripBubbleStore {
     static final class Message {
-        final long id,at;final String raw;final boolean merchant,ack;
-        Message(JSONObject o){id=o.optLong("id");at=o.optLong("at");raw=o.optString("raw");merchant=o.optBoolean("merchant");ack=o.optBoolean("ack");}
+        final long id,at;final String raw;final boolean merchant,ack,dismissed;
+        Message(JSONObject o){id=o.optLong("id");at=o.optLong("at");raw=o.optString("raw");merchant=o.optBoolean("merchant");ack=o.optBoolean("ack");dismissed=o.optBoolean("dismissed");}
         String key(){return (merchant?"m":"c")+id;}
     }
     private static String key(Context c,JSONObject o,boolean merchant){return NavigationSessionStore.identity(c)+"|"+NavigationTargetPolicy.identity(o)+(merchant?"|m":"|c");}
@@ -32,4 +32,15 @@ final class TripBubbleStore {
         Message current=get(c,o,message.merchant);if(current==null||current.id!=message.id||current.ack)return;
         try{JSONObject value=new JSONObject(prefs(c).getString(key(c,o,message.merchant),"{}"));value.put("ack",true);prefs(c).edit().putString(key(c,o,message.merchant),value.toString()).apply();}catch(JSONException ignored){}
     }
+    static synchronized void dismiss(Context c,JSONObject o,Message message){
+        Message current=get(c,o,message.merchant);
+        if(current==null || current.id!=message.id || current.dismissed)return;
+        try{
+            String storageKey=key(c,o,message.merchant);
+            JSONObject value=new JSONObject(prefs(c).getString(storageKey,"{}"));
+            value.put("ack",true).put("dismissed",true);
+            prefs(c).edit().putString(storageKey,value.toString()).apply();
+        }catch(JSONException ignored){}
+    }
+
 }

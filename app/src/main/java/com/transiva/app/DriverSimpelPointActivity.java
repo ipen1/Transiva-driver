@@ -63,6 +63,9 @@ public final class DriverSimpelPointActivity extends android.app.Activity {
     private String kind, resolved="";
     private int selectionVersion;
     private boolean confirming;
+    private ImageView selectionPin;
+    private View selectionShadow;
+    private long landingAt;
     private DriverUiScope routeNetwork;
 
     @Override protected void onCreate(Bundle saved) {
@@ -135,10 +138,18 @@ public final class DriverSimpelPointActivity extends android.app.Activity {
         FrameLayout viewport=new FrameLayout(this);
         mapView=new MapView(this);
         viewport.addView(mapView,new FrameLayout.LayoutParams(-1,-1));
+        selectionShadow=new View(this);
+        GradientDrawable oval=new GradientDrawable();
+        oval.setShape(GradientDrawable.OVAL);
+        oval.setColor(0x500F3153);
+        selectionShadow.setBackground(oval);
+        selectionShadow.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        viewport.addView(selectionShadow,new FrameLayout.LayoutParams(dp(16),dp(6),Gravity.CENTER));
         ImageView pin=new ImageView(this);
+        selectionPin=pin;
         pin.setImageBitmap(pin(kind));
         pin.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        pin.setTranslationY(-dp(23));
+        pin.setTranslationY(-dp(33));
         viewport.addView(pin,new FrameLayout.LayoutParams(dp(40),dp(46),Gravity.CENTER));
         TextView pinLabel=text(label(kind),13,0xFF10284C,true);
         pinLabel.setPadding(dp(10),dp(5),dp(10),dp(5));
@@ -320,6 +331,13 @@ public final class DriverSimpelPointActivity extends android.app.Activity {
         cancelLocation();
         confirming=true;
         LatLng point=selected;
+        googleMap.getUiSettings().setAllGesturesEnabled(false);
+        if (android.os.Build.VERSION.SDK_INT<26 || android.animation.ValueAnimator.areAnimatorsEnabled()) {
+            landingAt=android.os.SystemClock.uptimeMillis()+200L;
+            selectionShadow.animate().scaleX(1.24f).setDuration(180).start();
+            selectionPin.animate().translationY(-dp(23)).setDuration(195)
+                    .setInterpolator(new android.view.animation.BounceInterpolator()).start();
+        }
         if (!resolved.isEmpty()) {
             finishPoint(point,resolved);
             return;
@@ -332,6 +350,11 @@ public final class DriverSimpelPointActivity extends android.app.Activity {
 
     private void finishPoint(LatLng point,String resultAddress) {
         if (isFinishing() || isDestroyed()) return;
+        long delay=landingAt-android.os.SystemClock.uptimeMillis();
+        if (delay>0) {
+            main.postDelayed(()->finishPoint(point,resultAddress),delay);
+            return;
+        }
         Intent result=new Intent().putExtra("lat",point.latitude).putExtra("lng",point.longitude)
                 .putExtra("address",resultAddress);
         if (baseRoute!=null) {

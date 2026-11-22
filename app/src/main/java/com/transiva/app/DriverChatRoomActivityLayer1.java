@@ -126,6 +126,7 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
                 sendReadReceiptNow(throughId);
             };
     protected int lastId;
+    protected final android.util.SparseArray<View> acknowledgedBubbles=new android.util.SparseArray<>();
     protected boolean firstLoad = true;
     protected final SparseArray<TextView> receiptViews = new SparseArray<>();
 
@@ -142,6 +143,24 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
     protected static final class PendingText { final LinearLayout root; final TextView state; PendingText(LinearLayout root, TextView state){this.root=root;this.state=state;} void markNetworkPending(){state.setText("Pending • jaringan");} }
 
     protected void animateMessage(View view, boolean mine) {
+        if (android.os.Build.VERSION.SDK_INT>=26 && !android.animation.ValueAnimator.areAnimatorsEnabled()) return;
+        if (mine && view instanceof LinearLayout) {
+            View content=((LinearLayout)view).getChildAt(0);
+            if (content!=null) {
+                content.setAlpha(0f);
+                content.setTranslationY(dp(18));
+                content.post(()->{
+                    float diameter=dp(20);
+                    content.setPivotX(content.getWidth()-dp(12));
+                    content.setPivotY(content.getHeight());
+                    content.setScaleX(Math.min(.7f,diameter/Math.max(1,content.getWidth())));
+                    content.setScaleY(Math.min(.78f,diameter/Math.max(1,content.getHeight())));
+                    content.animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
+                            .setDuration(270).setInterpolator(new DecelerateInterpolator()).start();
+                });
+                return;
+            }
+        }
         view.setAlpha(0f);
         view.setTranslationX(dp(mine ? 18 : -18));
         view.setScaleX(0.97f);
@@ -301,9 +320,14 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
                         if (sentChat != null) {
                             String canonical = normalizeRoom(sentChat.optString("room_id", ""));
                             if (!canonical.isEmpty()) roomId = canonical;
-                            if (pending != null) messagesBox.removeView(pending.root);
-                            int sentId = sentChat.optInt("id", 0);
-                            if (sentId > lastId) { lastId = sentId; addBubble(sentChat, true); scrollBottom(); }
+                            int sentId=sentChat.optInt("id");
+                            if (pending!=null) {
+                                if (sentId<=lastId) messagesBox.removeView(pending.root);
+                                else {
+                                    pending.state.setText("Terkirim");
+                                    acknowledgedBubbles.put(sentId,pending.root);
+                                }
+                            }
                         } else if (pending != null) {
                             messagesBox.removeView(pending.root);
                         }

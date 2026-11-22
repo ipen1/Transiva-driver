@@ -109,9 +109,12 @@ final class ChatPhotoTile extends LinearLayout {
         }
     }
 
+    static final String PENDING_TEXT_TAG="pending_chat_text";
+
     static void clearServerRows(LinearLayout messages) {
         for (int i = messages.getChildCount() - 1; i >= 0; i--) {
-            if (!(messages.getChildAt(i) instanceof ChatPhotoTile)) messages.removeViewAt(i);
+            View row=messages.getChildAt(i);
+            if (!(row instanceof ChatPhotoTile) && !PENDING_TEXT_TAG.equals(row.getTag())) messages.removeViewAt(i);
         }
     }
 
