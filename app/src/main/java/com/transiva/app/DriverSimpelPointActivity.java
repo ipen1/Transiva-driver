@@ -68,8 +68,6 @@ public final class DriverSimpelPointActivity extends android.app.Activity {
             kind=title!=null && title.toLowerCase(Locale.ROOT).contains("antar")?"delivery":"pickup";
         }
         buildScreen();
-        getWindow().setStatusBarColor(0xFF07265E);
-        getWindow().setNavigationBarColor(0xFF0C1E37);
 
         Bundle mapState=saved==null?null:saved.getBundle("simpel_map");
         mapView.onCreate(mapState);
