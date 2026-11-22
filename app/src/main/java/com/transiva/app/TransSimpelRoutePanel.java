@@ -264,6 +264,11 @@ final class TransSimpelRoutePanel {
                 .putExtra("point_kind",field)
                 .putExtra("title",which==PICKUP?"Atur Titik Jemput":which==STOP?"Atur Titik Singgah":"Atur Titik Antar");
         if (seed!=null) intent.putExtra("lat",seed.optDouble("lat")).putExtra("lng",seed.optDouble("lng"));
+        for (String marker:new String[]{"pickup","delivery","stop"}) {
+            JSONObject point=route.optJSONObject(marker);
+            if (point!=null) intent.putExtra("saved_"+marker,point.toString());
+        }
+
         activity.startActivityForResult(intent,which);
     }
 
