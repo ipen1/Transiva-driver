@@ -58,6 +58,11 @@ public class ActionSyncProbe{
  SystemClock.now+=120000;check(TripBubbleStore.latest(nav,shop).id==101,"bubble has no seconds-based expiration");
  TripBubbleStore.ack(nav,shop,TripBubbleStore.latest(nav,shop));check(TripBubbleStore.latest(trip,shop).ack,"opening or playing acknowledges reminder across screens");
  TripBubbleStore.offer(trip,shop,101,"baru",false,false);check(TripBubbleStore.latest(nav,shop).ack,"repeated polling cannot restart reminder");
+ TripBubbleStore.dismiss(trip,shop,TripBubbleStore.latest(trip,shop));
+ TripBubbleStore.offer(nav,shop,101,"baru",false,false);TripBubbleStore.offer(nav,shop,100,"lama",false,false);
+ check(TripBubbleStore.latest(nav,shop).dismissed,"closed bubble stays closed across screens and poll replays");
+ TripBubbleStore.offer(nav,shop,102,"terbaru",false,false);
+ check(TripBubbleStore.latest(trip,shop).id==102&&!TripBubbleStore.latest(trip,shop).dismissed,"new message reopens bubble");
  TripBubbleStore.offer(nav,meal,120,"pesan merchant",true,false);TripBubbleStore.offer(trip,meal,121,"pesan pelanggan",false,false);check(!TripBubbleStore.latest(nav,meal).merchant,"newest incoming room wins one bubble without overlap");
  TripBubbleStore.offer(trip,send,300,"sudah dibaca",false,true);check(TripBubbleStore.latest(nav,send)==null,"initial historical read messages do not resurface");
  check(TripBubbleContent.image("[[IMAGE2]]uploads/a.webp|uploads/a.jpg")&&TripBubbleContent.mediaUrl("[[IMAGE2]]uploads/a.webp|uploads/a.jpg").equals("https://transiva.my.id/server/uploads/a.webp"),"image bubble uses lightweight preview encoding");
