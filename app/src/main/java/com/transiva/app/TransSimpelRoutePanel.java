@@ -32,6 +32,8 @@ final class TransSimpelRoutePanel {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Runnable poll = this::refresh;
     private final LinearLayout view;
+    private final android.widget.ScrollView routeScroll;
+    private final LinearLayout fareRow;
     private final Button pickup;
     private final Button delivery;
     private final Button stop;
@@ -62,9 +64,30 @@ final class TransSimpelRoutePanel {
         session = new SessionManager(activity);
         view = new LinearLayout(activity);
         view.setOrientation(LinearLayout.VERTICAL);
-        view.setPadding(dp(12),dp(5),dp(12),dp(5));
+        view.setPadding(dp(9),dp(4),dp(9),dp(5));
         view.setBackground(surface("#FFFFFF", "#DCE8F5"));
-        view.setVisibility(View.GONE);
+        routeScroll=new android.widget.ScrollView(activity) {
+            @Override protected void onMeasure(int widthSpec,int heightSpec) {
+                android.view.ViewParent parent=getParent();
+                int available=parent instanceof View && ((View)parent).getHeight()>0
+                        ? ((View)parent).getHeight()
+                        : dp(activity.getResources().getConfiguration().screenHeightDp);
+                int cap=Math.max(dp(48),Math.round(available*.42f));
+                if (MeasureSpec.getMode(heightSpec)!=MeasureSpec.UNSPECIFIED) cap=Math.min(cap,MeasureSpec.getSize(heightSpec));
+                super.onMeasure(widthSpec,MeasureSpec.makeMeasureSpec(cap,MeasureSpec.AT_MOST));
+            }
+        };
+        routeScroll.setFillViewport(false);
+        routeScroll.setVisibility(View.GONE);
+        routeScroll.addView(view,new android.widget.ScrollView.LayoutParams(-1,-2));
+        LinearLayout heading=new LinearLayout(activity);
+        heading.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        TextView title=new TextView(activity);
+        title.setText("Rute Trans Simpel");
+        title.setTextColor(0xFF102449);
+        title.setTextSize(16);
+        title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        heading.addView(title,new LinearLayout.LayoutParams(0,-2,1));
         LinearLayout actions = new LinearLayout(activity);
         pickup = button("Jemput", () -> openPicker(PICKUP));
         delivery = button("Antar", () -> openPicker(DELIVERY));
@@ -79,14 +102,29 @@ final class TransSimpelRoutePanel {
             params.setMargins(dp(2),0,dp(2),0);
             actions.addView(point,params);
         }
-        briefButton=button("Percakapan Tiva AI",()->TivaSimpelBrief.show(activity,tivaBrief));
+        briefButton=button("Tiva AI  ›",()->TivaSimpelBrief.show(activity,tivaBrief));
+        style(briefButton,"#EFE8FF","#502B93");
+        briefButton.setContentDescription("Buka percakapan Tiva AI");
+        briefButton.setPadding(dp(10),0,dp(10),0);
         briefButton.setVisibility(View.GONE);
-        view.addView(briefButton,new LinearLayout.LayoutParams(-1,dp(44)));
+        heading.addView(briefButton,new LinearLayout.LayoutParams(-2,dp(48)));
+        view.addView(heading,new LinearLayout.LayoutParams(-1,-2));
         view.addView(actions);
-        pickupAddress = routeLine();
-        stopAddress = routeLine();
-        deliveryAddress = routeLine();
-        summary = routeLine();
+        pickupAddress = addressLine("Jemput","●",0xFF08785B,"pickup");
+        stopAddress = addressLine("Singgah","◆",0xFF925200,"stop");
+        deliveryAddress = addressLine("Antar","⚑",0xFF075BC8,"delivery");
+        View divider=new View(activity);
+        divider.setBackgroundColor(0xFFDCE8F5);
+        view.addView(divider,new LinearLayout.LayoutParams(-1,dp(1)));
+        fareRow=new LinearLayout(activity);
+        fareRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        view.addView(fareRow,new LinearLayout.LayoutParams(-1,-2));
+        summary = new TextView(activity);
+        summary.setTextColor(0xFF143052);
+        summary.setTextSize(13);
+        summary.setMaxLines(2);
+        summary.setPadding(dp(4),dp(8),dp(4),dp(8));
+        fareRow.addView(summary,new LinearLayout.LayoutParams(-1,-2));
         summary.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         summary.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         purchaseHint=new TextView(activity);
@@ -109,7 +147,13 @@ final class TransSimpelRoutePanel {
         return "";
     }
 
-    View view() { return view; }
+    View view() { return routeScroll; }
+
+    void fitOnResize(View parent) {
+        parent.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{
+            if (b-t!=ob-ot) routeScroll.requestLayout();
+        });
+    }
 
     void resume() { active = true; refresh(); }
     void pause() { active = false; main.removeCallbacks(poll); }
@@ -178,15 +222,31 @@ final class TransSimpelRoutePanel {
         }
     }
 
-    private TextView routeLine() {
-        TextView line = new TextView(activity);
-        line.setTextColor(0xFF21547A);
+    private TextView addressLine(String title,String icon,int color,String key) {
+        TextView line=new TextView(activity);
+        line.setTextColor(color);
         line.setTextSize(13);
-        line.setSingleLine(true);
+        line.setMaxLines(2);
         line.setEllipsize(TextUtils.TruncateAt.END);
-        line.setPadding(dp(2), dp(2), dp(2), dp(2));
-        view.addView(line);
+        line.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        line.setMinHeight(dp(44));
+        line.setPadding(dp(6),dp(4),dp(4),dp(4));
+        line.setOnClickListener(v->new android.app.AlertDialog.Builder(activity)
+                .setTitle(title).setMessage(route==null?"Belum diatur":address(key))
+                .setPositiveButton("Tutup",null).show());
+        line.setTag(icon+"  "+title);
+        view.addView(line,new LinearLayout.LayoutParams(-1,-2));
         return line;
+    }
+
+    private void showAddress(TextView line,String key) {
+        String title=(String)line.getTag();
+        String place=address(key);
+        android.text.SpannableString display=new android.text.SpannableString(title+"\n    "+place+"  ›");
+        display.setSpan(new android.text.style.StyleSpan(Typeface.BOLD),0,title.length(),0);
+        display.setSpan(new android.text.style.ForegroundColorSpan(0xFF213953),title.length()+1,display.length(),0);
+        line.setText(display);
+        line.setContentDescription(title+". "+place+". Ketuk untuk melihat alamat lengkap.");
     }
 
     private void refresh() {
@@ -201,7 +261,7 @@ final class TransSimpelRoutePanel {
         String state=route.optString("state");
         boolean editable="accepted".equals(state);
         boolean ordered="ordered".equals(state);
-        view.setVisibility(editable || ordered ? View.VISIBLE : View.GONE);
+        routeScroll.setVisibility(editable || ordered ? View.VISIBLE : View.GONE);
         boolean food="food".equals(kind());
         boolean send="send".equals(kind());
         pickup.setEnabled(editable && !busy && !food);
@@ -215,10 +275,10 @@ final class TransSimpelRoutePanel {
         clearStop.setEnabled(!busy);
         clearStop.setContentDescription("Hapus titik singgah");
         long amount=route.optLong("total",0);
-        pickupAddress.setText("Jemput  ·  "+address("pickup"));
-        stopAddress.setText("Singgah  ·  "+address("stop"));
+        showAddress(pickupAddress,"pickup");
+        showAddress(stopAddress,"stop");
         stopAddress.setVisibility(hasStop?View.VISIBLE:View.GONE);
-        deliveryAddress.setText("Antar  ·  "+address("delivery"));
+        showAddress(deliveryAddress,"delivery");
         summary.setText(amount>0?(food?"Total makanan + ongkir":ordered?"Total":"Estimasi")+"  Rp "
                 +NumberFormat.getIntegerInstance(new Locale("id","ID")).format(amount)+" · Tunai":"");
         boolean assistedPurchase=tivaBrief!=null
@@ -330,7 +390,7 @@ final class TransSimpelRoutePanel {
         if (activity.isFinishing() || activity.isDestroyed()) return;
         if (reply!=null && !reply.optBoolean("available",true)) {
             available=false;
-            view.setVisibility(View.GONE);
+            routeScroll.setVisibility(View.GONE);
             return;
         }
         boolean briefChanged=false;

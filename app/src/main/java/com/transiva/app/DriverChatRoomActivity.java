@@ -76,7 +76,7 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        DriverSystemBars.setStatusBarColor(this, Color.parseColor("#0B7CFF"));
+        DriverSystemBars.setStatusBarColor(this, Color.parseColor("#072758"));
         DriverSystemBars.setNavigationBarColor(this, Color.parseColor("#071426"));
 
         session = new SessionManager(this);
@@ -179,13 +179,13 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
         titleBox.setOrientation(LinearLayout.VERTICAL);
         titleBox.setPaddingRelative(dp(8), 0, dp(2), 0);
         participantText = text(participantName, 16, "#0F172A", true);
-        participantText.setTextColor(chatChrome.textColor());
+        participantText.setTextColor(0xFFFFFFFF);
         participantText.setSingleLine(true);
         participantText.setEllipsize(android.text.TextUtils.TruncateAt.END);
         titleBox.addView(participantText);
 
         statusText = text(readOnly ? "Riwayat percakapan" : "Menghubungkan chat…", 11, "#64748B", false);
-        statusText.setTextColor(chatChrome.secondaryColor());
+        statusText.setTextColor(0xFFDCEEFF);
         statusText.setMaxLines(2);
         statusText.setEllipsize(android.text.TextUtils.TruncateAt.END);
         titleBox.addView(statusText);
@@ -197,7 +197,12 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
 
         root.addView(header);
         root.addView(new ActiveCallBanner(this),new LinearLayout.LayoutParams(-1,-2));
-        if (simpelPanel!=null) root.addView(simpelPanel.view(),new LinearLayout.LayoutParams(-1,-2));
+        if (simpelPanel!=null) {
+            LinearLayout.LayoutParams routeParams=new LinearLayout.LayoutParams(-1,-2);
+            routeParams.topMargin=dp(5);
+            root.addView(simpelPanel.view(),routeParams);
+            simpelPanel.fitOnResize(root);
+        }
 
         messagesScroll = new ScrollView(this);
         messagesScroll.setFillViewport(true);

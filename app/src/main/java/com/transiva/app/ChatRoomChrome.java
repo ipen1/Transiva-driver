@@ -53,13 +53,12 @@ final class ChatRoomChrome {
     void styleBar(LinearLayout bar) {
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(dp(3), dp(5), dp(3), dp(5));
-        bar.setBackground(surface(dark ? 0xff122238 : 0xfff9fcff,
-                dark ? 0xff101c30 : 0xffeef5ff, 16, dark ? 0xff253650 : 0xffdce7f5));
+        bar.setBackground(surface(0xff006bf0, 0xff072758, 14, 0));
     }
 
     Button addHeaderAction(LinearLayout header, String icon, String description) {
-        Action button = new Action(icon, description, textColor());
-        button.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x26c1dcff : 0x1a1264d4),
+        Action button = new Action(icon, description, 0xffffffff);
+        button.setBackground(new RippleDrawable(ColorStateList.valueOf(0x30ffffff),
                 null, surface(0xffffffff, 0xffffffff, 14, 0)));
         header.addView(button, new LinearLayout.LayoutParams(dp(44), dp(48)));
         return button;
