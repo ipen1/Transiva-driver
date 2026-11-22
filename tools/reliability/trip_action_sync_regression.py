@@ -41,6 +41,11 @@ public class ActionSyncProbe{
  check(FoodTripPresentation.kitchen(meal).equals("Sedang disiapkan • ±10 menit"),"preparation estimate is based on merchant data");food.put("merchant_status","ready");meal.put("note",food.toString());check(FoodTripPresentation.kitchen(meal).equals("Siap diambil"),"ready orders stop displaying old cooking estimate");
  TripActionSession foodSession=TripActionSession.get(nav,meal);foodSession.synced(meal);foodSession.fix(gps);check(TripActionPolicy.resolve(foodSession).label.equals("Geser untuk tiba di resto")&&TripActionPolicy.resolve(foodSession).enabled,"food pickup shares action session and verified GPS");
 
+ food.put("driver_first",true);meal.put("status","arrived_pickup").put("note",food.toString());foodSession.synced(meal);
+ check(!TripActionPolicy.resolve(foodSession).enabled,"navigation blocks food departure while merchant confirmation is pending");
+ food.put("merchant_accepted_at","2026-11-22 18:00:00");meal.put("note",food.toString());foodSession.synced(meal);
+ check(TripActionPolicy.resolve(foodSession).enabled,"navigation unlocks food departure after merchant acceptance");
+
  JSONObject shop=new JSONObject().put("id",201).put("order_id","SHOP-201").put("order_type","TransShop").put("status","driver_accepted").put("pickup_lat",-.79).put("pickup_lng",120).put("note",new JSONObject().put("type","shop").put("shopping_plan",new JSONObject().put("version",1).put("pickup",new JSONObject().put("note","Belanja di Cii Shop\\n1x Setcel @ Rp 88.000\\nSubtotal referensi produk: Rp 88.000"))).toString());
  check(DeliveryTripPresentation.shop(shop)&&!DeliveryTripPresentation.customerAtPickup(shop),"TransShop bubble anchors at customer destination");
  check(DeliveryTripPresentation.reference(shop)==88000,"shop reference is separate from delivery fee");
