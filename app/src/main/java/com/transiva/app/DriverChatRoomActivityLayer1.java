@@ -157,6 +157,7 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
     }
 
     protected LinearLayout messageWrapper(boolean mine) {
+        updateEmptyConversation(false);
         LinearLayout wrapper = new LinearLayout(this);
         wrapper.setOrientation(LinearLayout.VERTICAL);
         wrapper.setGravity(mine ? Gravity.RIGHT : Gravity.LEFT);
@@ -341,6 +342,17 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
     protected void setSendingEnabled(boolean enabled) {
         chatChrome.setComposerAvailable(enabled && !readOnly && !sending && !uploading);
         input.setEnabled(enabled && !readOnly);
+    }
+
+    private View emptyConversation;
+
+    protected void updateEmptyConversation(boolean show) {
+        if (emptyConversation!=null && emptyConversation.getParent()==messagesBox) messagesBox.removeView(emptyConversation);
+        emptyConversation=null;
+        if (show && messagesBox.getChildCount()==0) {
+            addSystemMessage("Belum ada pesan pada percakapan ini.");
+            emptyConversation=messagesBox.getChildAt(0);
+        }
     }
 
     protected void addSystemMessage(String value) {

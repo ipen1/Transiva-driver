@@ -23,15 +23,24 @@ final class TripBubbleMedia {
             ImageView image=new ImageView(activity);image.setScaleType(ImageView.ScaleType.FIT_CENTER);image.setContentDescription("Gambar pesan · ketuk untuk membuka chat");
             parent.addView(image,new LinearLayout.LayoutParams(-1,dp(96)));image.setOnClickListener(v->open.run());
             TextView hint=label("Memuat gambar…");parent.addView(hint);
-            if(url.isEmpty()){hint.setText("Gambar tidak tersedia · buka chat");return;}
-            if(!scope.execute(()->{try{
-                byte[] bytes=download(scope,url,6*1024*1024);
-                BitmapFactory.Options opts=new BitmapFactory.Options();opts.inJustDecodeBounds=true;BitmapFactory.decodeByteArray(bytes,0,bytes.length,opts);
-                if(opts.outWidth<=0||opts.outHeight<=0)throw new IOException("Invalid image");
-                opts.inSampleSize=NetworkSafetyRules.bitmapSample(opts.outWidth,opts.outHeight,400,160000);opts.inJustDecodeBounds=false;
-                Bitmap bitmap=BitmapFactory.decodeByteArray(bytes,0,bytes.length,opts);
-                scope.post(()->{if(gen==version){image.setImageBitmap(bitmap);hint.setText(bitmap==null?"Gambar tidak tersedia · buka chat":"Ketuk untuk membuka chat");}});
-            }catch(Exception e){scope.post(()->hint.setText("Gambar belum termuat · buka chat"));}}))hint.setText("Gambar belum termuat · buka chat");
+            String[] candidates=TripBubbleContent.mediaUrls(raw);
+            if(candidates.length==0){hint.setText("Gambar tidak tersedia · buka chat");return;}
+            if(!scope.execute(()->{
+                Bitmap result=null;
+                for (String candidate:candidates) {
+                    if (!scope.alive() || Thread.currentThread().isInterrupted()) return;
+                    try {
+                        result=decodeImage(download(scope,candidate,6*1024*1024));
+                        if (result!=null) break;
+                    } catch (Exception ignored) { }
+                }
+                Bitmap bitmap=result;
+                scope.post(()->{
+                    if(gen!=version)return;
+                    image.setImageBitmap(bitmap);
+                    hint.setText(bitmap==null?"Gambar belum termuat · buka chat":"Ketuk untuk membuka chat");
+                });
+            })) hint.setText("Gambar belum termuat · buka chat");
         }else{
             TextView play=label("▶  Putar pesan suara");play.setTextSize(13);play.setMinHeight(dp(44));play.setGravity(Gravity.CENTER_VERTICAL);play.setContentDescription("Putar atau hentikan pesan suara");parent.addView(play);
             play.setOnClickListener(v->{
@@ -59,6 +68,16 @@ final class TripBubbleMedia {
             current.setOnErrorListener((mp,w,e)->{if(player==mp){player=null;mp.release();if(audio!=null){audio.delete();audio=null;}play.setEnabled(true);play.setText("▶  Coba putar lagi");}return true;});current.prepareAsync();
         }catch(Exception e){if(player!=null){player.release();player=null;}if(audio!=null){audio.delete();audio=null;}play.setEnabled(true);play.setText("▶  Coba putar lagi");}
     }
+    private static Bitmap decodeImage(byte[] bytes) {
+        BitmapFactory.Options options=new BitmapFactory.Options();
+        options.inJustDecodeBounds=true;
+        BitmapFactory.decodeByteArray(bytes,0,bytes.length,options);
+        if(options.outWidth<=0 || options.outHeight<=0) return null;
+        options.inSampleSize=NetworkSafetyRules.bitmapSample(options.outWidth,options.outHeight,400,160000);
+        options.inJustDecodeBounds=false;
+        return BitmapFactory.decodeByteArray(bytes,0,bytes.length,options);
+    }
+
     private byte[] download(DriverUiScope scope,String url,int limit)throws Exception{
         HttpURLConnection connection=com.transiva.app.driver.data.DriverConnectionRepository.open(url);
         try{

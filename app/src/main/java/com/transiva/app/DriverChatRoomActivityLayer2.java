@@ -144,7 +144,7 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
                 postUi(() -> {
                     loading = false;
                     progress.setVisibility(View.GONE);
-                    handleResponse(response, firstLoad);
+                    handleResponse(response, firstLoad && lastId==0);
                 });
 
             } catch (Exception error) {
@@ -189,7 +189,7 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
                     customer.optString("customer_name"));
             if (!serverName.isEmpty()) {
                 participantName = serverName;
-                participantText.setText(serverName);
+                if (!android.text.TextUtils.equals(participantText.getText(),serverName)) participantText.setText(serverName);
             }
         }
 
@@ -213,7 +213,7 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
         if(peer!=null){
             participantName=CallPeerIdentity.first(peer.optString("name"),participantName);
             participantPhoto=CallPeerIdentity.first(peer.optString("photo"),participantPhoto);
-            participantText.setText(participantName);
+            if (!android.text.TextUtils.equals(participantText.getText(),participantName)) participantText.setText(participantName);
         }
         chatStyle.profile(response,participantName,participantPhoto);
         boolean added = false;
@@ -247,9 +247,8 @@ abstract class DriverChatRoomActivityLayer2 extends DriverChatRoomActivityLayer1
             JSONObject update=receipts.optJSONObject(i);if(update!=null)updateReceipt(update);
         }
         added=chatStyle.mergeCalls(messagesBox,response)||added;
-        if (reset && messagesBox.getChildCount() == 0) {
-            addSystemMessage("Belum ada pesan pada percakapan ini.");
-        }
+        if (added) updateEmptyConversation(false);
+        else if (reset) updateEmptyConversation(true);
 
         firstLoad = false;
         if (added || reset) scrollBottom();

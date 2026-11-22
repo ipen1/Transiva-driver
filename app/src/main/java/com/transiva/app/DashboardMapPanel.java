@@ -38,6 +38,8 @@ final class DashboardMapPanel {
     private final FrameLayout controls;
     private final MapView mapView;
     private final TextView status;
+    private final DriverUiScope queueScope;
+    private android.app.AlertDialog queueDialog;
     private final ScrollView offers;
     private final LinearLayout popup;
     private static final String ACTIVE = "dashboard:active";
@@ -64,6 +66,7 @@ final class DashboardMapPanel {
     DashboardMapPanel(DriverDashboardActivity host, FrameLayout page, Bundle saved) {
         this.host = host;
         this.page = page;
+        queueScope=new DriverUiScope(host);
         mapView = new MapView(host);
         mapView.onCreate(saved == null ? null : saved.getBundle("dashboard_map"));
         page.addView(mapView, 0, new FrameLayout.LayoutParams(-1, -1));
@@ -90,6 +93,17 @@ final class DashboardMapPanel {
         FrameLayout.LayoutParams topParams = new FrameLayout.LayoutParams(-1, -2, Gravity.TOP);
         topParams.setMargins(dp(10), dp(9), dp(10), 0);
         controls.addView(top, topParams);
+
+        TextView queue=host.text("≡",27,"#0B3A78",true);
+        queue.setContentDescription("Buka antrean order");
+        queue.setGravity(Gravity.CENTER);
+        queue.setBackground(host.round("#FFFFFF",dp(25)));
+        queue.setElevation(dp(5));
+        queue.setOnClickListener(v->openOrderQueue());
+        FrameLayout.LayoutParams queueParams=new FrameLayout.LayoutParams(dp(48),dp(48),Gravity.TOP|Gravity.START);
+        queueParams.setMarginStart(dp(12));
+        queueParams.topMargin=dp(65);
+        controls.addView(queue,queueParams);
 
         popup = new LinearLayout(host);
         popup.setOrientation(LinearLayout.VERTICAL);
@@ -136,6 +150,87 @@ final class DashboardMapPanel {
         });
         page.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> limitPopup());
         mapView.getMapAsync(this::ready);
+    }
+
+    private void openOrderQueue() {
+        if (queueDialog!=null && queueDialog.isShowing()) return;
+        ScrollView scroll=new ScrollView(host);
+        LinearLayout rows=new LinearLayout(host);
+        rows.setOrientation(LinearLayout.VERTICAL);
+        rows.setPadding(dp(14),dp(6),dp(14),dp(10));
+        scroll.addView(rows);
+        android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(host)
+                .setTitle("Antrean order").setView(scroll).setNegativeButton("Tutup",null).create();
+        queueDialog=dialog;
+        renderOrderQueue(dialog,rows,null,false);
+        dialog.show();
+        if (!queueScope.execute(()->{
+            try {
+                org.json.JSONObject response=DriverMessageApi.post(new SessionManager(host),
+                        DriverApiConfig.BASE_URL+"transsend_contact.php",new org.json.JSONObject().put("action","list"),queueScope.owner);
+                queueScope.post(()->renderOrderQueue(dialog,rows,response.optJSONArray("contacts"),!response.optBoolean("success")));
+            } catch (Exception error) {
+                queueScope.post(()->renderOrderQueue(dialog,rows,null,true));
+            }
+        })) renderOrderQueue(dialog,rows,null,true);
+    }
+
+    private void renderOrderQueue(android.app.AlertDialog dialog,LinearLayout rows,org.json.JSONArray contacts,boolean failed) {
+        if (queueDialog!=dialog || destroyed) return;
+        rows.removeAllViews();
+        boolean waiting=contacts==null && !failed;
+        rows.addView(host.text("Tawaran order",15,"#0B3A78",true));
+        int count=0;
+        if (state!=null && state.online && state.offers!=null) for (DriverOrder order:state.offers) {
+            if (order.raw==null) continue;
+            String key=host.offerCountdownController.key(order);
+            if (host.offerCountdownController.remainingMillis(key)<=0) continue;
+            String type=CallPeerIdentity.first(order.raw.optString("service_name"),order.raw.optString("order_type"),"Order");
+            String address=CallPeerIdentity.first(order.raw.optString("pickup_address"),order.raw.optString("address"));
+            queueRow(rows,type+(address.isEmpty()?"":" · "+address),()->{
+                dialog.dismiss();
+                if (liveKeys.contains(key) && host.offerCountdownController.remainingMillis(key)>0) selectOffer(key,true);
+                else android.widget.Toast.makeText(host,"Tawaran sudah berakhir.",android.widget.Toast.LENGTH_SHORT).show();
+            });
+            count++;
+        }
+        if (count==0) rows.addView(host.text("Belum ada tawaran aktif.",13,"#405975",false));
+
+        TextView title=host.text("Permintaan Trans Simpel & TransSend",15,"#0B3A78",true);
+        title.setPadding(0,dp(12),0,0);
+        rows.addView(title);
+        int pending=0;
+        if (contacts!=null) for (int i=0;i<contacts.length();i++) {
+            org.json.JSONObject item=contacts.optJSONObject(i);
+            if (item==null || !"pending".equals(item.optString("state"))) continue;
+            String label="trans_simpel".equals(item.optString("service"))?"Trans Simpel":"TransSend";
+            String peer=CallPeerIdentity.first(item.optString("peer_name"),"Customer");
+            queueRow(rows,label+" · "+peer,()->{
+                dialog.dismiss();
+                host.startActivity(new Intent(host,DriverTransSendContactsActivity.class)
+                        .putExtra("focus_contact",item.optString("id")));
+            });
+            pending++;
+        }
+        if (pending==0) rows.addView(host.text(waiting?"Memuat permintaan…":failed?
+                "Permintaan belum bisa dimuat. Buka daftar untuk mencoba lagi.":"Belum ada permintaan aktif.",
+                13,"#405975",false));
+        queueRow(rows,"Buka daftar permintaan",()->{
+            dialog.dismiss();
+            host.startActivity(new Intent(host,DriverTransSendContactsActivity.class));
+        });
+    }
+
+    private void queueRow(LinearLayout rows,String label,Runnable open) {
+        TextView row=host.text(label+"  ›",15,"#0B3A78",true);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setMinHeight(dp(48));
+        row.setPadding(dp(10),dp(6),dp(10),dp(6));
+        row.setBackground(host.round("#EAF3FF",dp(14)));
+        row.setOnClickListener(v->open.run());
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);
+        lp.topMargin=dp(5);
+        rows.addView(row,lp);
     }
 
     private void ready(GoogleMap value) {
@@ -413,6 +508,8 @@ final class DashboardMapPanel {
     void lowMemory() { mapView.onLowMemory(); }
     void save(Bundle out) { Bundle mapState = new Bundle(); mapView.onSaveInstanceState(mapState); out.putBundle("dashboard_map", mapState); }
     void destroy() {
+        if (queueDialog!=null) queueDialog.dismiss();
+        queueScope.close();
         destroyed = true;
         if (pulse != null) pulse.cancel();
         pins.clear();

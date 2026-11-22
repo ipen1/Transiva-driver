@@ -117,9 +117,15 @@ public final class DriverTransSendContactsActivity extends Activity {
         if (rendered.equals(snapshot)) return;
         rendered=snapshot;
         rows.removeAllViews();
-        for (int i = 0; i < count; i++) {
-            JSONObject entry = entries.optJSONObject(i);
-            if (entry == null) continue;
+        String focus=getIntent().getStringExtra("focus_contact");
+        java.util.ArrayList<JSONObject> ordered=new java.util.ArrayList<>();
+        for (int i=0;i<count;i++) {
+            JSONObject item=entries.optJSONObject(i);
+            if (item==null) continue;
+            if (item.optString("id").equals(focus)) ordered.add(0,item);
+            else ordered.add(item);
+        }
+        for (JSONObject entry:ordered) {
             boolean accepted = "accepted".equals(entry.optString("state"));
             String name = entry.optString("peer_name", "Customer");
             String service = "trans_simpel".equals(entry.optString("service")) ? "Trans Simpel" : "TransSend";

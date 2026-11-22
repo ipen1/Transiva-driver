@@ -51,17 +51,27 @@ public final class DriverSimpelPointActivity extends android.app.Activity {
     private GoogleMap googleMap;
     private LatLng selected;
     private TextView address;
-    private Button usePoint, locate;
+    private Button usePoint, locate, routeUpdate;
+    private final java.util.List<com.google.android.gms.maps.model.Marker> sharedMarkers=new java.util.ArrayList<>();
+    private final Runnable routePoll=this::loadRoute;
+    private String contactId;
+    private JSONObject baseRoute, latestRoute;
+    private boolean routeVisible, routeReading, routeClosed, cameraMoving;
     private Future<?> addressRead;
     private Runnable addressDebounce;
     private CancellationTokenSource locationRequest;
     private String kind, resolved="";
     private int selectionVersion;
     private boolean confirming;
+    private DriverUiScope routeNetwork;
 
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
         Intent intent=getIntent();
+        routeNetwork=new DriverUiScope(this);
+        contactId=intent.getStringExtra("route_contact");
+        baseRoute=parse(saved==null?intent.getStringExtra("route_snapshot"):saved.getString("route_base"));
+        latestRoute=parse(saved==null?null:saved.getString("route_latest"));
         kind=intent.getStringExtra("point_kind");
         if (!"pickup".equals(kind) && !"delivery".equals(kind) && !"stop".equals(kind)) {
             String title=intent.getStringExtra("title");
@@ -82,18 +92,20 @@ public final class DriverSimpelPointActivity extends android.app.Activity {
             map.getUiSettings().setMyLocationButtonEnabled(false);
             map.getUiSettings().setRotateGesturesEnabled(false);
             map.getUiSettings().setTiltGesturesEnabled(false);
-            addSavedMarker(map,"pickup");
-            addSavedMarker(map,"delivery");
-            addSavedMarker(map,"stop");
+            updateSavedMarkers();
             map.moveCamera(CameraUpdateFactory.newLatLngZoom(seed,ZOOM));
             map.setOnCameraMoveStartedListener(reason->{
                 if (reason==GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) cancelLocation();
+                cameraMoving=true;
                 invalidateAddress();
                 if (!confirming) address.setText("Menyesuaikan titik…");
                 usePoint.setEnabled(false);
                 usePoint.setAlpha(.55f);
             });
-            map.setOnCameraIdleListener(()->updateSelection(map.getCameraPosition().target));
+            map.setOnCameraIdleListener(()->{
+                cameraMoving=false;
+                updateSelection(map.getCameraPosition().target);
+            });
             if (seeded) updateSelection(seed);
             else {
                 locate.setEnabled(true);
@@ -156,6 +168,11 @@ public final class DriverSimpelPointActivity extends android.app.Activity {
         TextView hint=text("Geser peta untuk menyesuaikan titik.",13,0xFF405975,false);
         hint.setPadding(0,dp(2),0,dp(8));
         sheet.addView(hint);
+        routeUpdate=button("Rute diperbarui · Tinjau",0xFF124480);
+        routeUpdate.setBackground(gradient(0xFFE0F0FF,0xFFF0F7FF,12));
+        routeUpdate.setOnClickListener(v->reviewRoute());
+        routeUpdate.setVisibility(latestRoute==null?View.GONE:View.VISIBLE);
+        sheet.addView(routeUpdate);
         usePoint=button("✓  Pakai Titik Ini",Color.WHITE);
         usePoint.setBackground(gradient(0xFF0735B7,0xFF0879EB,13));
         usePoint.setEnabled(false);
@@ -166,19 +183,103 @@ public final class DriverSimpelPointActivity extends android.app.Activity {
         setContentView(page);
     }
 
-    private void addSavedMarker(GoogleMap map,String other) {
-        if (other.equals(kind)) return;
-        String payload=getIntent().getStringExtra("saved_"+other);
-        if (payload==null) return;
-        try {
-            JSONObject point=new JSONObject(payload);
+    private static JSONObject parse(String raw) {
+        try { return raw==null?null:new JSONObject(raw); }
+        catch (org.json.JSONException ignored) { return null; }
+    }
+
+    private void updateSavedMarkers() {
+        if (googleMap==null) return;
+        for (com.google.android.gms.maps.model.Marker marker:sharedMarkers) marker.remove();
+        sharedMarkers.clear();
+        for (String type:new String[]{"pickup","delivery","stop"}) {
+            if (type.equals(kind)) continue;
+            JSONObject point=baseRoute==null?parse(getIntent().getStringExtra("saved_"+type)):baseRoute.optJSONObject(type);
+            if (point==null) continue;
             double lat=point.optDouble("lat"),lng=point.optDouble("lng");
-            if (!valid(lat,lng)) return;
-            Bitmap image=Bitmap.createScaledBitmap(pin(other),dp(28),dp(32),true);
-            map.addMarker(new MarkerOptions().position(new LatLng(lat,lng))
-                    .anchor(.5f,1f).title(label(other)).snippet(point.optString("address"))
-                    .icon(BitmapDescriptorFactory.fromBitmap(image)));
-        } catch (org.json.JSONException ignored) {}
+            if (!valid(lat,lng)) continue;
+            Bitmap image=Bitmap.createScaledBitmap(pin(type),dp(28),dp(32),true);
+            com.google.android.gms.maps.model.Marker marker=googleMap.addMarker(new MarkerOptions()
+                    .position(new LatLng(lat,lng)).anchor(.5f,1f).title(label(type))
+                    .snippet(point.optString("address")).icon(BitmapDescriptorFactory.fromBitmap(image)));
+            if (marker!=null) sharedMarkers.add(marker);
+        }
+    }
+
+    private void loadRoute() {
+        if (!routeVisible || routeReading || routeClosed || confirming || baseRoute==null || contactId==null) return;
+        routeReading=true;
+        if (!routeNetwork.execute(()->{
+            JSONObject reply=null;
+            try {
+                reply=DriverMessageApi.post(new SessionManager(this),DriverApiConfig.BASE_URL+"trans_simpel.php",
+                        new JSONObject().put("action","get").put("contact_id",contactId),routeNetwork.owner);
+            } catch (Exception ignored) { }
+            JSONObject result=reply;
+            routeNetwork.post(()->routeLoaded(result));
+        })) routeLoaded(null);
+    }
+
+    private void routeLoaded(JSONObject reply) {
+        routeReading=false;
+        if (!routeVisible || isFinishing() || isDestroyed() || confirming) return;
+        JSONObject snapshot=reply==null?null:reply.optJSONObject("route");
+        if (snapshot!=null && reply.optBoolean("success")) {
+            if (!"accepted".equals(snapshot.optString("state"))) {
+                routeClosed=true;
+                routeUpdate.setVisibility(View.VISIBLE);
+                routeUpdate.setText("Rute tidak dapat diubah");
+                routeUpdate.setEnabled(false);
+                updateConfirmButton();
+                return;
+            }
+            if (snapshot.optInt("revision")>baseRoute.optInt("revision")
+                    && (latestRoute==null || snapshot.optInt("revision")>=latestRoute.optInt("revision"))) {
+                latestRoute=snapshot;
+                routeUpdate.setVisibility(View.VISIBLE);
+                updateConfirmButton();
+            }
+        }
+        main.postDelayed(routePoll,4500L);
+    }
+
+    private boolean pointChanged() {
+        if (latestRoute==null || baseRoute==null) return false;
+        JSONObject oldPoint=baseRoute.optJSONObject(kind), newPoint=latestRoute.optJSONObject(kind);
+        if (oldPoint==null || newPoint==null) return oldPoint!=newPoint;
+        return oldPoint.optDouble("lat")!=newPoint.optDouble("lat")
+                || oldPoint.optDouble("lng")!=newPoint.optDouble("lng")
+                || !oldPoint.optString("address").equals(newPoint.optString("address"));
+    }
+
+    private void reviewRoute() {
+        if (latestRoute==null || routeClosed || confirming) return;
+        new android.app.AlertDialog.Builder(this).setTitle("Rute diperbarui")
+                .setMessage(pointChanged()?"Titik ini diubah dari perangkat lain. Pilih titik terbaru atau pertahankan pratinjau Anda."
+                        :"Titik lain di rute telah berubah. Pratinjau Anda tetap tersedia.")
+                .setNegativeButton("Pertahankan pratinjau",(dialog,which)->adoptRoute(false))
+                .setPositiveButton("Muat titik terbaru",(dialog,which)->adoptRoute(true)).show();
+    }
+
+    private void adoptRoute(boolean center) {
+        if (latestRoute==null || routeClosed || confirming) return;
+        baseRoute=latestRoute;
+        latestRoute=null;
+        routeUpdate.setVisibility(View.GONE);
+        updateSavedMarkers();
+        JSONObject point=baseRoute.optJSONObject(kind);
+        if (center && googleMap!=null && point!=null && valid(point.optDouble("lat"),point.optDouble("lng"))) {
+            LatLng target=new LatLng(point.optDouble("lat"),point.optDouble("lng"));
+            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(target,ZOOM));
+            if (!cameraMoving) updateSelection(target);
+        }
+        updateConfirmButton();
+    }
+
+    private void updateConfirmButton() {
+        boolean enabled=selected!=null && !cameraMoving && !confirming && !routeClosed && !pointChanged();
+        usePoint.setEnabled(enabled);
+        usePoint.setAlpha(enabled?1f:.55f);
     }
 
     private void invalidateAddress() {
@@ -193,8 +294,7 @@ public final class DriverSimpelPointActivity extends android.app.Activity {
         selected=point;
         resolved="";
         address.setText(coordinates(point));
-        usePoint.setEnabled(true);
-        usePoint.setAlpha(1f);
+        updateConfirmButton();
         locate.setEnabled(locationRequest==null);
         int version=selectionVersion;
         addressDebounce=()->addressRead=geocoder.submit(()->{
@@ -232,8 +332,14 @@ public final class DriverSimpelPointActivity extends android.app.Activity {
 
     private void finishPoint(LatLng point,String resultAddress) {
         if (isFinishing() || isDestroyed()) return;
-        setResult(RESULT_OK,new Intent().putExtra("lat",point.latitude).putExtra("lng",point.longitude)
-                .putExtra("address",resultAddress));
+        Intent result=new Intent().putExtra("lat",point.latitude).putExtra("lng",point.longitude)
+                .putExtra("address",resultAddress);
+        if (baseRoute!=null) {
+            JSONObject previous=baseRoute.optJSONObject(kind);
+            result.putExtra("route_revision",baseRoute.optInt("revision"))
+                    .putExtra("route_previous",previous==null?"":previous.toString());
+        }
+        setResult(RESULT_OK,result);
         finish();
     }
 
@@ -354,14 +460,21 @@ public final class DriverSimpelPointActivity extends android.app.Activity {
     private int dp(int value) { return Math.round(getResources().getDisplayMetrics().density*value); }
 
     @Override protected void onStart() { super.onStart(); mapView.onStart(); }
-    @Override protected void onResume() { super.onResume(); mapView.onResume(); }
-    @Override protected void onPause() { cancelLocation(); mapView.onPause(); super.onPause(); }
+    @Override protected void onResume() { super.onResume(); mapView.onResume(); routeVisible=true; loadRoute(); }
+    @Override protected void onPause() {
+        routeVisible=false;
+        main.removeCallbacks(routePoll);
+        cancelLocation();
+        mapView.onPause();
+        super.onPause();
+    }
     @Override protected void onStop() { mapView.onStop(); super.onStop(); }
     @Override public void onLowMemory() { super.onLowMemory(); mapView.onLowMemory(); }
     @Override protected void onDestroy() {
         invalidateAddress();
         main.removeCallbacksAndMessages(null);
         geocoder.shutdownNow();
+        routeNetwork.close();
         mapView.onDestroy();
         super.onDestroy();
     }
@@ -371,6 +484,8 @@ public final class DriverSimpelPointActivity extends android.app.Activity {
         Bundle map=new Bundle();
         mapView.onSaveInstanceState(map);
         out.putBundle("simpel_map",map);
+        if (baseRoute!=null) out.putString("route_base",baseRoute.toString());
+        if (latestRoute!=null) out.putString("route_latest",latestRoute.toString());
         if (googleMap!=null) {
             LatLng point=googleMap.getCameraPosition().target;
             if (selected!=null) {
