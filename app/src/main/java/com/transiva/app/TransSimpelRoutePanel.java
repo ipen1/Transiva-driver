@@ -201,7 +201,10 @@ final class TransSimpelRoutePanel {
         boolean editable="accepted".equals(state);
         boolean ordered="ordered".equals(state);
         view.setVisibility(editable || ordered ? View.VISIBLE : View.GONE);
-        pickup.setEnabled(editable && !busy);
+        boolean food="food".equals(kind());
+        boolean send="send".equals(kind());
+        pickup.setEnabled(editable && !busy && !food);
+        stop.setVisibility(kind().isEmpty() || "ride".equals(kind())?View.VISIBLE:View.GONE);
         delivery.setEnabled(editable && !busy);
         stop.setEnabled(editable && !busy);
         boolean hasStop=route.optJSONObject("stop")!=null;
@@ -215,10 +218,10 @@ final class TransSimpelRoutePanel {
         stopAddress.setText("Singgah  ·  "+address("stop"));
         stopAddress.setVisibility(hasStop?View.VISIBLE:View.GONE);
         deliveryAddress.setText("Antar  ·  "+address("delivery"));
-        summary.setText(amount>0?(ordered?"Total":"Estimasi")+"  Rp "
+        summary.setText(amount>0?(food?"Total makanan + ongkir":ordered?"Total":"Estimasi")+"  Rp "
                 +NumberFormat.getIntegerInstance(new Locale("id","ID")).format(amount)+" · Tunai":"");
         boolean assistedPurchase=tivaBrief!=null
-                && ("food".equals(tivaBrief.optString("kind")) || "shop".equals(tivaBrief.optString("kind")));
+                && "shop".equals(kind());
         purchaseHint.setVisibility(assistedPurchase?View.VISIBLE:View.GONE);
         if (amount>0 && assistedPurchase) {
             summary.setText("Ongkir  Rp "+NumberFormat.getIntegerInstance(new Locale("id","ID")).format(amount)+" · Tunai");
@@ -234,7 +237,14 @@ final class TransSimpelRoutePanel {
         return point==null?"Belum diatur":point.optString("address").replace('\n',' ');
     }
 
+    private String kind() {
+        return tivaBrief==null?"":tivaBrief.optString("kind");
+    }
+
     private void calculateIfReady() {
+        if ("send".equals(kind())) return;
+        if ("food".equals(kind())) return;
+
         if (!active || busy || route==null || !"accepted".equals(route.optString("state"))
                 || route.optJSONObject("pickup")==null || route.optJSONObject("delivery")==null
                 || !route.isNull("total")) return;

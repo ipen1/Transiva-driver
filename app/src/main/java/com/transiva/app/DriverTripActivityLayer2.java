@@ -401,7 +401,15 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
             return;
         }
         if(st.equals("arrived_pickup")){
-            showAction(startDeliveryBtn, true);
+            JSONObject food=parseFoodNote();
+            boolean waitingForMerchant=food!=null && food.optBoolean("driver_first")
+                    && food.optString("merchant_accepted_at").isEmpty();
+            showAction(startDeliveryBtn, !waitingForMerchant);
+            if (waitingForMerchant) {
+                distanceInfo.setText("Menunggu konfirmasi restoran");
+                distanceHint.setText("Mulai Antar aktif setelah restoran menerima pesanan.");
+                return;
+            }
             showAction(updatePriceBtn, true);
             distanceInfo.setText("✅ Anda sudah tiba di titik penjemputan.");
             distanceHint.setText(orderKind.equals("pickup") ? "Ambil paket, lalu geser Mulai Antar." : "Pastikan pesanan sudah siap, lalu mulai perjalanan ke pengantaran.");
