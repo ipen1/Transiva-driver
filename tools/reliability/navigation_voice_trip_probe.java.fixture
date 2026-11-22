@@ -27,6 +27,20 @@ class VoiceTripProbe{
   arrivalVoice.close();handoff.close();
   SystemClock.now=500000;TripButtonsProbe trip=new TripButtonsProbe();trip.order=new JSONObject().put("delivery_lat",-.8).put("delivery_lng",120).put("pickup_lat",-.81).put("pickup_lng",120);trip.tripArrivalFix=fix(-.8003,120,5);trip.refreshButtons();check(trip.arrivedDeliveryBtn.isEnabled(),"arrival unlock uses fresh precise GPS even while the filtered icon is still over 200m away");int enables=trip.arrivedDeliveryBtn.enabledWrites,hides=trip.arrivedDeliveryBtn.hiddenWrites;for(int i=0;i<20;i++)trip.refreshButtons();check(trip.arrivedDeliveryBtn.enabledWrites==enables&&trip.arrivedDeliveryBtn.hiddenWrites==hides,"actual Trip refresh never disables or hides an unchanged arrival swipe");
   trip.tripArrivalFix=fix(-.801,120,5);trip.refreshButtons();check(trip.arrivedDeliveryBtn.isEnabled(),"small boundary GPS noise retains an already-unlocked arrival swipe");trip.tripArrivalFix=fix(-.802,120,5);trip.refreshButtons();check(!trip.arrivedDeliveryBtn.isEnabled(),"moving clearly outside arrival area disables confirmation again");trip.tripArrivalFix=fix(-.8003,120,5);trip.refreshButtons();trip.updatingStatus=true;trip.refreshButtons();check(!trip.arrivedDeliveryBtn.isEnabled(),"pending status request still prevents duplicate arrival submissions");trip.updatingStatus=false;trip.state="arrived_pickup";trip.refreshButtons();check(trip.startDeliveryBtn.isEnabled()&&trip.arrivedDeliveryBtn.getVisibility()==View.GONE,"atomic button update still enforces the proper order phase");
+  TripButtonsProbe foodTrip=new TripButtonsProbe();
+  foodTrip.state="arrived_pickup";
+  foodTrip.orderKind="food";
+  JSONObject foodNote=new JSONObject().put("type","food").put("driver_first",true);
+  foodTrip.order.put("note",foodNote.toString());
+  foodTrip.refreshButtons();
+  check(foodTrip.startDeliveryBtn.getVisibility()==View.VISIBLE&&!foodTrip.startDeliveryBtn.isEnabled()
+        &&foodTrip.distanceInfo.text.contains("Menunggu konfirmasi restoran"),
+        "driver-first TransFood keeps Start Delivery disabled until merchant confirmation");
+  foodNote.put("merchant_accepted_at","2026-11-22 10:00:00");
+  foodTrip.order.put("note",foodNote.toString());
+  foodTrip.refreshButtons();
+  check(foodTrip.startDeliveryBtn.getVisibility()==View.VISIBLE&&foodTrip.startDeliveryBtn.isEnabled(),
+        "merchant confirmation unlocks Start Delivery on the same Trip screen");
   SystemClock.now+=16000;check(trip.trustedArrivalFix()==null,"stale raw GPS is not reused as fresh arrival proof");trip.tripArrivalFix=fix(-.8,120,60);check(trip.trustedArrivalFix()==null,"weak GPS does not override accepted arrival coordinates");trip.tripArrivalFix=fix(-.8,120,Float.NaN);check(trip.trustedArrivalFix()==null,"non-finite accuracy cannot unlock arrival");
   trip.pendingTripRender=true;trip.tripInteraction(true,true);trip.tripInteraction(false,true);trip.tripInteraction(true,false);Handler.flush();check(trip.renders==0,"polling render stays deferred while either map or swipe interaction remains active");trip.tripInteraction(false,false);Handler.flush();check(trip.renders==1&&!trip.pendingTripRender,"ending the last interaction applies one latest pending UI refresh");
   TripButtonsProbe stops=new TripButtonsProbe();
