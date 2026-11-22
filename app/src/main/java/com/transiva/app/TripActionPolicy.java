@@ -23,7 +23,11 @@ final class TripActionPolicy {
         double radius = 100;
         NavigationTargetPolicy.Target target = NavigationTargetPolicy.resolve(order, null, Double.NaN, Double.NaN);
         if ("taken".equals(status)) { next = "arrived_pickup"; label = "Geser untuk tiba di penjemputan"; arrival = true; }
-        else if ("arrived_pickup".equals(status)) { next = "on_delivery"; label = "Geser untuk mulai perjalanan"; }
+        else if ("arrived_pickup".equals(status)) {
+            next = "on_delivery";
+            label = "Geser untuk mulai perjalanan";
+            if (FoodTripPresentation.waitsForMerchant(order)) reason = "Menunggu konfirmasi restoran";
+        }
         else if ("on_delivery".equals(status) || "arrived_delivery".equals(status)) {
             JSONObject waypoint = "orders".equals(NavigationTargetPolicy.source(order))
                     ? DriverEcosystemFeatures.from(order).nextPendingWaypoint() : null;

@@ -401,9 +401,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
             return;
         }
         if(st.equals("arrived_pickup")){
-            JSONObject food=parseFoodNote();
-            boolean waitingForMerchant=food!=null && food.optBoolean("driver_first")
-                    && food.optString("merchant_accepted_at").isEmpty();
+            boolean waitingForMerchant=FoodTripPresentation.waitsForMerchant(order);
             showAction(startDeliveryBtn, !waitingForMerchant);
             if (waitingForMerchant) {
                 distanceInfo.setText("Menunggu konfirmasi restoran");

@@ -12,6 +12,12 @@ final class FoodTripPresentation {
         try { return new JSONObject(order.optString("note", "{}")); }
         catch(org.json.JSONException ignored){return new JSONObject();}
     }
+    static boolean waitsForMerchant(JSONObject order) {
+        JSONObject food=food(order);
+        return isFood(order) && food.optBoolean("driver_first")
+                && food.optString("merchant_accepted_at","").trim().isEmpty();
+    }
+
     static boolean isFood(JSONObject order) {
         if(order==null)return false;
         String type=(order.optString("order_type")+" "+order.optString("service_name")).toLowerCase(Locale.US);
