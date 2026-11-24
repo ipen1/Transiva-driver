@@ -49,8 +49,8 @@ final class PremiumRideTripLayout {
         itinerary = host.card();
         itinerary.setPadding(dp(10), dp(6), dp(10), dp(6));
         itinerary.setBackground(round("#FFFFFF", dp(20)));
-        pickupLine = itineraryLine(host.isFoodOrder() ? "Jemput • Resto" : DeliveryTripPresentation.shop(host.order)?"Jemput • Toko":"Jemput", "#C66200", host::pickupAddress);
-        deliveryLine = itineraryLine(host.isFoodOrder() ? "Antar • Pelanggan" : "Pengantaran", "#059669", host::deliveryAddress);
+        pickupLine = itineraryLine(host.isFoodOrder() ? "Jemput • Resto" : DeliveryTripPresentation.shop(host.order)?"Jemput • Toko":"Jemput", "#C66200", host::pickupAddress,true);
+        deliveryLine = itineraryLine(host.isFoodOrder() ? "Antar • Pelanggan" : "Pengantaran", "#059669", host::deliveryAddress,false);
         LinearLayout.LayoutParams itineraryParams = new LinearLayout.LayoutParams(-1, -2);
         itineraryParams.setMargins(dp(10), dp(7), dp(10), 0);
         overlay.addView(itinerary, itineraryParams);
@@ -75,7 +75,7 @@ final class PremiumRideTripLayout {
         dockPanel.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> host.updatePremiumMapInsets());
     }
 
-    private TextView itineraryLine(String label, String color, java.util.function.Supplier<String> address) {
+    private TextView itineraryLine(String label, String color, java.util.function.Supplier<String> address, boolean pickup) {
         LinearLayout row = new LinearLayout(host);
         row.setGravity(Gravity.CENTER_VERTICAL);
         TextView pin = text("●", 18, color, true);
@@ -95,7 +95,7 @@ final class PremiumRideTripLayout {
         place.setEllipsize(android.text.TextUtils.TruncateAt.END);
         copy.addView(place);
         row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
-        row.setOnClickListener(v -> host.info(label, address.get()));
+        row.setOnClickListener(v -> host.openTripLocation(label, address.get(),pickup));
         itinerary.addView(row, new LinearLayout.LayoutParams(-1, -2));
         return place;
     }

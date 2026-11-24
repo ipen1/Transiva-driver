@@ -464,9 +464,20 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         LinearLayout c = card(); c.setPadding(dp(16), dp(14), dp(16), dp(14));
         TextView label=text(title,12,"#64748B",true);c.addView(label);
         TextView address=text(first(body,"-"),14,"#111827",false);address.setMaxLines(2);address.setEllipsize(android.text.TextUtils.TruncateAt.END);c.addView(address);
-        c.setOnClickListener(v->info(title,first(body,"-")));
+        c.setOnClickListener(v->openTripLocation(title,body,pickup));
         add(c,0,0,0,dp(12));
     }
+    void openTripLocation(String title, String address, boolean pickup) {
+        if (order!=null && (order.optInt("is_trans_simpel",0)!=0
+                || orderId().startsWith("TS-") || "Trans Simpel".equalsIgnoreCase(order.optString("order_type")))) {
+            TripCommunicationController navigation=communicationController;
+            if (navigation==null) navigation=new TripCommunicationController(this,order,driverUsername,null);
+            navigation.openNavigation(pickup,lastDriverLat,lastDriverLng);
+            return;
+        }
+        info(title,first(address,"-"));
+    }
+
     protected void addMapCard(){
         if (premiumRideTrip() && retainedMapCard != null) return;
         if (retainedMapCard != null) {

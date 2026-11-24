@@ -261,13 +261,16 @@ final class TransSimpelRoutePanel {
         String state=route.optString("state");
         boolean editable="accepted".equals(state);
         boolean ordered="ordered".equals(state);
-        routeScroll.setVisibility(editable || ordered ? View.VISIBLE : View.GONE);
+        boolean waiting="waiting_driver".equals(state);
+        routeScroll.setVisibility(editable || ordered || waiting ? View.VISIBLE : View.GONE);
+        pickup.setVisibility(editable?View.VISIBLE:View.GONE);
+        delivery.setVisibility(editable?View.VISIBLE:View.GONE);
         boolean food="food".equals(kind());
         boolean send="send".equals(kind());
-        pickup.setEnabled(editable && !busy && !food);
-        stop.setVisibility(kind().isEmpty() || "ride".equals(kind())?View.VISIBLE:View.GONE);
-        delivery.setEnabled(editable && !busy);
-        stop.setEnabled(editable && !busy);
+        pickup.setEnabled(editable && !food);
+        stop.setVisibility(editable && (kind().isEmpty() || "ride".equals(kind()))?View.VISIBLE:View.GONE);
+        delivery.setEnabled(editable);
+        stop.setEnabled(editable);
         boolean hasStop=route.optJSONObject("stop")!=null;
         stop.setText(hasStop?"Singgah":"+ Singgah");
         stop.setContentDescription(hasStop?"Ubah titik singgah":"Tambah titik singgah opsional");
@@ -287,7 +290,8 @@ final class TransSimpelRoutePanel {
         if (amount>0 && assistedPurchase) {
             summary.setText("Ongkir  Rp "+NumberFormat.getIntegerInstance(new Locale("id","ID")).format(amount)+" · Tunai");
         }
-        summary.setVisibility(amount>0?View.VISIBLE:View.GONE);
+        if (waiting) summary.setText("Pesanan antre sampai perjalanan aktif selesai.");
+        summary.setVisibility(waiting || amount>0?View.VISIBLE:View.GONE);
         boolean both=route.optJSONObject("pickup")!=null && route.optJSONObject("delivery")!=null;
         quoteRetry.setVisibility(editable && both && amount==0 && quotedRevision==revision ? View.VISIBLE : View.GONE);
         quoteRetry.setEnabled(!busy);
@@ -316,7 +320,7 @@ final class TransSimpelRoutePanel {
     }
 
     private void openPicker(int which) {
-        if ((busy && !readingRoute) || route==null || !"accepted".equals(route.optString("state"))) return;
+        if (route==null || !"accepted".equals(route.optString("state"))) return;
         String field=field(which);
         pickerRevision=route.optInt("revision");
         previous=route.optJSONObject(field);
@@ -331,7 +335,8 @@ final class TransSimpelRoutePanel {
             if (point!=null) intent.putExtra("saved_"+marker,point.toString());
         }
 
-        activity.startActivityForResult(intent,which);
+        try { activity.startActivityForResult(intent,which); }
+        catch (android.content.ActivityNotFoundException e) { notice("Pemilih lokasi belum dapat dibuka."); }
     }
 
     boolean result(int request,int result,Intent data) {
@@ -414,7 +419,8 @@ final class TransSimpelRoutePanel {
         }
         if (active) {
             calculateIfReady();
-            if (!busy && (route==null || "accepted".equals(route.optString("state")))) main.postDelayed(poll,3000);
+            if (!busy && (route==null || "accepted".equals(route.optString("state"))
+                    || "waiting_driver".equals(route.optString("state")))) main.postDelayed(poll,3000);
         }
     }
 
