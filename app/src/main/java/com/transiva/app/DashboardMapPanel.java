@@ -51,6 +51,9 @@ final class DashboardMapPanel {
     private long lastPulseAt;
     private com.google.android.gms.tasks.CancellationTokenSource locateRequest;
     private final Map<String, Pin> pins = new LinkedHashMap<>();
+    private final Map<String, DriverOrder> assignedPickups = new LinkedHashMap<>();
+    private String assignedFocus = "";
+    private String requestedAssignment = "";
     private GoogleMap map;
     private ValueAnimator pulse;
     private boolean resumed;
@@ -241,7 +244,9 @@ final class DashboardMapPanel {
         map.setOnMarkerClickListener(marker -> {
             Object tag = marker.getTag();
             if (!(tag instanceof String) || !pins.containsKey(tag)) return false;
-            selectOffer((String) tag, false);
+            DriverOrder assigned = assignedPickups.get(tag);
+            if (assigned != null) host.openTrip(assigned);
+            else selectOffer((String) tag, false);
             return true;
         });
         enableLocation();
@@ -278,6 +283,7 @@ final class DashboardMapPanel {
         requestedId = textExtra(intent, "order_db_id");
         if (requestedId.isEmpty()) requestedId = textExtra(intent, "order_id");
         requestedToken = textExtra(intent, "dashboard_offer_token");
+        requestedAssignment = textExtra(intent, "simpel_assigned_id");
     }
 
     private static String textExtra(Intent intent, String key) {
@@ -308,6 +314,24 @@ final class DashboardMapPanel {
         String next = !preferred.isEmpty() ? preferred : activeShown || live.containsKey(focusedOffer) ? focusedOffer
                 : live.isEmpty() ? "" : live.keySet().iterator().next();
         boolean changed = !next.equals(focusedOffer);
+        assignedPickups.clear();
+        String assignment = "";
+        if (state.activeOrders != null) for (DriverOrder order : state.activeOrders) {
+            if (order.raw == null || order.raw.optInt("is_trans_simpel", 0) != 1
+                    || !("driver_accepted".equals(order.status) || "taken".equals(order.status))) continue;
+            String key = "active-pickup:" + order.source + ":" + order.id;
+            assignedPickups.put(key, order);
+            live.put(key, order);
+            if (assignment.isEmpty() || requestedAssignment.equals(order.id)) assignment = key;
+        }
+        boolean focusAssignment = !assignment.isEmpty()
+                && (next.isEmpty() || ACTIVE.equals(next) || !requestedAssignment.isEmpty())
+                && (mapJustReady || changed || !assignment.equals(assignedFocus) || !requestedAssignment.isEmpty());
+        if (focusAssignment) {
+            next = ACTIVE;
+            if (map != null) requestedAssignment = "";
+        }
+        assignedFocus = assignment;
         if (map != null) {
             pins.entrySet().removeIf(entry -> {
                 if (live.containsKey(entry.getKey())) return false;
@@ -326,7 +350,7 @@ final class DashboardMapPanel {
                 } else pin.move(point);
             }
         }
-        selectOffer(next, changed || mapJustReady || !preferred.isEmpty());
+        selectOffer(next, changed || mapJustReady || !preferred.isEmpty() || focusAssignment);
         updatePulse();
     }
 
@@ -392,7 +416,7 @@ final class DashboardMapPanel {
         popup.setVisibility(key.isEmpty() && host.activeBox.getChildCount() == 0 ? View.GONE : View.VISIBLE);
         if (changed) offers.scrollTo(0, 0);
         limitPopup();
-        Pin pin = pins.get(key);
+        Pin pin = pins.get(ACTIVE.equals(key) ? assignedFocus : key);
         if (moveCamera && pin != null) {
             centered = true;
             popup.post(() -> {
@@ -548,8 +572,11 @@ final class DashboardMapPanel {
                     .fillColor(0x32F27547).strokeColor(0xB3E95635).strokeWidth(dp(2)).zIndex(3));
             rings = new Circle[]{wave(point), wave(point), wave(point)};
             frame(0f);
-            marker = map.addMarker(new MarkerOptions().position(point).title("Titik jemput")
-                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE)).zIndex(6));
+            boolean assigned = assignedPickups.containsKey(key);
+            marker = map.addMarker(new MarkerOptions().position(point)
+                    .title(assigned ? "Jemput pesanan Trans Simpel" : "Titik jemput")
+                    .icon(BitmapDescriptorFactory.defaultMarker(assigned
+                            ? BitmapDescriptorFactory.HUE_AZURE : BitmapDescriptorFactory.HUE_ORANGE)).zIndex(6));
             if (marker != null) marker.setTag(key);
         }
         void move(LatLng point) {

@@ -243,11 +243,12 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
 
         // FCM adalah jalur utama real-time. Saat dashboard sedang terbuka,
         // kirim sinyal lokal agar data langsung refresh tanpa menunggu polling berikutnya.
-        if (isDriverRealtimeType(type) || isChat(type)) {
+        boolean assignedFromChat = "transsend_contact".equals(type) && "transsend_ordered".equals(data.get("event"));
+        if (assignedFromChat || isDriverRealtimeType(type) || isChat(type)) {
             try {
                 Intent changed = new Intent(ACTION_DRIVER_DATA_CHANGED);
                 changed.setPackage(getPackageName());
-                changed.putExtra("type", type);
+                changed.putExtra("type", assignedFromChat ? "trip_assigned" : type);
                 changed.putExtra("order_id", orderId);
                 changed.putExtra("room_id", roomId);
                 changed.putExtra("source", data.get("source"));

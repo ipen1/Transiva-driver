@@ -322,7 +322,7 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
                             if (!canonical.isEmpty()) roomId = canonical;
                             int sentId=sentChat.optInt("id");
                             if (pending!=null) {
-                                if (sentId<=lastId) messagesBox.removeView(pending.root);
+                                if (response.optBoolean("contact_redacted") || sentId<=lastId) messagesBox.removeView(pending.root);
                                 else {
                                     pending.state.setText("Terkirim");
                                     acknowledgedBubbles.put(sentId,pending.root);
@@ -331,6 +331,7 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
                         } else if (pending != null) {
                             messagesBox.removeView(pending.root);
                         }
+                        if (response.optBoolean("contact_redacted")) toast("Kontak disensor. Lanjutkan percakapan di Transiva.");
                         DriverChatNotificationPoller.setOpenRoom(roomId);
                         main.postDelayed(() -> loadMessages(false), 180L);
                     } else {

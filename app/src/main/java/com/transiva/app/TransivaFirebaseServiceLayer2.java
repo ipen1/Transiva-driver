@@ -91,7 +91,8 @@ abstract class TransivaFirebaseServiceLayer2 extends TransivaFirebaseServiceLaye
     ) {
         if ("transsend_contact".equals(type) && data != null) {
             if ("transsend_ordered".equals(data.get("event"))) {
-                return new Intent(this, DriverDashboardActivity.class).putExtra("from_fcm", true);
+                return new Intent(this, DriverDashboardActivity.class).putExtra("from_fcm", true)
+                        .putExtra("simpel_assigned_id", first(data.get("order_db_id"), orderId));
             }
             return new Intent(this, DriverTransSendContactsActivity.class);
         }
