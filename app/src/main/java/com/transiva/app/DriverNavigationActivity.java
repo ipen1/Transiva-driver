@@ -22,6 +22,7 @@ import android.util.Rational;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
+import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -280,7 +281,14 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         LinearLayout.LayoutParams callLp = new LinearLayout.LayoutParams(0, -2, 1);
         callLp.setMarginStart(dp(7));
         communication.addView(callButton, callLp);
-        if (!NavigationTargetPolicy.id(order).isEmpty()) arrival = new NavigationArrivalController(this, bottomActions);
+        if (!NavigationTargetPolicy.id(order).isEmpty()) {
+            Button correctLocation=new Button(this);
+            correctLocation.setText("Perbaiki Lokasi");
+            correctLocation.setTextColor(DriverThemeTokens.accent(this));
+            correctLocation.setOnClickListener(v->DriverLocationProposal.show(this,session,order,lastLocation,false));
+            bottomActions.addView(correctLocation,new LinearLayout.LayoutParams(-1,dp(44)));
+            arrival = new NavigationArrivalController(this, bottomActions);
+        }
         FrameLayout.LayoutParams bottomLp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
         bottomLp.setMargins(dp(10), 0, dp(10), dp(20));
         android.widget.ScrollView dockScroll = DriverResponsiveUi.mapPanelScroll(this, .45f);

@@ -290,7 +290,6 @@ abstract class DriverTripActivityLayer1 extends Activity {
         }
     }
 
-    protected String pendingFinishOtp = "";
 
     protected void showAction(View b, boolean enabled){
         if(b == null) return;
@@ -302,29 +301,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
 
     protected boolean isDeliveryPhase(String st){ return DriverOrderStateMachine.isDeliveryPhase(st); }
 
-    protected void showPickupOtpDialog() {
-        if (updatingStatus) return;
-        final EditText input = new EditText(this);
-        input.setHint("Masukkan 6 digit OTP penerima");
-        input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        input.setSingleLine(true);
-        input.setPadding(dp(18), dp(8), dp(18), dp(8));
-        AlertDialog ad = PremiumDialogs.builder(this)
-                .setTitle("Verifikasi OTP TransSend")
-                .setMessage("Minta OTP kepada penerima setelah paket benar-benar diterima.")
-                .setView(input)
-                .setNegativeButton("Batal", null)
-                .setPositiveButton("Verifikasi & Selesaikan", null)
-                .create();
-        ad.setOnShowListener(dialog -> { PremiumDialogs.applyPremiumStyle(ad); ad.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            String otp = input.getText().toString().replaceAll("[^0-9]", "");
-            if (otp.length() < 4) { input.setError("OTP belum lengkap"); return; }
-            pendingFinishOtp = otp;
-            ad.dismiss();
-            updateStatus("completed");
-        }); });
-        ad.show();
-    }
+
 
     protected void confirm(String msg, String next){ if(updatingStatus)return; PremiumDialogs.builder(this).setTitle("Konfirmasi").setMessage(msg).setNegativeButton("Batal",null).setPositiveButton("Ya",(d,w)->updateStatus(next)).show(); }
     protected void updateStatus(String next){
@@ -368,7 +345,6 @@ abstract class DriverTripActivityLayer1 extends Activity {
             p.put("source", isPickupOrder() ? "pickup_orders" : "orders");
             p.put("status", next);
             p.put("driver_lat",statusLat);p.put("driver_lng",statusLng);
-            if(requiresPickupOtp() && (next.equals("finished") || next.equals("completed"))) p.put("otp", pendingFinishOtp);
             String endpoint = endpoint(next);
             JSONObject r = postJson(BASE_URL + endpoint, p);
             boolean ok = r.optBoolean("success", false);
@@ -377,7 +353,6 @@ abstract class DriverTripActivityLayer1 extends Activity {
                 updatingStatus=false;
                 setLoading(false);
                 if(ok){
-                    pendingFinishOtp = "";
                     try{ order = TripActionSession.merge(order, r.optJSONObject("order")); order.put("status", next); }catch(Exception ignored){ TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
                     if (actionSession != null) actionSession.completed(order);
                     saveActiveOrder();
@@ -447,12 +422,7 @@ abstract class DriverTripActivityLayer1 extends Activity {
         if(!queued){updatingStatus=false;if(actionSession!=null)actionSession.failed();setLoading(false);refreshButtons();info("Antrean penuh","Coba lagi sebentar.");}
     }
     protected String endpoint(String n){ return DriverOrderStateMachine.endpoint(n, isPickupOrder()); }
-    protected boolean requiresPickupOtp(){
-        if (!isPickupOrder() || order==null) return false;
-        return order.optInt("is_trans_simpel",0)==0
-                && !first(order.optString("service_type"),order.optString("service_name"),
-                        order.optString("order_type")).toLowerCase(Locale.US).contains("simpel");
-    }
+
     protected boolean isPickupOrder(){
         String source = first(order == null ? "" : order.optString("source"),
                 order == null ? "" : order.optString("source_table"), orderKind).toLowerCase(Locale.US);

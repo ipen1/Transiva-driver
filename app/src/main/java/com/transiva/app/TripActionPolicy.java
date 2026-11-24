@@ -29,8 +29,7 @@ final class TripActionPolicy {
             if (FoodTripPresentation.waitsForMerchant(order)) reason = "Menunggu konfirmasi restoran";
         }
         else if ("on_delivery".equals(status) || "arrived_delivery".equals(status)) {
-            JSONObject waypoint = "orders".equals(NavigationTargetPolicy.source(order))
-                    ? DriverEcosystemFeatures.from(order).nextPendingWaypoint() : null;
+            JSONObject waypoint = DriverEcosystemFeatures.from(order).nextPendingWaypoint();
             JSONObject extension = order.optJSONObject("destination_extension");
             boolean extra = extension != null && "approved".equals(extension.optString("status"))
                     && extension.optInt("needs_arrival") == 1;
@@ -46,7 +45,7 @@ final class TripActionPolicy {
                 next = "finished"; label = "Geser untuk selesaikan order";
                 if (extension != null && "pending".equals(extension.optString("status"))) reason = "Menunggu persetujuan tujuan tambahan";
                 else if ("pending".equals(order.optString("price_change_status"))) reason = "Menunggu persetujuan biaya pelanggan";
-                else if (!"pickup_orders".equals(NavigationTargetPolicy.source(order)) && order.optInt("customer_received") != 1)
+                else if (order.optInt("customer_received") != 1)
                     reason = "Menunggu konfirmasi pelanggan";
             }
         }
@@ -61,6 +60,8 @@ final class TripActionPolicy {
         if (NavigationTargetPolicy.terminal(order)) {
             next = ""; label = "Perjalanan berakhir"; reason = "Perjalanan telah berakhir";
         }
+        if ("pending".equals(order.optString("price_change_status"))
+                && order.optString("price_change_reason").startsWith("[Lokasi #")) reason = "Menunggu customer meninjau usulan lokasi";
         if (session.busy()) reason = "Memproses perubahan order…";
         else if (!session.fresh()) reason = "Menyinkronkan status perjalanan…";
         boolean enabled = !next.isEmpty() && reason.isEmpty() && !NavigationTargetPolicy.terminal(order);

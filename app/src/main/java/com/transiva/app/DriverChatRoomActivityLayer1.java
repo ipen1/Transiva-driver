@@ -279,7 +279,14 @@ abstract class DriverChatRoomActivityLayer1 extends Activity {
         loadRemoteImage(image, url);
     }
 
-    protected void sendMessage() { sendChatContent(input.getText().toString().trim(), true); }
+    protected void sendMessage() {
+        String draft = input.getText().toString().trim();
+        if (ChatPhoneNotice.detectsPhone(draft)) {
+            ChatPhoneNotice.confirm(this, () -> {
+                if (draft.equals(input.getText().toString().trim())) sendChatContent(draft, true);
+            });
+        } else sendChatContent(draft, true);
+    }
     protected void sendSticker(String wire) { sendChatContent(wire, false); }
     private void sendChatContent(String message, boolean clearDraft) {
         if (readOnly || sending || uploading || chatChrome.isRecording()) return;

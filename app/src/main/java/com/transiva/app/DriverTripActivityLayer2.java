@@ -126,10 +126,10 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         startDeliveryBtn = slideAction(orderKind.equals("pickup") ? "📦 Geser • Paket Diambil, Mulai Antar" : vehicleEmoji() + " Geser • Mulai Perjalanan", () -> updateStatus("on_delivery")); actionDock.addView(startDeliveryBtn, slideLp(0));
         JSONObject pendingStop=DriverEcosystemFeatures.from(order).nextPendingWaypoint();
         final int stopSequence=pendingStop==null?0:pendingStop.optInt("sequence",1);
-        waypointBtn=slideAction("📍 Geser • Tiba di Persinggahan "+stopSequence,()->markCurrentWaypointArrived(stopSequence));
+        waypointBtn=slideAction("📍 Geser • Tiba di Persinggahan "+stopSequence,()->{ JSONObject next=DriverEcosystemFeatures.from(order).nextPendingWaypoint(); if(next!=null)markCurrentWaypointArrived(next.optInt("sequence")); });
         actionDock.addView(waypointBtn,slideLp(0));
         arrivedDeliveryBtn = slideAction("🏁 Geser • Tiba di Pengantaran", () -> { if(extensionNeedsArrival()) destinationExtension.arrive(); else updateStatus("arrived_delivery"); }); actionDock.addView(arrivedDeliveryBtn, slideLp(0));
-        finishBtn = slideAction("✅ Geser • Selesaikan Order", () -> { if (requiresPickupOtp()) showPickupOtpDialog(); else updateStatus("finished"); }); actionDock.addView(finishBtn, slideLp(0));
+        finishBtn = slideAction("✅ Geser • Selesaikan Order", () -> { updateStatus("finished"); }); actionDock.addView(finishBtn, slideLp(0));
         dockHint=text("Geser untuk melanjutkan perjalanan",12,"#64748B",false);actionDock.addView(dockHint);
         LinearLayout options=new LinearLayout(this);options.setOrientation(LinearLayout.VERTICAL);options.setVisibility(View.GONE);
         Button more=outline("Opsi  ▾");
@@ -142,6 +142,12 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
             more.setText(open?"Opsi  ▴":"Opsi  ▾");
         });
         header.addView(more,new LinearLayout.LayoutParams(dp(70),dp(48)));
+        Button correctLocation=outline("Perbaiki Lokasi");
+        correctLocation.setOnClickListener(v->DriverLocationProposal.show(this,session,order,trustedArrivalFix(),false));
+        options.addView(correctLocation,btnLp(6));
+        Button addStop=outline("+ Singgah");
+        addStop.setOnClickListener(v->DriverLocationProposal.show(this,session,order,trustedArrivalFix(),true));
+        options.addView(addStop,btnLp(6));
         updatePriceBtn = outline("💰 Update Total"); updatePriceBtn.setOnClickListener(v -> showUpdatePriceDialog()); options.addView(updatePriceBtn, btnLp(6));
         if(isDeliveryPhase(status())){ Button extraFare=outline("Ajukan ongkir tambahan"); extraFare.setOnClickListener(v->requestExtraFareForMissedDistance()); options.addView(extraFare,btnLp(6)); }
         if(canExtendDestination()){
@@ -526,7 +532,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         tripMutationStarted();waypointArrivalBusy=true;refreshButtons();if(progressBar!=null)progressBar.setVisibility(View.VISIBLE);
         boolean queued=tripRouteScope.execute(()->{
             try{
-                JSONObject body=new JSONObject().put("action","arrive_waypoint").put("order_id",capturedOrder).put("sequence",sequence).put("driver_lat",fix.getLatitude()).put("driver_lng",fix.getLongitude());
+                JSONObject body=new JSONObject().put("action","arrive_waypoint").put("source",isPickupOrder()?"pickup_orders":"orders").put("order_id",capturedOrder).put("sequence",sequence).put("driver_lat",fix.getLatitude()).put("driver_lng",fix.getLongitude());
                 JSONObject response=new com.transiva.app.driver.data.DriverApiClient(session).post("ride_ecosystem_order.php",body).body;
                 tripRouteScope.post(()->{
                     waypointArrivalBusy=false;if(progressBar!=null)progressBar.setVisibility(View.GONE);

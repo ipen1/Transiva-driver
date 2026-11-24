@@ -169,7 +169,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
                         if(pickup){
                             order.put("smart_waiting",state);if(waitingView!=null)waitingView.bind(state);
                             if(fresh!=null){
-                                String signature=fresh.optString("status")+"|"+fresh.optString("assignment_version")+"|"+fresh.optString("pickup_lat")+"|"+fresh.optString("pickup_lng")+"|"+fresh.optString("delivery_lat")+"|"+fresh.optString("delivery_lng")+"|"+fresh.optString("destination_lat")+"|"+fresh.optString("destination_lng");
+                                String signature=fresh.optString("status")+"|"+fresh.optString("assignment_version")+"|"+fresh.optInt("customer_received")+"|"+fresh.optString("price")+"|"+fresh.optString("price_change_status")+"|"+String.valueOf(fresh.optJSONObject("ecosystem"))+"|"+fresh.optString("pickup_lat")+"|"+fresh.optString("pickup_lng")+"|"+fresh.optString("delivery_lat")+"|"+fresh.optString("delivery_lng")+"|"+fresh.optString("destination_lat")+"|"+fresh.optString("destination_lng");
                                 if(!signature.equals(realtimeSignature)){realtimeSignature=signature;java.util.Iterator<String> fields=fresh.keys();while(fields.hasNext()){String field=fields.next();order.put(field,fresh.opt(field));}saveActiveOrder();renderOrder();refreshButtons();requestStableRoute(false);}
                                 if(NavigationTargetPolicy.terminal(order)){NavigationSessionStore.clear(this);NavigationGuidanceService.stop(this);DriverGuardianManager.invalidate(this);}
                             }

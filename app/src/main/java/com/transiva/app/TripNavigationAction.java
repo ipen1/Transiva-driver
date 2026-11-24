@@ -1,30 +1,12 @@
 package com.transiva.app;
 
 import android.location.Location;
-import android.text.InputType;
-import android.widget.EditText;
 import com.transiva.app.driver.data.DriverApiClient;
 import org.json.JSONObject;
 
-/** Same endpoints, waypoint sequence, OTP and completion flow used by the trip screen. */
+/** Same endpoints, waypoint sequence and completion flow used by the trip screen. */
 final class TripNavigationAction {
     static void execute(DriverNavigationActivity host, TripActionSession shared, TripActionPolicy.Action expected) {
-        JSONObject order = shared.order();
-        if ("finished".equals(expected.next) && "pickup_orders".equals(NavigationTargetPolicy.source(order))) {
-            EditText otp = new EditText(host);
-            otp.setHint("OTP penerima");
-            otp.setInputType(InputType.TYPE_CLASS_NUMBER);
-            PremiumDialogs.builder(host).setTitle("Verifikasi penerima").setView(otp)
-                    .setNegativeButton("Batal", null).setPositiveButton("Verifikasi", (d, w) -> {
-                        String value = otp.getText().toString().replaceAll("[^0-9]", "");
-                        if (value.length() < 4) { message(host, "Masukkan OTP penerima yang valid."); return; }
-                        send(host, shared, expected, value);
-                    }).show();
-        } else send(host, shared, expected, "");
-    }
-
-    private static void send(DriverNavigationActivity host, TripActionSession shared,
-                             TripActionPolicy.Action expected, String otp) {
         TripActionPolicy.Action action = TripActionPolicy.resolve(shared);
         if (!action.enabled || !action.next.equals(expected.next) || action.stop != expected.stop) return;
         JSONObject order = shared.order();
@@ -41,7 +23,6 @@ final class TripNavigationAction {
                         .put("driver", host.username).put("driver_username", host.username)
                         .put("status", action.next);
                 if (fix != null) payload.put("driver_lat", fix.getLatitude()).put("driver_lng", fix.getLongitude());
-                if (!otp.isEmpty()) payload.put("otp", otp);
                 String endpoint = DriverOrderStateMachine.endpoint(action.next, "pickup_orders".equals(source));
                 if ("waypoint".equals(action.next)) {
                     endpoint = "ride_ecosystem_order.php";

@@ -34,8 +34,6 @@ final class TransSimpelRoutePanel {
     private final LinearLayout view;
     private final android.widget.ScrollView routeScroll;
     private final LinearLayout fareRow;
-    private final Button pickup;
-    private final Button delivery;
     private final Button stop;
     private final Button clearStop;
     private final Button quoteRetry;
@@ -57,6 +55,17 @@ final class TransSimpelRoutePanel {
     private boolean readingRoute;
     private boolean available=true;
 
+    private final TextView routeTitle;
+    private final Button mapToggle;
+    private com.google.android.gms.maps.MapView mapView;
+    private com.google.android.gms.maps.GoogleMap googleMap;
+    private boolean mapExpanded=true;
+    private String mapBoundsKey="";
+    private final java.util.ArrayList<com.google.android.gms.maps.model.Marker> mapMarkers=new java.util.ArrayList<>();
+    private com.google.android.gms.maps.model.Polyline mapLine;
+    private org.json.JSONArray mapPath;
+    private String mapRouteKey="";
+
     TransSimpelRoutePanel(Activity activity, String id) {
         this.activity = activity;
         this.id = id;
@@ -72,7 +81,7 @@ final class TransSimpelRoutePanel {
                 int available=parent instanceof View && ((View)parent).getHeight()>0
                         ? ((View)parent).getHeight()
                         : dp(activity.getResources().getConfiguration().screenHeightDp);
-                int cap=Math.max(dp(48),Math.round(available*.42f));
+                int cap=Math.max(dp(48),Math.round(available*(mapView==null?.42f:.56f)));
                 if (MeasureSpec.getMode(heightSpec)!=MeasureSpec.UNSPECIFIED) cap=Math.min(cap,MeasureSpec.getSize(heightSpec));
                 super.onMeasure(widthSpec,MeasureSpec.makeMeasureSpec(cap,MeasureSpec.AT_MOST));
             }
@@ -82,37 +91,37 @@ final class TransSimpelRoutePanel {
         routeScroll.addView(view,new android.widget.ScrollView.LayoutParams(-1,-2));
         LinearLayout heading=new LinearLayout(activity);
         heading.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        TextView title=new TextView(activity);
-        title.setText("Rute Trans Simpel");
+        routeTitle=new TextView(activity);
+        TextView title=routeTitle;
+        title.setText("Atur rute");
         title.setTextColor(0xFF102449);
-        title.setTextSize(16);
+        title.setTextSize(15);
+        title.setMaxLines(3);
         title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         heading.addView(title,new LinearLayout.LayoutParams(0,-2,1));
-        LinearLayout actions = new LinearLayout(activity);
-        pickup = button("Jemput", () -> openPicker(PICKUP));
-        delivery = button("Antar", () -> openPicker(DELIVERY));
         stop = button("+ Singgah", () -> openPicker(STOP));
         clearStop = button("Hapus", this::removeStop);
-        style(pickup,"#E7F7F0","#096749");
-        style(delivery,"#EAF1FF","#164C9C");
-        style(stop,"#FFF4E1","#774508");
+        style(stop,"#F5F9FF","#075BC8");
         style(clearStop,"#F3F6FA","#41556C");
-        for (Button point : new Button[]{pickup, stop, delivery}) {
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,dp(44),1);
-            params.setMargins(dp(2),0,dp(2),0);
-            actions.addView(point,params);
-        }
         briefButton=button("Tiva AI  ›",()->TivaSimpelBrief.show(activity,tivaBrief));
         style(briefButton,"#EFE8FF","#502B93");
         briefButton.setContentDescription("Buka percakapan Tiva AI");
         briefButton.setPadding(dp(10),0,dp(10),0);
         briefButton.setVisibility(View.GONE);
         heading.addView(briefButton,new LinearLayout.LayoutParams(-2,dp(48)));
+        mapToggle=button("Sembunyikan peta",()->{
+            mapExpanded=!mapExpanded;
+            if(route!=null)render(route);
+            if(mapExpanded)refresh();
+        });
+        mapToggle.setVisibility(View.GONE);
+        heading.addView(mapToggle,new LinearLayout.LayoutParams(-2,dp(44)));
         view.addView(heading,new LinearLayout.LayoutParams(-1,-2));
-        view.addView(actions);
+
         pickupAddress = addressLine("Jemput","●",0xFF08785B,"pickup");
+        view.addView(stop,new LinearLayout.LayoutParams(-2,dp(44)));
         stopAddress = addressLine("Singgah","◆",0xFF925200,"stop");
-        deliveryAddress = addressLine("Antar","⚑",0xFF075BC8,"delivery");
+        deliveryAddress = addressLine("Antar","⚑",0xFFB52432,"delivery");
         View divider=new View(activity);
         divider.setBackgroundColor(0xFFDCE8F5);
         view.addView(divider,new LinearLayout.LayoutParams(-1,dp(1)));
@@ -155,9 +164,96 @@ final class TransSimpelRoutePanel {
         });
     }
 
-    void resume() { active = true; refresh(); }
-    void pause() { active = false; main.removeCallbacks(poll); }
-    void close() { pause(); network.close(); }
+    void resume() {
+        active=true;
+        if (mapView!=null) mapView.onResume();
+        refresh();
+    }
+
+    void pause() {
+        if (active && mapView!=null) mapView.onPause();
+        active=false;
+        main.removeCallbacks(poll);
+    }
+
+    void close() { pause(); removeMap(); network.close(); }
+
+    private void removeMap() {
+        if(mapView==null)return;
+        if(active)mapView.onPause();
+        mapView.onStop();mapView.onDestroy();
+        view.removeView(mapView);
+        mapView=null;googleMap=null;mapBoundsKey="";mapRouteKey="";mapPath=null;mapMarkers.clear();mapLine=null;
+        routeScroll.requestLayout();
+    }
+
+    private void showMap() {
+        if(mapView!=null){ paintMap(); return; }
+        com.google.android.gms.maps.MapView map=new com.google.android.gms.maps.MapView(activity);
+        mapView=map;
+        map.onCreate(null);
+        int height=Math.max(112,Math.min(165,activity.getResources().getConfiguration().screenHeightDp/4));
+        view.addView(map,1,new LinearLayout.LayoutParams(-1,dp(height)));
+        map.onStart();
+        if(active)map.onResume();
+        map.getMapAsync(google->{
+            if(mapView!=map || activity.isFinishing() || activity.isDestroyed())return;
+            googleMap=google;
+            google.getUiSettings().setAllGesturesEnabled(false);
+            google.getUiSettings().setMapToolbarEnabled(false);
+            paintMap();
+        });
+    }
+
+    private void paintMap() {
+        if(googleMap==null || route==null)return;
+        com.google.android.gms.maps.model.LatLngBounds.Builder bounds=new com.google.android.gms.maps.model.LatLngBounds.Builder();
+        StringBuilder key=new StringBuilder();
+        for(com.google.android.gms.maps.model.Marker marker:mapMarkers)if(marker!=null)marker.remove();
+        mapMarkers.clear();
+        String[] names={"pickup","delivery","driver_position"};
+        float[] colors={120f,0f,210f};
+        for(int index=0;index<names.length;index++){
+            JSONObject point=route.optJSONObject(names[index]);
+            if(point==null)continue;
+            double lat=point.optDouble("lat"),lng=point.optDouble("lng");
+            if(!Double.isFinite(lat)||!Double.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180)continue;
+            com.google.android.gms.maps.model.LatLng position=new com.google.android.gms.maps.model.LatLng(lat,lng);
+            bounds.include(position);
+            key.append(index==2?"driver":position.toString());
+            mapMarkers.add(googleMap.addMarker(new com.google.android.gms.maps.model.MarkerOptions().position(position)
+                    .title(index==0?"Jemput":index==1?"Antar":"Posisi driver")
+                    .icon(com.google.android.gms.maps.model.BitmapDescriptorFactory.defaultMarker(colors[index]))));
+        }
+        if (mapMarkers.isEmpty()) return;
+        String routeKey=String.valueOf(route.optJSONObject("pickup"))+"|"
+                +String.valueOf(route.optJSONObject("delivery"))+"|"+String.valueOf(route.optJSONObject("stop"));
+        if (!routeKey.equals(mapRouteKey)) { mapRouteKey=routeKey;mapPath=null; }
+        if (route.has("map_points")) mapPath=route.optJSONArray("map_points");
+        org.json.JSONArray path=mapPath;
+        java.util.ArrayList<com.google.android.gms.maps.model.LatLng> polyline=new java.util.ArrayList<>();
+        if(path!=null)for(int index=0;index<path.length();index++){
+            org.json.JSONArray point=path.optJSONArray(index);
+            if(point!=null && Double.isFinite(point.optDouble(0)) && Double.isFinite(point.optDouble(1))) {
+                com.google.android.gms.maps.model.LatLng position=new com.google.android.gms.maps.model.LatLng(point.optDouble(0),point.optDouble(1));
+                polyline.add(position);bounds.include(position);
+            }
+        }
+        if(mapLine!=null)mapLine.remove();
+        mapLine=polyline.size()>1?googleMap.addPolyline(new com.google.android.gms.maps.model.PolylineOptions()
+                .addAll(polyline).color(0xff0865e8).width(dp(5))):null;
+        String signature=key.toString();
+        if(!signature.equals(mapBoundsKey)){
+            mapBoundsKey=signature;
+            com.google.android.gms.maps.model.LatLngBounds area=bounds.build();
+            com.google.android.gms.maps.MapView root=mapView;
+            root.post(()->{
+                if(mapView!=root||root.getWidth()<=0||root.getHeight()<=0)return;
+                try{ googleMap.moveCamera(com.google.android.gms.maps.CameraUpdateFactory.newLatLngBounds(area,root.getWidth(),root.getHeight(),dp(20))); }
+                catch (IllegalStateException ignored) { }
+            });
+        }
+    }
 
     void restore(Bundle state) {
         if (state == null) return;
@@ -230,10 +326,18 @@ final class TransSimpelRoutePanel {
         line.setEllipsize(TextUtils.TruncateAt.END);
         line.setGravity(android.view.Gravity.CENTER_VERTICAL);
         line.setMinHeight(dp(44));
+        line.setBackground(surface("#F8FAFD","#E5ECF5"));
         line.setPadding(dp(6),dp(4),dp(4),dp(4));
-        line.setOnClickListener(v->new android.app.AlertDialog.Builder(activity)
+        line.setOnClickListener(v->{
+            if (route!=null && "accepted".equals(route.optString("state"))
+                    && !("pickup".equals(key) && "food".equals(kind()))) {
+                openPicker("pickup".equals(key)?PICKUP:"stop".equals(key)?STOP:DELIVERY);
+                return;
+            }
+            new android.app.AlertDialog.Builder(activity)
                 .setTitle(title).setMessage(route==null?"Belum diatur":address(key))
-                .setPositiveButton("Tutup",null).show());
+                .setPositiveButton("Tutup",null).show();
+        });
         line.setTag(icon+"  "+title);
         view.addView(line,new LinearLayout.LayoutParams(-1,-2));
         return line;
@@ -250,7 +354,10 @@ final class TransSimpelRoutePanel {
     }
 
     private void refresh() {
-        if (active && !busy && available) send("get",null);
+        if (active && !busy && available) {
+            try { send("get",new JSONObject().put("map_live",mapExpanded).put("map",mapExpanded && (mapPath==null || mapPath.length()<2))); }
+            catch (org.json.JSONException ignored) { }
+        }
     }
 
     private void render(JSONObject update) {
@@ -263,13 +370,21 @@ final class TransSimpelRoutePanel {
         boolean ordered="ordered".equals(state);
         boolean waiting="waiting_driver".equals(state);
         routeScroll.setVisibility(editable || ordered || waiting ? View.VISIBLE : View.GONE);
-        pickup.setVisibility(editable?View.VISIBLE:View.GONE);
-        delivery.setVisibility(editable?View.VISIBLE:View.GONE);
+        String phase=route.optString("order_status");
+        String caption="arrived_pickup".equals(phase)?"Tiba di jemput":
+                "on_delivery".equals(phase)||"picked_up".equals(phase)?"Menuju antar":
+                "arrived_delivery".equals(phase)?"Tiba di tujuan":
+                "finished".equals(phase)||"completed".equals(phase)?"Selesai":"Menuju jemput";
+        routeTitle.setText(ordered?"Rute perjalanan\n"+caption:waiting?"Pesanan dalam antrean":"Atur rute");
+        boolean canShowMap=ordered && route.optJSONObject("pickup")!=null && route.optJSONObject("delivery")!=null;
+        mapToggle.setVisibility(canShowMap?View.VISIBLE:View.GONE);
+        mapToggle.setText(mapExpanded?"Tutup peta":"Tampil peta");
+        if (canShowMap && mapExpanded) showMap();
+        else removeMap();
+        briefButton.setVisibility(editable && tivaBrief!=null ? View.VISIBLE : View.GONE);
         boolean food="food".equals(kind());
         boolean send="send".equals(kind());
-        pickup.setEnabled(editable && !food);
         stop.setVisibility(editable && (kind().isEmpty() || "ride".equals(kind()))?View.VISIBLE:View.GONE);
-        delivery.setEnabled(editable);
         stop.setEnabled(editable);
         boolean hasStop=route.optJSONObject("stop")!=null;
         stop.setText(hasStop?"Singgah":"+ Singgah");
@@ -420,7 +535,8 @@ final class TransSimpelRoutePanel {
         if (active) {
             calculateIfReady();
             if (!busy && (route==null || "accepted".equals(route.optString("state"))
-                    || "waiting_driver".equals(route.optString("state")))) main.postDelayed(poll,3000);
+                    || "waiting_driver".equals(route.optString("state"))
+                    || ("ordered".equals(route.optString("state")) && mapExpanded))) main.postDelayed(poll,5000);
         }
     }
 
