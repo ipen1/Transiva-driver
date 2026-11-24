@@ -379,7 +379,10 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
             if(commission!=null)appreciation.addView(text("Potongan aplikasi Rp"+java.text.NumberFormat.getNumberInstance(new Locale("id","ID")).format(commission.optInt("app_fee"))+" • Bersih Rp"+java.text.NumberFormat.getNumberInstance(new Locale("id","ID")).format(commission.optInt("driver_net"))+" + biaya tunggu",12,"#64748B",false));
             add(appreciation,0,dp(8),0,dp(8));
         }
-        waitingView=new SmartWaitingTextView(this);waitingView.bind(order.optJSONObject("smart_waiting"));root.addView(waitingView,new LinearLayout.LayoutParams(-1,-2));
+        waitingView=new SmartWaitingTextView(this);
+        if (tripDetailsScreen()) add(waitingView.compactDetailRow(),0,0,0,dp(6));
+        else root.addView(waitingView,new LinearLayout.LayoutParams(-1,-2));
+        waitingView.bind(order.optJSONObject("smart_waiting"));
         JSONObject waitingState=order.optJSONObject("smart_waiting");JSONObject waitingActive=waitingState==null?null:waitingState.optJSONObject("active");
         if(waitingActive!=null && waitingActive.optString("point_key").startsWith("stop:")){
             final long sessionId=waitingActive.optLong("id");Button continueTrip=outline("Lanjut perjalanan • hentikan waktu tunggu");
@@ -391,7 +394,12 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
                     if(!response.body.optBoolean("success"))throw new Exception(response.body.optString("message"));
                     mainHandler.post(() -> { try{order.put("smart_waiting",response.body.optJSONObject("smart_waiting"));}catch(Exception ignored){}tripNeedsSync();renderOrder(); });
                 }catch(Exception error){mainHandler.post(() -> {continueTrip.setEnabled(true);info("Smart Waiting",first(error.getMessage(),"Belum dapat melanjutkan. Coba lagi."));});} });
-            });root.addView(continueTrip,btnLp(8));
+            });
+            if (tripDetailsScreen()) {
+                continueTrip.setMinHeight(dp(48));
+                continueTrip.setPadding(dp(10),dp(5),dp(10),dp(5));
+                add(continueTrip,0,0,0,dp(6));
+            } else root.addView(continueTrip,btnLp(8));
         }
         if(actionDock!=null)actionDock.removeAllViews();
         addLocationCard("Titik jemput", pickupAddress(), true);

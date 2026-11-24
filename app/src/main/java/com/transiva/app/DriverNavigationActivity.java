@@ -103,8 +103,12 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         }
     }
 
+    private Button correctLocationButton;
+
     @Override void onNavigationOrderSynced(JSONObject fresh) {
         if (arrival != null) arrival.synced(fresh);
+        if (correctLocationButton!=null) correctLocationButton.setVisibility(
+                DriverLocationProposal.available(fresh)?View.VISIBLE:View.GONE);
     }
 
     @Override protected void onCreate(Bundle savedInstanceState) {
@@ -282,11 +286,10 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         callLp.setMarginStart(dp(7));
         communication.addView(callButton, callLp);
         if (!NavigationTargetPolicy.id(order).isEmpty()) {
-            Button correctLocation=new Button(this);
-            correctLocation.setText("Perbaiki Lokasi");
-            correctLocation.setTextColor(DriverThemeTokens.accent(this));
-            correctLocation.setOnClickListener(v->DriverLocationProposal.show(this,session,order,lastLocation,false));
-            bottomActions.addView(correctLocation,new LinearLayout.LayoutParams(-1,dp(44)));
+            correctLocationButton=DriverLocationProposal.actionButton(this);
+            correctLocationButton.setVisibility(DriverLocationProposal.available(order)?View.VISIBLE:View.GONE);
+            correctLocationButton.setOnClickListener(v->DriverLocationProposal.show(this,session,order,lastLocation,false));
+            bottomActions.addView(correctLocationButton,new LinearLayout.LayoutParams(-1,-2));
             arrival = new NavigationArrivalController(this, bottomActions);
         }
         FrameLayout.LayoutParams bottomLp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);

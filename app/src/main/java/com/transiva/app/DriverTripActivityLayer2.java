@@ -111,6 +111,34 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         c.addView(n);
         add(c,0,0,0,dp(12));
     }
+    private void styleDetailAction(Button button,boolean destructive) {
+        button.setLayoutParams(new LinearLayout.LayoutParams(-1,-2));
+        button.setMinHeight(dp(48));
+        button.setMinimumHeight(dp(48));
+        button.setMinimumWidth(0);
+        button.setGravity(Gravity.START|Gravity.CENTER_VERTICAL);
+        button.setTextSize(13);
+        button.setSingleLine(false);
+        button.setPaddingRelative(dp(9),dp(6),dp(10),dp(6));
+        button.setStateListAnimator(null);
+        button.setElevation(0);
+        boolean dark=DriverThemeTokens.isDark(this);
+        button.setTextColor(destructive?(dark?0xffffa3a8:0xffb4232c):(dark?0xffb8d9ff:0xff075ac8));
+        button.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(dark?0x4496c6ff:0x22086bff),
+                null,round("#FFFFFF",dp(8))));
+    }
+
+    private void addDetailRouteAction(LinearLayout row, Button button, int gap) {
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,-2,1);
+        params.setMarginStart(dp(gap));
+        button.setGravity(Gravity.CENTER);
+        button.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x33086bff),
+                DriverNavigationUi.roundRect(DriverThemeTokens.surfaceAlt(this),dp(10)),null));
+        row.addView(button,params);
+    }
+
     protected void rowText(LinearLayout p, String l, String v){
         LinearLayout r = new LinearLayout(this); r.setGravity(Gravity.CENTER_VERTICAL); r.setPadding(0, dp(7),0,dp(7));
         r.addView(text(l, 14, "#64748B", false), new LinearLayout.LayoutParams(0,-2,1)); r.addView(text(v, 14, "#111827", true)); p.addView(r);
@@ -142,17 +170,22 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
             more.setText(open?"Opsi  ▴":"Opsi  ▾");
         });
         header.addView(more,new LinearLayout.LayoutParams(dp(70),dp(48)));
-        Button correctLocation=outline("Perbaiki Lokasi");
+        Button correctLocation=DriverLocationProposal.actionButton(this);
+        correctLocation.setVisibility(DriverLocationProposal.available(order)?View.VISIBLE:View.GONE);
         correctLocation.setOnClickListener(v->DriverLocationProposal.show(this,session,order,trustedArrivalFix(),false));
-        options.addView(correctLocation,btnLp(6));
+        if (tripDetailsScreen()) options.addView(correctLocation,btnLp(6));
+        else actionDock.addView(correctLocation,new LinearLayout.LayoutParams(-1,-2));
         Button addStop=outline("+ Singgah");
+        addStop.setVisibility(DriverLocationProposal.available(order) && "on_delivery".equals(status()) ? View.VISIBLE : View.GONE);
         addStop.setOnClickListener(v->DriverLocationProposal.show(this,session,order,trustedArrivalFix(),true));
         options.addView(addStop,btnLp(6));
         updatePriceBtn = outline("💰 Update Total"); updatePriceBtn.setOnClickListener(v -> showUpdatePriceDialog()); options.addView(updatePriceBtn, btnLp(6));
         if(isDeliveryPhase(status())){ Button extraFare=outline("Ajukan ongkir tambahan"); extraFare.setOnClickListener(v->requestExtraFareForMissedDistance()); options.addView(extraFare,btnLp(6)); }
         if(canExtendDestination()){
             Button addDestination=outline("＋ Tujuan baru / Pulang (PP)");
-            addDestination.setOnClickListener(v->destinationExtension.show());c.addView(addDestination,btnLp(8));
+            addDestination.setOnClickListener(v->destinationExtension.show());
+            if (tripDetailsScreen()) options.addView(addDestination,0,btnLp(0));
+            else c.addView(addDestination,btnLp(8));
             JSONObject proposal=order.optJSONObject("destination_extension");
             if(proposal!=null && "pending".equals(proposal.optString("status"))){
                 c.addView(text("Menunggu customer: "+proposal.optString("address")+" • tambahan "+rupiah(proposal.optDouble("extra_fare")),13,"#B45309",true));
@@ -164,15 +197,32 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         options.addView(cancelOrderBtn, btnLp(6));
 
         if (tripDetailsScreen()) {
-            c.removeView(header);
-            c.setPadding(0, 0, 0, 0);
-            c.setBackground(null);
+            header.removeView(more);
+            ((TextView)header.getChildAt(0)).setText("Aksi perjalanan");
+            c.setPadding(dp(10),dp(8),dp(10),dp(6));
+            c.setBackground(stroke("#FFFFFF","#D9E2EE",dp(14),1));
             c.setElevation(0);
             options.setVisibility(View.VISIBLE);
+            updatePriceBtn.setText("Perbarui total");
             cancelOrderBtn.setText("Batalkan order");
-            cancelOrderBtn.setBackgroundColor(Color.TRANSPARENT);
+            for (int index=0;index<options.getChildCount();index++) {
+                Button button=(Button) options.getChildAt(index);
+                styleDetailAction(button, button==cancelOrderBtn);
+            }
+            android.content.res.Configuration config=getResources().getConfiguration();
+            if (config.screenWidthDp>=340 && config.fontScale<=1.2f) {
+                int position=options.indexOfChild(correctLocation);
+                options.removeView(correctLocation);
+                options.removeView(addStop);
+                LinearLayout routeActions=new LinearLayout(this);
+                LinearLayout.LayoutParams rowParams=new LinearLayout.LayoutParams(-1,-2);
+                rowParams.topMargin=dp(4);
+                options.addView(routeActions,position,rowParams);
+                addDetailRouteAction(routeActions,correctLocation,0);
+                addDetailRouteAction(routeActions,addStop,6);
+            }
             c.addView(options);
-            add(c, 0, 0, 0, dp(8));
+            add(c,0,0,0,dp(6));
             return;
         }
 
