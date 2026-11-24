@@ -36,6 +36,10 @@ public class ComfortProbe{
   pendingStop(guarded);guarded.markCurrentWaypointArrived(1);ck(DriverApiClient.payload==null&&!guarded.tripStateFresh,"outdated stop sequence requests fresh state without submitting the wrong stop");
   pendingStop(guarded);guarded.updatingStatus=true;guarded.markCurrentWaypointArrived(2);ck(DriverApiClient.payload==null&&!guarded.waypointArrivalBusy,"in-flight main status update blocks a competing waypoint transaction");
   guarded.updatingStatus=false;guarded.order.put("status","cancelled");guarded.markCurrentWaypointArrived(2);ck(DriverApiClient.payload==null&&!guarded.waypointArrivalBusy,"terminal trip blocks waypoint network mutation");
+  ck("orders".equals(sent.getString("source")),"regular trip sends waypoint arrival to orders");
+  WaypointProbe parcel=new WaypointProbe();pendingStop(parcel);parcel.fix=fix(-.79);
+  parcel.order.put("source","pickup_orders");parcel.markCurrentWaypointArrived(2);
+  ck("pickup_orders".equals(DriverApiClient.payload.getString("source")),"TransSend sends waypoint arrival to pickup_orders");
   NavigationFrameStats frames=new NavigationFrameStats();frames.offer(-1,16666667,0);ck(frames.frames()==0,"invalid frame metric is excluded");for(int i=0;i<95;i++)frames.offer(8000000,16666667,0);for(int i=0;i<5;i++)frames.offer(25000000,16666667,1);
   ck(frames.frames()==100&&frames.percentile95()==9,"frame histogram calculates bounded P95 without per-frame allocations");
   ck(frames.summary(60).contains("5,0%")&&frames.summary(60).contains("5"),"render deadline misses and dropped reports remain visible");
