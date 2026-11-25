@@ -8,7 +8,14 @@ import android.content.res.ColorStateList;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
+import android.location.Address;
+import android.location.Geocoder;
 import android.location.Location;
+import android.os.Handler;
+import android.os.Looper;
+import android.text.Editable;
+import android.text.TextUtils;
+import android.text.TextWatcher;
 import android.os.SystemClock;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -29,7 +36,11 @@ import com.google.android.gms.maps.MapView;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.tasks.CancellationTokenSource;
 
+import com.transiva.app.driver.data.DriverApiClient;
+
 import org.json.JSONObject;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 
 /** Assigns the crosshair center to the selected order point. Stops still use their quoted proposal. */
@@ -56,7 +67,9 @@ final class DriverLocationProposal {
     static Button actionButton(Activity activity) {
         Button button=new Button(activity);
         button.setAllCaps(false);
-        button.setText("⌖  Perbaiki Lokasi");
+        button.setText("Perbaiki Lokasi");
+        button.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_trip_correct_location,0,0,0);
+        button.setCompoundDrawablePadding(dp(activity,5));
         button.setTypeface(Typeface.DEFAULT_BOLD);
         button.setTextSize(13);
         button.setTextColor(DriverThemeTokens.isDark(activity)?0xffc4dfff:0xff0958bd);
@@ -106,8 +119,14 @@ final class DriverLocationProposal {
         MapView mapView;
         GoogleMap map;
         Button gps,save;
-        TextView status;
+        TextView status, addressPreview;
         EditText address;
+        final Handler main = new Handler(Looper.getMainLooper());
+        Runnable lookup;
+        int addressVersion;
+        LatLng addressPoint;
+        AddressLabel resolvedAddress;
+        boolean addressLoading;
         boolean busy,cameraMoving;
         CancellationTokenSource gpsRequest;
 
@@ -149,13 +168,22 @@ final class DriverLocationProposal {
             viewport.addView(pin,new FrameLayout.LayoutParams(dp(host,36),dp(host,46),Gravity.CENTER));
 
             gps=actionButton(host);
-            gps.setText("⌖  Ambil lokasi GPS");
+            gps.setText("Ambil lokasi GPS");
             gps.setEnabled(false);
             FrameLayout.LayoutParams gpsPosition=new FrameLayout.LayoutParams(-2,-2,Gravity.BOTTOM|Gravity.END);
             gpsPosition.setMargins(dp(host,8),0,dp(host,8),dp(host,8));
             viewport.addView(gps,gpsPosition);
             body.addView(viewport,new LinearLayout.LayoutParams(-1,
                     Math.min(dp(host,420),host.getResources().getDisplayMetrics().heightPixels/2)));
+
+            addressPreview = new TextView(host);
+            addressPreview.setTextSize(13);
+            addressPreview.setTextColor(DriverThemeTokens.textPrimary(host));
+            addressPreview.setMaxLines(2);
+            addressPreview.setEllipsize(TextUtils.TruncateAt.END);
+            addressPreview.setPadding(0, dp(host,6), 0, 0);
+            addressPreview.setVisibility(TextView.GONE);
+            body.addView(addressPreview, new LinearLayout.LayoutParams(-1,-2));
 
             address=new EditText(host);
             address.setSingleLine(true);
@@ -164,6 +192,13 @@ final class DriverLocationProposal {
             address.setTextColor(DriverThemeTokens.textPrimary(host));
             address.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(165)});
             body.addView(address,new LinearLayout.LayoutParams(-1,-2));
+            address.addTextChangedListener(new TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                    if (save != null) controls();
+                }
+                @Override public void afterTextChanged(Editable ignored) {}
+            });
             android.widget.ScrollView scroll=new android.widget.ScrollView(host);
             scroll.addView(body);
             dialog=PremiumDialogs.builder(host).setTitle(title).setView(scroll)
@@ -171,6 +206,7 @@ final class DriverLocationProposal {
                     .setPositiveButton("stop".equals(kind)?"Kirim usulan":"Simpan lokasi",null).create();
             dialog.setOnDismissListener(ignored->{
                 cancelGps();
+                cancelAddressLookup();
                 mapView.onPause();mapView.onStop();mapView.onDestroy();
                 map=null;
             });
@@ -192,13 +228,19 @@ final class DriverLocationProposal {
             map.moveCamera(CameraUpdateFactory.newLatLngZoom(initial,16f));
             map.setOnCameraMoveStartedListener(reason->{
                 cameraMoving=true;
+                cancelAddressLookup();
+                addressPreview.setVisibility(TextView.GONE);
                 if(reason==GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE){
                     cancelGps();
                     status.setText("Geser peta untuk menyesuaikan titik.");
                 }
                 controls();
             });
-            map.setOnCameraIdleListener(()->{cameraMoving=false;controls();});
+            map.setOnCameraIdleListener(() -> {
+                cameraMoving = false;
+                if (!busy) lookupAddress(map.getCameraPosition().target);
+                controls();
+            });
             controls();
         }
 
@@ -207,7 +249,70 @@ final class DriverLocationProposal {
         private void controls() {
             gps.setEnabled(!busy && map!=null && gpsRequest==null);
             save.setEnabled(!busy && map!=null && !cameraMoving && gpsRequest==null
-                    && !initial.equals(map.getCameraPosition().target));
+                    && !initial.equals(map.getCameraPosition().target)
+                    && (!addressLoading || !address.getText().toString().trim().isEmpty()));
+        }
+
+        private void cancelAddressLookup() {
+            ++addressVersion;
+            if (lookup != null) main.removeCallbacks(lookup);
+            lookup = null;
+            resolvedAddress = null;
+            addressPoint = null;
+            addressLoading = false;
+        }
+
+        private void lookupAddress(LatLng point) {
+            cancelAddressLookup();
+            if (initial.equals(point) || !NavigationTargetPolicy.valid(point.latitude, point.longitude)) return;
+            int version = addressVersion;
+            addressLoading = true;
+            addressPreview.setText("Mencari alamat titik pilihan…");
+            addressPreview.setVisibility(TextView.VISIBLE);
+            lookup = () -> {
+                boolean queued = DriverNetworkExecutor.execute(() -> {
+                    AddressLabel found = reverseAddress(point, true);
+                    main.post(() -> showAddress(version, point, found));
+                });
+                if (!queued) showAddress(version, point, new AddressLabel("", false));
+            };
+            main.postDelayed(lookup, 450);
+        }
+
+        private void showAddress(int version, LatLng point, AddressLabel found) {
+            if (version != addressVersion || !alive() || map == null
+                    || !point.equals(map.getCameraPosition().target)) return;
+            resolvedAddress = found;
+            addressPoint = point;
+            addressLoading = false;
+            addressPreview.setText(found.text.isEmpty() ? "Alamat jalan belum ditemukan. Tambahkan patokan jika ada."
+                    : found.google ? "Google Maps · " + found.text : found.text);
+            controls();
+        }
+
+        private AddressLabel reverseAddress(LatLng point, boolean preview) {
+            DriverApiClient client = new DriverApiClient(session);
+            try {
+                JSONObject query = new JSONObject().put("latitude", point.latitude)
+                        .put("longitude", point.longitude).put("google_preview", preview);
+                JSONObject response = client.post("driver_reverse_geocode.php", query).body;
+                String label = compactAddress(response.optString("address"));
+                if (!label.isEmpty()) return new AddressLabel(label, "google".equals(response.optString("provider")));
+            } catch (Exception ignored) {
+                // Devices with an Android geocoder can still resolve the selected coordinates.
+            } finally {
+                client.shutdown();
+            }
+            try {
+                if (Geocoder.isPresent()) {
+                    List<Address> matches = new Geocoder(host, new Locale("id", "ID"))
+                            .getFromLocation(point.latitude, point.longitude, 1);
+                    if (matches != null && !matches.isEmpty()) {
+                        return new AddressLabel(compactAddress(matches.get(0).getAddressLine(0)), false);
+                    }
+                }
+            } catch (Exception ignored) {}
+            return new AddressLabel("", false);
         }
 
         private void cancelGps() {
@@ -267,7 +372,7 @@ final class DriverLocationProposal {
             LatLng point=map.getCameraPosition().target;
             if(point.equals(initial)||!NavigationTargetPolicy.valid(point.latitude,point.longitude))return;
             String typed=address.getText().toString().trim();
-            String label=typed.isEmpty()?String.format(Locale.US,"%.6f, %.6f",point.latitude,point.longitude):typed;
+            AddressLabel current = point.equals(addressPoint) ? resolvedAddress : null;
             busy=true;
             map.getUiSettings().setAllGesturesEnabled(false);
             dialog.setCancelable(false);
@@ -276,11 +381,19 @@ final class DriverLocationProposal {
             controls();
             if(!DriverNetworkExecutor.executeOrderAction(()->{
                 try{
+                    String label = typed;
+                    if (label.isEmpty()) {
+                        // The Google label is a live preview. Resolve the shared order label independently.
+                        label = current == null || current.google
+                                ? reverseAddress(point, false).text : current.text;
+                        if (label.isEmpty()) label = "pickup".equals(kind) ? "Titik jemput di peta"
+                                : "stop".equals(kind) ? "Titik singgah di peta" : "Titik tujuan di peta";
+                    }
                     JSONObject request=new JSONObject().put("order_id",NavigationTargetPolicy.id(order))
                             .put("source",NavigationTargetPolicy.source(order))
                             .put("point",kind).put("latitude",point.latitude).put("longitude",point.longitude)
                             .put("address",label);
-                    com.transiva.app.driver.data.DriverApiClient client=new com.transiva.app.driver.data.DriverApiClient(session);
+                    DriverApiClient client = new DriverApiClient(session);
                     JSONObject response;
                     try{response=client.post("driver_propose_location.php",request).body;}
                     finally{client.shutdown();}
@@ -304,6 +417,30 @@ final class DriverLocationProposal {
             status.setText(error==null?"Lokasi belum tersimpan. Coba lagi.":error);
             controls();
         }
+    }
+
+    private static final class AddressLabel {
+        final String text;
+        final boolean google;
+
+        AddressLabel(String text, boolean google) {
+            this.text = text;
+            this.google = google;
+        }
+    }
+
+    static String compactAddress(String address) {
+        if (address == null) return "";
+        LinkedHashSet<String> parts = new LinkedHashSet<>();
+        for (String raw : address.split(",")) {
+            String part = raw.trim().replaceFirst("\\s+[0-9]{5}$", "");
+            if (part.isEmpty() || part.equalsIgnoreCase("Indonesia") || part.matches("[0-9]{5}")) continue;
+            parts.add(part);
+            if (parts.size() == 3) break;
+        }
+        String result = TextUtils.join(", ", parts);
+        int length = result.codePointCount(0, result.length());
+        return length <= 120 ? result : result.substring(0, result.offsetByCodePoints(0, 119)).trim() + "…";
     }
 
     private static void message(Activity activity,String message) {

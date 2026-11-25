@@ -63,7 +63,7 @@ final class PremiumRideTripLayout {
         actionDock.setElevation(dp(7));
         actionDock.setClickable(true);
         actionDock.setBackground(round("#FFFFFF", dp(22)));
-        actionDock.setPadding(dp(9), dp(8), dp(9), dp(6));
+        actionDock.setPadding(dp(7), dp(6), dp(7), dp(5));
         FrameLayout.LayoutParams bottom = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
         bottom.setMargins(dp(10), 0, dp(10), dp(8));
         dockPanel = DriverResponsiveUi.mapPanelScroll(host, .45f);

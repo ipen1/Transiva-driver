@@ -174,7 +174,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         correctLocation.setVisibility(DriverLocationProposal.available(order)?View.VISIBLE:View.GONE);
         correctLocation.setOnClickListener(v->DriverLocationProposal.show(this,session,order,trustedArrivalFix(),false));
         if (tripDetailsScreen()) options.addView(correctLocation,btnLp(6));
-        else actionDock.addView(correctLocation,new LinearLayout.LayoutParams(-1,-2));
+        else if (!premiumRideTrip()) actionDock.addView(correctLocation,new LinearLayout.LayoutParams(-1,-2));
         Button addStop=outline("+ Singgah");
         addStop.setVisibility(DriverLocationProposal.available(order) && "on_delivery".equals(status()) ? View.VISIBLE : View.GONE);
         addStop.setOnClickListener(v->DriverLocationProposal.show(this,session,order,trustedArrivalFix(),true));
@@ -260,19 +260,56 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
             c.removeView(quick);
             quick.removeView(nav);
             quick.addView(nav, 0, new LinearLayout.LayoutParams(0, -2, 1));
-            LinearLayout.LayoutParams contact = (LinearLayout.LayoutParams) customerChatBtn.getLayoutParams();
-            contact.setMarginStart(dp(7));
-            customerChatBtn.setBackground(DriverNavigationUi.roundRect(DriverThemeTokens.surfaceAlt(this), dp(16)));
-            nav.setBackground(DriverNavigationUi.roundRect(android.graphics.Color.rgb(0, 93, 222), dp(16)));
+            if (correctLocation.getVisibility() == View.VISIBLE) {
+                quick.addView(correctLocation, new LinearLayout.LayoutParams(0, -2, 1));
+            }
+            for (int index = 0; index < quick.getChildCount(); index++) {
+                Button button = (Button) quick.getChildAt(index);
+                int icon = button == nav ? R.drawable.ic_food_navigation
+                        : button == customerChatBtn ? R.drawable.ic_food_chat
+                        : button == correctLocation ? R.drawable.ic_trip_correct_location
+                        : isFoodOrder() ? R.drawable.ic_food_merchant : android.R.drawable.ic_menu_agenda;
+                styleDockAction(button, icon, button == nav);
+                LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) button.getLayoutParams();
+                params.height = LinearLayout.LayoutParams.MATCH_PARENT;
+                params.setMarginStart(index == 0 ? 0 : dp(5));
+            }
             actionDock.addView(quick, 0, new LinearLayout.LayoutParams(-1, -2));
             dockHint.setGravity(Gravity.CENTER);
-            dockHint.setPadding(0, dp(3), 0, dp(1));
+            dockHint.setTextSize(11);
+            dockHint.setPadding(0, dp(2), 0, 0);
             header.removeView(more);
             options.setVisibility(View.VISIBLE);
         }
         c.addView(options);
         add(c,0,0,0,dp(10));
     }
+    private void styleDockAction(Button button, int icon, boolean primaryAction) {
+        int accent = primaryAction ? android.graphics.Color.WHITE
+                : DriverThemeTokens.isDark(this) ? 0xffc4dfff : 0xff0b4d96;
+        int surface = primaryAction ? 0xff005dde : DriverThemeTokens.surfaceAlt(this);
+        GradientDrawable fill = DriverNavigationUi.roundRect(surface, dp(12));
+        if (!primaryAction) fill.setStroke(dp(1), DriverThemeTokens.border(this));
+        button.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(primaryAction ? 0x55ffffff : 0x30086bff),
+                fill, null));
+        button.setTextColor(accent);
+        button.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(accent));
+        button.setCompoundDrawablesRelativeWithIntrinsicBounds(0, icon, 0, 0);
+        button.setCompoundDrawablePadding(dp(1));
+        button.setGravity(Gravity.CENTER);
+        button.setIncludeFontPadding(false);
+        button.setTextSize(11);
+        button.setMaxLines(2);
+        button.setMinWidth(0);
+        button.setMinimumWidth(0);
+        button.setMinHeight(dp(48));
+        button.setMinimumHeight(dp(48));
+        button.setPadding(dp(3), dp(5), dp(3), dp(5));
+        button.setElevation(0);
+        button.setStateListAnimator(null);
+    }
+
     private void compactTripAction(Button button){
         button.setTextSize(12);
         button.setMaxLines(2);
@@ -284,7 +321,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
     }
     protected LinearLayout.LayoutParams slideLp(int top) {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(premiumRideTrip() ? 48 : 72));
-        p.setMargins(0, dp(premiumRideTrip() ? Math.max(6, top) : top), 0, 0);
+        p.setMargins(0, dp(premiumRideTrip() ? Math.max(4, top) : top), 0, 0);
         return p;
     }
 
