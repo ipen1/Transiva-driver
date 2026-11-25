@@ -219,7 +219,9 @@ jobs:
       - name: Prepare verified emulator SDK with bounded recovery
         run: python3 tools/ci/prepare_emulator_sdk.py
       - name: Run connected instrumentation tests
-        timeout-minutes: 30
+        id: runtime
+        continue-on-error: ${{ matrix.api-level == 24 }}
+        timeout-minutes: ${{ matrix.api-level == 24 && 23 || 30 }}
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, verified installer contract
         with:
           api-level: ${{ matrix.api-level }}
@@ -229,6 +231,39 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot -memory 3072
           script: bash tools/ci/run_android_runtime_tests.sh
+      - name: Check for the API 24 display service crash
+        id: runtime_crash
+        if: ${{ !cancelled() && matrix.api-level == 24 && steps.runtime.outcome == 'failure' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          results=app/build/outputs/androidTest-results/connected
+          if python3 tools/ci/android_runtime_result.py retryable-display-crash --results "$results" --logcat artifacts/android-runtime/logcat-live.txt; then
+            cp -a artifacts/android-runtime artifacts/android-api24-first-attempt
+            cp -a "$results" artifacts/android-api24-first-attempt/test-results
+            echo "retry=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Android 7.0 display service crashed. Running the full suite on a fresh emulator."
+          fi
+      - name: Repeat API 24 instrumentation after system crash
+        id: runtime_recovery
+        if: ${{ !cancelled() && steps.runtime_crash.outputs.retry == 'true' }}
+        timeout-minutes: 23
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 24
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          avd-name: transiva-api24-recovery
+          disable-animations: true
+          emulator-options: -no-window -gpu software -noaudio -no-boot-anim -camera-back none -no-snapshot -memory 3072
+          script: bash tools/ci/run_android_runtime_tests.sh
+      - name: Enforce API 24 instrumentation result
+        if: ${{ !cancelled() && matrix.api-level == 24 && steps.runtime.outcome == 'failure' && steps.runtime_recovery.outcome != 'success' }}
+        run: |
+          echo "::error::Android API 24 instrumentation did not complete successfully."
+          exit 1
+
       - name: Print instrumentation failure details
         if: failure()
         shell: bash
@@ -245,6 +280,7 @@ jobs:
           name: instrumentation-api-${{ matrix.api-level }}
           path: |
             artifacts/android-runtime/**
+            artifacts/android-api24-first-attempt/**
             app/build/reports/androidTests/connected/**
             app/build/outputs/androidTest-results/connected/**
           if-no-files-found: warn
