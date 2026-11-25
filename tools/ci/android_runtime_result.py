@@ -2,6 +2,7 @@
 """Classify infrastructure failures without converting unexecuted tests into a pass."""
 from pathlib import Path
 import argparse
+import re
 import xml.etree.ElementTree as ET
 
 
@@ -22,12 +23,11 @@ def results(directory):
                     failures+=1;details.append(f'{path}\n{case.get("classname","")}.{case.get("name","")}\n{node.get("message","")}\n'+''.join(node.itertext()))
         for suite in root.iter('testsuite'):
             failures=max(failures,int(suite.get('failures','0'))+int(suite.get('errors','0')))
-        if not cases:
-            # UTP can put install/device failures in suite output instead of testcase failures.
-            for node in root.iter():
-                if node.tag in ('system-err','system-out','failure','error'):
-                    body=''.join(node.itertext()).strip()
-                    if body:details.append(f'{path}\n{node.tag}: {body}')
+        # UTP can report a device crash in suite stderr even after some tests ran.
+        for node in root.iter():
+            if node.tag == 'system-err' or (not cases and node.tag in ('system-out','failure','error')):
+                body=''.join(node.itertext()).strip()
+                if body:details.append(f'{path}\n{node.tag}: {body}')
     return dict(files=len(files),tests=tests,failures=failures,unreadable=unreadable,details=details)
 
 
@@ -41,10 +41,43 @@ def retryable_install_timeout(directory,log):
             and ('Finished 0 tests' in text or 'Total tests 0' in text))
 
 
+def retryable_display_crash(directory, logcat):
+    files = sorted(Path(directory).rglob('*.xml'))
+    if not files:
+        return False
+    crashed = False
+    try:
+        for path in files:
+            root = ET.parse(path).getroot()
+            for node in root.iter():
+                text = ''.join(node.itertext()).strip() if node.tag in ('failure', 'error', 'system-err') else ''
+                if node.tag in ('failure', 'error') and (
+                    node.get('message', '').strip() or node.get('type', '').strip() or text
+                ):
+                    return False
+                if node.tag == 'system-err':
+                    ending = re.search(r'Test run failed to complete\. Expected (\d+) tests, received (\d+)\. System has crashed\.', text)
+                    if ending and int(ending[2]) < int(ending[1]):
+                        crashed = True
+        if not crashed:
+            return False
+        text = Path(logcat).read_text(encoding='utf-8', errors='replace')
+    except (ET.ParseError, OSError):
+        return False
+    # Match the fatal signal and Android tombstone to the same system_server PID.
+    signals = set(re.findall(r'^\S+\s+\S+\s+(\d+)\s+\d+\s+F libc\s*:\s*Fatal signal 11 \(SIGSEGV\).*\(android\.display\)', text, re.M))
+    tombstones = set(re.findall(r'pid:\s*(\d+),\s*tid:\s*\d+,\s*name:\s*android\.display\s+>>> system_server <<<', text))
+    return bool(signals & tombstones)
+
+
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('mode',choices=['report','retryable','require-tests'])
+    parser=argparse.ArgumentParser();parser.add_argument('mode',choices=['report','retryable','retryable-display-crash','require-tests'])
     parser.add_argument('--results',default='app/build/outputs/androidTest-results/connected')
-    parser.add_argument('--log');args=parser.parse_args()
+    parser.add_argument('--log')
+    parser.add_argument('--logcat')
+    args=parser.parse_args()
+    if args.mode=='retryable-display-crash':
+        return 0 if args.logcat and retryable_display_crash(args.results,args.logcat) else 1
     if args.mode=='retryable':return 0 if args.log and retryable_install_timeout(args.results,args.log) else 1
     r=results(args.results)
     for text in r['unreadable']+r['details']:print(text)

@@ -41,6 +41,44 @@ class RuntimeResultsTest(unittest.TestCase):
         self.xml('<testsuite tests="0" errors="1"/>');self.assertFalse(module.retryable_install_timeout(self.reports,self.log))
 
 
+class DisplayCrashTest(unittest.TestCase):
+    crash_xml = (
+        '<testsuite tests="3" failures="1"><testcase name="interrupted"><failure/></testcase>'
+        '<system-err>Test run failed to complete. Expected 17 tests, received 2. System has crashed.'
+        '</system-err></testsuite>'
+    )
+    crash_log = (
+        '11-25 00:39:22.723  1675  1696 F libc    : Fatal signal 11 (SIGSEGV), code 1 in tid 1696 (android.display)\n'
+        '11-25 00:39:22.781  4440  4440 F DEBUG   : pid: 1675, tid: 1696, name: android.display  >>> system_server <<<\n'
+    )
+
+    def classify(self, xml, log):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'TEST.xml').write_text(xml)
+            logcat = root / 'logcat.txt'
+            logcat.write_text(log)
+            return module.retryable_display_crash(root, logcat)
+
+    def test_interrupted_suite_and_matching_system_server_tombstone_are_retryable(self):
+        self.assertTrue(self.classify(self.crash_xml, self.crash_log))
+
+    def test_report_includes_crash_after_some_tests_ran(self):
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / 'TEST.xml').write_text(self.crash_xml)
+            self.assertIn('System has crashed', '\n'.join(module.results(directory)['details']))
+
+    def test_assertion_failures_are_not_retried(self):
+        failed = self.crash_xml.replace('<failure/>', '<failure message="expected 24">AssertionError</failure>')
+        self.assertFalse(self.classify(failed, self.crash_log))
+
+    def test_missing_or_unrelated_system_server_crash_does_not_retry(self):
+        different_pid = self.crash_log.replace('pid: 1675', 'pid: 1676')
+        self.assertFalse(self.classify(self.crash_xml, different_pid))
+        self.assertFalse(self.classify(self.crash_xml, ''))
+        self.assertFalse(self.classify(FAIL, self.crash_log))
+
+
 class RuntimeShellTest(unittest.TestCase):
     def run_scenario(self,scenario,health='ok',stale=False):
         with tempfile.TemporaryDirectory() as folder:
