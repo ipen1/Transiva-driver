@@ -90,6 +90,8 @@ abstract class TransivaFirebaseServiceLayer2 extends TransivaFirebaseServiceLaye
             Map<String, String> data
     ) {
         if ("transsend_contact".equals(type) && data != null) {
+            String simpelContact = DashboardOfferForeground.simpelContactId(data);
+            if (!simpelContact.isEmpty()) return DashboardOfferForeground.simpelIntent(this, simpelContact);
             if ("transsend_ordered".equals(data.get("event"))) {
                 return new Intent(this, DriverDashboardActivity.class).putExtra("from_fcm", true)
                         .putExtra("simpel_assigned_id", first(data.get("order_db_id"), orderId));

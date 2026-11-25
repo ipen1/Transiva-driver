@@ -206,14 +206,18 @@ public final class DriverTransSendContactsActivity extends Activity {
     }
 
     private void openChat(JSONObject entry) {
-        startActivity(new Intent(this, DriverChatRoomActivity.class)
+        startActivity(chatIntent(this, entry));
+    }
+
+    static Intent chatIntent(android.content.Context context, JSONObject entry) {
+        return new Intent(context, DriverChatRoomActivity.class)
                 .putExtra("order_source", "pickup_orders")
                 .putExtra("order_type", "trans_simpel".equals(entry.optString("service")) ? "Trans Simpel" : "TransSend")
                 .putExtra("order_status", "contact_accepted")
                 .putExtra("order_id", entry.optString("order_id"))
                 .putExtra("room_id", entry.optString("room_id"))
                 .putExtra("participant_name", entry.optString("peer_name"))
-                .putExtra("participant_photo", entry.optString("peer_photo")));
+                .putExtra("participant_photo", entry.optString("peer_photo"));
     }
 
     private void failure(String message) {

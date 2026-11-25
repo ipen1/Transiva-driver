@@ -39,6 +39,7 @@ final class DashboardMapPanel {
     private final MapView mapView;
     private final TextView status;
     private final DriverUiScope queueScope;
+    private final DashboardSimpelRequests simpelRequests;
     private android.app.AlertDialog queueDialog;
     private final ScrollView offers;
     private final LinearLayout popup;
@@ -126,6 +127,8 @@ final class DashboardMapPanel {
         offers.setVerticalScrollBarEnabled(false);
         offers.addView(host.orderSections, new ScrollView.LayoutParams(-1, -2));
         popup.addView(offers, new LinearLayout.LayoutParams(-1, -2));
+        simpelRequests = new DashboardSimpelRequests(host, queueScope, () -> syncPins(false));
+        popup.addView(simpelRequests.view(), new LinearLayout.LayoutParams(-1, -2));
         acceptDock = new FrameLayout(host);
         acceptDock.setVisibility(View.GONE);
         popup.addView(acceptDock, new LinearLayout.LayoutParams(-1, -2));
@@ -257,11 +260,12 @@ final class DashboardMapPanel {
 
     void present(DriverDashboardState snapshot) {
         state = snapshot;
+        simpelRequests.setOnline(snapshot.online);
         status.setText(snapshot.online ? "● Online" : "● Offline");
         status.setTextColor(snapshot.online
                 ? (DriverThemeTokens.isDark(host) ? 0xFF86EFAC : 0xFF08774F)
                 : DriverThemeTokens.textSecondary(host));
-        boolean visible = host.orderSections.getVisibility() == View.VISIBLE;
+        boolean visible = host.orderSections.getVisibility() == View.VISIBLE || !simpelRequests.keys().isEmpty();
         boolean wasVisible = popup.getVisibility() == View.VISIBLE;
         popup.setVisibility(visible ? View.VISIBLE : View.GONE);
         if (visible && !wasVisible && !DevicePerformanceProfile.get(host).reduceMapMotion) {
@@ -280,6 +284,10 @@ final class DashboardMapPanel {
 
     void requestedOffer(Intent intent) {
         if (intent == null) return;
+        if (intent.hasExtra(DashboardOfferForeground.SIMPEL_REQUEST)) {
+            simpelRequests.focus(intent);
+            return;
+        }
         requestedId = textExtra(intent, "order_db_id");
         if (requestedId.isEmpty()) requestedId = textExtra(intent, "order_id");
         requestedToken = textExtra(intent, "dashboard_offer_token");
@@ -308,11 +316,24 @@ final class DashboardMapPanel {
         }
         if (!preferred.isEmpty()) { requestedId = ""; requestedToken = ""; }
         java.util.List<String> nextKeys = new java.util.ArrayList<>(live.keySet());
+        if (state.online) {
+            String contactFocus = simpelRequests.preferredKey();
+            if (preferred.isEmpty()) preferred = contactFocus;
+            nextKeys.addAll(simpelRequests.keys());
+        }
         boolean newOffer = !liveKeys.containsAll(nextKeys);
+        if (preferred.isEmpty() && simpelRequests.contains(focusedOffer)) {
+            for (String orderKey : live.keySet()) {
+                if (!liveKeys.contains(orderKey)) {
+                    preferred = orderKey;
+                    break;
+                }
+            }
+        }
         liveKeys = nextKeys;
         boolean activeShown = ACTIVE.equals(focusedOffer) && host.activeBox.getChildCount() > 0 && !newOffer;
-        String next = !preferred.isEmpty() ? preferred : activeShown || live.containsKey(focusedOffer) ? focusedOffer
-                : live.isEmpty() ? "" : live.keySet().iterator().next();
+        String next = !preferred.isEmpty() ? preferred : activeShown || liveKeys.contains(focusedOffer) ? focusedOffer
+                : liveKeys.isEmpty() ? "" : liveKeys.get(0);
         boolean changed = !next.equals(focusedOffer);
         assignedPickups.clear();
         String assignment = "";
@@ -333,17 +354,27 @@ final class DashboardMapPanel {
         }
         assignedFocus = assignment;
         if (map != null) {
+            Map<String, LatLng> points = new LinkedHashMap<>();
+            for (Map.Entry<String, DriverOrder> entry : live.entrySet()) {
+                LatLng point = pickup(entry.getValue().raw);
+                if (point != null) points.put(entry.getKey(), point);
+            }
+            if (state.online) for (String key : simpelRequests.keys()) {
+                org.json.JSONObject point = simpelRequests.point(key);
+                if (point == null) continue;
+                double lat = point.optDouble("lat", Double.NaN);
+                double lng = point.optDouble("lng", Double.NaN);
+                if (NavigationTargetPolicy.valid(lat, lng)) points.put(key, new LatLng(lat, lng));
+            }
             pins.entrySet().removeIf(entry -> {
-                if (live.containsKey(entry.getKey())) return false;
+                if (points.containsKey(entry.getKey())) return false;
                 entry.getValue().remove();
                 return true;
             });
-            for (Map.Entry<String, DriverOrder> entry : live.entrySet()) {
-                LatLng point = pickup(entry.getValue().raw);
+            for (Map.Entry<String, LatLng> entry : points.entrySet()) {
+                LatLng point = entry.getValue();
                 Pin pin = pins.get(entry.getKey());
-                if (point == null) {
-                    if (pin != null) { pin.remove(); pins.remove(entry.getKey()); }
-                } else if (pin == null) {
+                if (pin == null) {
                     Pin created = new Pin(point, entry.getKey());
                     if (created.marker != null) pins.put(entry.getKey(), created);
                     else created.remove();
@@ -381,6 +412,9 @@ final class DashboardMapPanel {
         boolean changed = !key.equals(focusedOffer);
         if (changed) restoreAction();
         focusedOffer = key;
+        boolean requestVisible = simpelRequests.contains(key);
+        simpelRequests.show(requestVisible ? key : "");
+        offers.setVisibility(requestVisible ? View.GONE : View.VISIBLE);
         View selectedAction = null;
         for (int i = 0; i < host.offerBox.getChildCount(); i++) {
             View card = host.offerBox.getChildAt(i);
@@ -393,6 +427,7 @@ final class DashboardMapPanel {
         }
         boolean activeShown = key.isEmpty() || ACTIVE.equals(key);
         boolean hasActive = host.activeBox.getChildCount() > 0;
+        if (requestVisible) acceptDock.removeAllViews();
         host.activeBox.setVisibility(activeShown ? View.VISIBLE : View.GONE);
         tabs.setVisibility(!liveKeys.isEmpty() && (hasActive || liveKeys.size() > 1) ? View.VISIBLE : View.GONE);
         activeTab.setVisibility(hasActive ? View.VISIBLE : View.GONE);
@@ -441,12 +476,18 @@ final class DashboardMapPanel {
     }
 
     void expire() {
-        if (liveKeys.stream().anyMatch(key -> host.offerCountdownController.remainingMillis(key) <= 0)) syncPins(false);
+        simpelRequests.tick();
+        if (liveKeys.stream().anyMatch(key -> !simpelRequests.contains(key)
+                && host.offerCountdownController.remainingMillis(key) <= 0)) syncPins(false);
     }
 
     private void limitPopup() {
         int available = page.getHeight();
         if (available <= 0) return;
+        if (offers.getVisibility() == View.GONE) {
+            updateMapPadding();
+            return;
+        }
         int cap = Math.max(dp(85), Math.round(available * .54f) - (acceptDock.getVisibility() == View.VISIBLE ? dp(51) : 0)
                 - (tabs.getVisibility() == View.VISIBLE ? dp(44) : 0));
         offers.measure(View.MeasureSpec.makeMeasureSpec(Math.max(0, page.getWidth() - dp(20)), View.MeasureSpec.EXACTLY),
@@ -518,12 +559,14 @@ final class DashboardMapPanel {
     void resume() {
         mapView.onResume();
         resumed = true;
+        simpelRequests.resume();
         enableLocation();
         centerDriver(false);
         updatePulse();
     }
     void pause() {
         resumed = false;
+        simpelRequests.pause();
         if (locateRequest != null) locateRequest.cancel();
         updatePulse();
         mapView.onPause();
@@ -533,6 +576,7 @@ final class DashboardMapPanel {
     void save(Bundle out) { Bundle mapState = new Bundle(); mapView.onSaveInstanceState(mapState); out.putBundle("dashboard_map", mapState); }
     void destroy() {
         if (queueDialog!=null) queueDialog.dismiss();
+        simpelRequests.pause();
         queueScope.close();
         destroyed = true;
         if (pulse != null) pulse.cancel();
@@ -574,7 +618,8 @@ final class DashboardMapPanel {
             frame(0f);
             boolean assigned = assignedPickups.containsKey(key);
             marker = map.addMarker(new MarkerOptions().position(point)
-                    .title(assigned ? "Jemput pesanan Trans Simpel" : "Titik jemput")
+                    .title(assigned ? "Jemput pesanan Trans Simpel"
+                            : simpelRequests.contains(key) ? "Jemput · Permintaan Trans Simpel" : "Titik jemput")
                     .icon(BitmapDescriptorFactory.defaultMarker(assigned
                             ? BitmapDescriptorFactory.HUE_AZURE : BitmapDescriptorFactory.HUE_ORANGE)).zIndex(6));
             if (marker != null) marker.setTag(key);

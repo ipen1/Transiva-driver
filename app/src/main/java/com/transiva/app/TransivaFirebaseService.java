@@ -259,6 +259,13 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
         }
 
         if (isNewIncomingOrder(type, data)) DashboardOfferForeground.maybeOpen(this, orderId, data);
+        String simpelContact = DashboardOfferForeground.simpelContactId(data);
+        if (!simpelContact.isEmpty()) {
+            Intent request = new Intent(DashboardOfferForeground.ACTION_SIMPEL_REQUEST).setPackage(getPackageName())
+                    .putExtra(DashboardOfferForeground.SIMPEL_REQUEST, simpelContact);
+            sendBroadcast(request);
+            DashboardOfferForeground.maybeOpenSimpel(this, simpelContact);
+        }
         publishBubbleEvent(type, title, body, orderId, roomId, data);
 
         showNotification(
@@ -354,7 +361,8 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
         );
 
         boolean newIncomingOrder = isNewIncomingOrder(type, data);
-        String channelId = newIncomingOrder ? CH_NEW_ORDER : channelForType(type);
+        boolean simpelRequest = !DashboardOfferForeground.simpelContactId(data).isEmpty();
+        String channelId = newIncomingOrder || simpelRequest ? CH_NEW_ORDER : channelForType(type);
 
         Intent intent = buildOpenIntent(
                 type,
@@ -434,7 +442,7 @@ public class TransivaFirebaseService extends TransivaFirebaseServiceLayer2 {
         boolean merchantDriverChatNotification = isMerchantDriverChat(type, data);
         if (merchantDriverChatNotification) builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE);
 
-        if (newIncomingOrder) {
+        if (newIncomingOrder || simpelRequest) {
             builder.setTimeoutAfter(Math.max(1,PushExpiryPolicy.remainingMillis(data,System.currentTimeMillis(),false)));
             // Android 8+ mengambil suara dari NotificationChannel.
             // Android 7 dan lebih lama mengambil suara langsung dari Builder.
