@@ -19,8 +19,8 @@ android {
         applicationId 'com.transiva.driver'
         minSdk 24
         targetSdk 36
-        versionCode 63
-        versionName '2.9.13'
+        versionCode 64
+        versionName '2.9.14'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
