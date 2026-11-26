@@ -78,7 +78,11 @@ public final class DriverTransSendContactsActivity extends Activity {
         super.onDestroy();
     }
 
-    private void refresh() { request("list", ""); }
+    private void refresh() {
+        String contact = getIntent().getStringExtra("open_contact");
+        if (TextUtils.isEmpty(contact)) request("list", "");
+        else request("get", contact);
+    }
 
     private void request(String action, String id) {
         if (!visible || busy || !scope.alive()) return;
@@ -92,12 +96,22 @@ public final class DriverTransSendContactsActivity extends Activity {
                     busy = false;
                     if (!visible) return;
                     if (!reply.optBoolean("success")) {
+                        if ("get".equals(action)) getIntent().removeExtra("open_contact");
                         failure(reply.optString("message", "Permintaan belum dapat dimuat."));
                     } else if ("list".equals(action)) {
                         render(reply.optJSONArray("contacts"));
+                    } else if ("get".equals(action)) {
+                        getIntent().removeExtra("open_contact");
+                        JSONObject contact = reply.optJSONObject("contact");
+                        if (contact != null && hasChat(contact)) {
+                            openChat(contact);
+                            finish();
+                        } else {
+                            refresh();
+                        }
                     } else if ("accept".equals(action)) {
                         JSONObject contact = reply.optJSONObject("contact");
-                        if (contact != null && "accepted".equals(contact.optString("state"))) openChat(contact);
+                        if (contact != null && hasChat(contact)) openChat(contact);
                         else failure("Permintaan sudah berubah. Perbarui daftar.");
                     } else {
                         refresh();
@@ -126,7 +140,7 @@ public final class DriverTransSendContactsActivity extends Activity {
             else ordered.add(item);
         }
         for (JSONObject entry:ordered) {
-            boolean accepted = "accepted".equals(entry.optString("state"));
+            boolean accepted = hasChat(entry);
             String name = entry.optString("peer_name", "Customer");
             String service = "trans_simpel".equals(entry.optString("service")) ? "Trans Simpel" : "TransSend";
             LinearLayout card=new LinearLayout(this);
@@ -207,6 +221,11 @@ public final class DriverTransSendContactsActivity extends Activity {
 
     private void openChat(JSONObject entry) {
         startActivity(chatIntent(this, entry));
+    }
+
+    static boolean hasChat(JSONObject entry) {
+        String state = entry.optString("state");
+        return ("accepted".equals(state) || "ordered".equals(state)) && !entry.optString("room_id").isEmpty();
     }
 
     static Intent chatIntent(android.content.Context context, JSONObject entry) {

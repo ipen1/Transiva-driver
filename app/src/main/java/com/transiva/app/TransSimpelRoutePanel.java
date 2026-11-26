@@ -35,6 +35,9 @@ final class TransSimpelRoutePanel {
     private final android.widget.ScrollView routeScroll;
     private final LinearLayout fareRow;
     private final Button stop;
+    private final Button navigation, tripAction;
+    private final TripLocationController tripLocation;
+    private android.location.Location lastFix;
     private final Button clearStop;
     private final Button quoteRetry;
     private final Button briefButton;
@@ -68,6 +71,10 @@ final class TransSimpelRoutePanel {
 
     TransSimpelRoutePanel(Activity activity, String id) {
         this.activity = activity;
+        tripLocation=new TripLocationController(activity,new TripLocationController.Callback() {
+            @Override public void onLocation(android.location.Location fix) { lastFix=fix; }
+            @Override public void onPermissionRequired() { }
+        });
         this.id = id;
         network = new DriverUiScope(activity);
         session = new SessionManager(activity);
@@ -148,6 +155,12 @@ final class TransSimpelRoutePanel {
             calculateIfReady();
         });
         view.addView(quoteRetry,new LinearLayout.LayoutParams(-1,dp(44)));
+        navigation=button("Navigasi",this::openNavigation);
+        tripAction=button("Perbarui perjalanan",this::advanceTrip);
+        for (Button control:new Button[]{navigation,tripAction}) {
+            control.setVisibility(View.GONE);
+            view.addView(control,new LinearLayout.LayoutParams(-1,-2));
+        }
     }
 
     static String contactId(String orderId,String roomId) {
@@ -171,6 +184,8 @@ final class TransSimpelRoutePanel {
     }
 
     void pause() {
+        tripLocation.stop();
+        lastFix=null;
         if (active && mapView!=null) mapView.onPause();
         active=false;
         main.removeCallbacks(poll);
@@ -330,7 +345,7 @@ final class TransSimpelRoutePanel {
         line.setBackground(surface("#F8FAFD","#E5ECF5"));
         line.setPadding(dp(6),dp(4),dp(4),dp(4));
         line.setOnClickListener(v->{
-            if (route!=null && "accepted".equals(route.optString("state"))
+            if (route!=null && canEditPoint("pickup".equals(key)?PICKUP:"stop".equals(key)?STOP:DELIVERY)
                     && !("pickup".equals(key) && "food".equals(kind()))) {
                 openPicker("pickup".equals(key)?PICKUP:"stop".equals(key)?STOP:DELIVERY);
                 return;
@@ -369,6 +384,13 @@ final class TransSimpelRoutePanel {
         String state=route.optString("state");
         boolean editable="accepted".equals(state);
         boolean ordered="ordered".equals(state);
+        boolean assigned=ordered && route.optBoolean("driver_has_order") && !tripEnded();
+        if (assigned && active) tripLocation.start();
+        else tripLocation.stop();
+        navigation.setVisibility(assigned?View.VISIBLE:View.GONE);
+        tripAction.setVisibility(assigned && !nextStep().isEmpty()?View.VISIBLE:View.GONE);
+        tripAction.setEnabled(!busy);
+        tripAction.setText(stepLabel());
         boolean waiting="waiting_driver".equals(state);
         routeScroll.setVisibility(editable || ordered || waiting ? View.VISIBLE : View.GONE);
         String phase=route.optString("order_status");
@@ -386,10 +408,11 @@ final class TransSimpelRoutePanel {
         briefButton.setText("shop".equals(kind())?"Daftar belanja  ›":"Tiva AI  ›");
         boolean food="food".equals(kind());
         boolean send="send".equals(kind());
-        stop.setVisibility(editable && (kind().isEmpty() || "ride".equals(kind()))?View.VISIBLE:View.GONE);
-        stop.setEnabled(editable);
+        stop.setVisibility((editable && (kind().isEmpty() || "ride".equals(kind())) ||
+                assigned && canEditPoint(STOP))?View.VISIBLE:View.GONE);
+        stop.setEnabled(!busy);
         boolean hasStop=route.optJSONObject("stop")!=null;
-        stop.setText(hasStop?"Singgah":"+ Singgah");
+        stop.setText(ordered?"+ Ajukan singgah":hasStop?"Singgah":"+ Singgah");
         stop.setContentDescription(hasStop?"Ubah titik singgah":"Tambah titik singgah opsional");
         clearStop.setVisibility(editable && hasStop?View.VISIBLE:View.GONE);
         clearStop.setEnabled(!busy);
@@ -443,7 +466,7 @@ final class TransSimpelRoutePanel {
     }
 
     private void openPicker(int which) {
-        if (route==null || !"accepted".equals(route.optString("state"))) return;
+        if (route==null || !canEditPoint(which)) return;
         String field=field(which);
         pickerRevision=route.optInt("revision");
         previous=route.optJSONObject(field);
@@ -473,7 +496,13 @@ final class TransSimpelRoutePanel {
                     .put("location",new JSONObject().put("lat",data.getDoubleExtra("lat",0))
                             .put("lng",data.getDoubleExtra("lng",0)).put("address",data.getStringExtra("address")));
             pickerRevision=-1;
-            if (busy) queuedPoint=payload;
+            if ("ordered".equals(route.optString("state"))) {
+                JSONObject location=payload.getJSONObject("location");
+                send("propose",new JSONObject().put("source",route.optString("source"))
+                        .put("order_id",route.optString("order_id")).put("point",field(request))
+                        .put("latitude",location.optDouble("lat")).put("longitude",location.optDouble("lng"))
+                        .put("address",location.optString("address")));
+            } else if (busy) queuedPoint=payload;
             else send("set",payload);
         } catch (Exception error) { notice("Titik belum dapat disimpan."); }
         return true;
@@ -534,6 +563,10 @@ final class TransSimpelRoutePanel {
         if (updated!=null && (!wasReading || briefChanged || !sameSelection(updated,route))) render(updated);
         else if (!wasReading && route!=null) render(route);
         if (failure!=null && !"get".equals(action)) notice(failure);
+        if (reply!=null && ("trip".equals(action)||"propose".equals(action))) {
+            if (active) refresh();
+            return;
+        }
         if (queuedPoint!=null) {
             JSONObject point=queuedPoint;
             queuedPoint=null;
@@ -544,7 +577,7 @@ final class TransSimpelRoutePanel {
             calculateIfReady();
             if (!busy && (route==null || "accepted".equals(route.optString("state"))
                     || "waiting_driver".equals(route.optString("state"))
-                    || ("ordered".equals(route.optString("state")) && mapExpanded))) main.postDelayed(poll,5000);
+                    || ("ordered".equals(route.optString("state")) && !tripEnded()))) main.postDelayed(poll,5000);
         }
     }
 
@@ -556,7 +589,102 @@ final class TransSimpelRoutePanel {
         if (!activity.isFinishing()) Toast.makeText(activity,message,Toast.LENGTH_LONG).show();
     }
 
+    private boolean tripEnded() {
+        String phase=DriverOrderStateMachine.normalize(route.optString("order_status"));
+        return "finished".equals(phase)||"cancelled".equals(phase)||"canceled".equals(phase);
+    }
+
+    private boolean canEditPoint(int which) {
+        if ("accepted".equals(route.optString("state"))) return true;
+        if (!"ordered".equals(route.optString("state"))||!route.optBoolean("driver_has_order")) return false;
+        String phase=DriverOrderStateMachine.normalize(route.optString("order_status"));
+        return which==PICKUP?!"food".equals(kind()) && "taken".equals(phase):"on_delivery".equals(phase);
+    }
+
+    private JSONObject nextStop() {
+        JSONObject ecosystem=route.optJSONObject("ecosystem");
+        org.json.JSONArray stops=ecosystem==null?null:ecosystem.optJSONArray("waypoints");
+        for (int i=0;stops!=null && i<stops.length();i++) {
+            JSONObject point=stops.optJSONObject(i);
+            if (point!=null && !java.util.Arrays.asList("arrived","skipped","cancelled","canceled").contains(point.optString("status"))) return point;
+        }
+        return null;
+    }
+
+    private String nextStep() {
+        switch (DriverOrderStateMachine.normalize(route.optString("order_status"))) {
+            case "taken": return "arrived_pickup";
+            case "arrived_pickup": return "on_delivery";
+            case "on_delivery": return nextStop()==null?"arrived_delivery":"arrive_waypoint";
+            case "arrived_delivery": return route.optInt("customer_received")==1?"finished":"";
+            default:return "";
+        }
+    }
+
+    private String stepLabel() {
+        switch(nextStep()) {
+            case "arrived_pickup":return "Tiba di titik jemput";
+            case "on_delivery":return "Mulai pengantaran";
+            case "arrive_waypoint":return "Tiba di titik singgah";
+            case "arrived_delivery":return "Tiba di tujuan";
+            case "finished":return "Selesaikan pesanan";
+            default:return "";
+        }
+    }
+
+    private void advanceTrip() {
+        if (busy || route==null || !route.optBoolean("driver_has_order")) return;
+        String next=nextStep();
+        if (next.isEmpty()) return;
+        android.location.Location fix=TripArrivalLocation.verified(lastFix);
+        if (fix==null && next.startsWith("arriv")) { notice("Tunggu GPS akurat di titik perjalanan."); return; }
+        new android.app.AlertDialog.Builder(activity)
+                .setMessage(stepLabel()+"?").setNegativeButton("Kembali",null)
+                .setPositiveButton("Konfirmasi",(dialog,which)->{
+                    if (busy || !next.equals(nextStep())) return;
+                    try {
+                        JSONObject payload=new JSONObject().put("order_id",route.optString("order_id"))
+                                .put("id",route.optLong("order_db_id")).put("source",route.optString("source"))
+                                .put("driver",session.getUsername()).put("driver_username",session.getUsername())
+                                .put("status",next);
+                        if (fix!=null) payload.put("driver_lat",fix.getLatitude()).put("driver_lng",fix.getLongitude());
+                        if ("arrive_waypoint".equals(next)) payload.put("sequence",nextStop().optInt("sequence"));
+                        send("trip",payload);
+                    } catch (org.json.JSONException invalid) { notice("Status belum dapat disimpan."); }
+                }).show();
+    }
+
+    private void openNavigation() {
+        if (route==null || !route.optBoolean("driver_has_order")) return;
+        try {
+            JSONObject order=new JSONObject().put("id",route.optLong("order_db_id"))
+                    .put("order_id",route.optString("order_id")).put("source",route.optString("source"))
+                    .put("status",route.optString("order_status")).put("order_type",route.optString("order_type"))
+                    .put("driver_type","bike").put("customer_received",route.optInt("customer_received"))
+                    .put("ecosystem",route.opt("ecosystem"));
+            for (String key:new String[]{"pickup","delivery"}) {
+                JSONObject point=route.getJSONObject(key);
+                order.put(key+"_lat",point.optDouble("lat")).put(key+"_lng",point.optDouble("lng"))
+                        .put(key+"_address",point.optString("address"));
+            }
+            activity.startActivity(new Intent(activity,DriverNavigationActivity.class).putExtra("order_json",order.toString()));
+        } catch (Exception unavailable) { notice("Rute navigasi belum tersedia."); }
+    }
+
     private JSONObject request(JSONObject data) throws Exception {
+        String action=data.optString("action");
+        if ("propose".equals(action)) {
+            return DriverMessageApi.post(session,DriverApiConfig.BASE_URL+"driver_propose_location.php",data,network.owner);
+        }
+        if ("trip".equals(action)) {
+            String status=data.optString("status");
+            String endpoint=DriverOrderStateMachine.endpoint(status,"pickup_orders".equals(data.optString("source")));
+            if ("arrive_waypoint".equals(status)) {
+                endpoint="ride_ecosystem_order.php";
+                data.put("action","arrive_waypoint");
+            }
+            return DriverMessageApi.post(session,DriverApiConfig.BASE_URL+endpoint,data,network.owner);
+        }
         return DriverMessageApi.post(session,DriverApiConfig.BASE_URL+"trans_simpel.php",data,network.owner);
     }
     private boolean submit(Runnable work) { return network.execute(work); }

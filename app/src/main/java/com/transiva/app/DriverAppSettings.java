@@ -225,7 +225,7 @@ public final class DriverAppSettings {
         if (!dark || view == null) return;
 
         transformBackground(view, depth);
-        transformText(view);
+        DarkTextContrast.apply(view);
         transformControls(view);
 
         if (view instanceof ViewGroup) {
@@ -293,28 +293,6 @@ public final class DriverAppSettings {
             return DARK_BORDER;
         }
         return null;
-    }
-
-    private static void transformText(View view) {
-        if (!(view instanceof TextView)) return;
-
-        TextView text = (TextView) view;
-        int current = text.getCurrentTextColor();
-
-        // Tulisan putih di atas kartu biru tetap putih.
-        if (isNearWhite(current)) return;
-        if(Color.green(current)>110&&Color.green(current)>Color.red(current)*1.4f&&Color.green(current)>Color.blue(current)*1.2f)return;
-
-        if (isDarkText(current)) {
-            text.setTextColor(DARK_TEXT);
-        } else if (isMutedText(current)) {
-            text.setTextColor(DARK_MUTED);
-        }
-
-        if (text instanceof EditText) {
-            EditText edit = (EditText) text;
-            edit.setHintTextColor(Color.rgb(132, 153, 178));
-        }
     }
 
     private static void transformControls(View view) {

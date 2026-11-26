@@ -82,7 +82,8 @@ abstract class DriverProfileActivityLayer1 extends Activity {
         verificationBadge.setText(verificationLabel(verification));
         verificationBadge.setTextColor(Color.parseColor(verificationTextColor(verification)));
         verificationBadge.setBackground(round(verificationBackground(verification), 14));
-        driverTypeBadge.setText("Driver " + driverType);
+        String vehicleModel=profile.optString("vehicle_model").trim();
+        driverTypeBadge.setText(vehicleModel.isEmpty()?"Driver "+driverType:"Driver "+driverType+" · "+vehicleModel);
 
         emailValue.setText(first(profile.optString("email"), "-"));
         phoneValue.setText(first(profile.optString("phone"), "-"));

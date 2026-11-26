@@ -240,7 +240,7 @@ final class DashboardSimpelRequests {
             onChanged.run();
             JSONObject contact = reply.optJSONObject("contact");
             if (listening && "accept".equals(action) && contact != null
-                    && "accepted".equals(contact.optString("state")) && !contact.optString("room_id").isEmpty()) {
+                    && DriverTransSendContactsActivity.hasChat(contact)) {
                 host.startActivity(DriverTransSendContactsActivity.chatIntent(host, contact));
             }
         } else if (listening) {
