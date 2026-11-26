@@ -104,9 +104,11 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
     }
 
     private Button correctLocationButton;
+    private SmartWaitingSwitch waitingSwitch;
 
     @Override void onNavigationOrderSynced(JSONObject fresh) {
         if (arrival != null) arrival.synced(fresh);
+        if (waitingSwitch != null && fresh != null) waitingSwitch.bind(fresh.optJSONObject("smart_waiting"));
         if (correctLocationButton!=null) correctLocationButton.setVisibility(
                 DriverLocationProposal.available(fresh)?View.VISIBLE:View.GONE);
     }
@@ -290,6 +292,22 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
             correctLocationButton.setVisibility(DriverLocationProposal.available(order)?View.VISIBLE:View.GONE);
             correctLocationButton.setOnClickListener(v->DriverLocationProposal.show(this,session,order,lastLocation,false));
             bottomActions.addView(correctLocationButton,new LinearLayout.LayoutParams(-1,-2));
+            waitingSwitch=new SmartWaitingSwitch(this,()->TripActionSession.get(this,order).fix());
+            waitingSwitch.bind(order.optJSONObject("smart_waiting"));
+            waitingSwitch.setOnClickListener(v->{
+                TripActionSession shared=TripActionSession.get(this,order);
+                waitingSwitch.request(this,session,order,shared.fix(),(id,state)->{
+                    if (!id.equals(NavigationTargetPolicy.id(order))) return;
+                    try {
+                        order.put("smart_waiting",state);
+                        shared.synced(order);
+                    } catch (org.json.JSONException error) {
+                        NavigationDiagnostics.error(this,"NAV_WAITING_RESPONSE",error);
+                    }
+                    if (liveRoutes!=null) liveRoutes.refreshOrderState();
+                });
+            });
+            bottomActions.addView(waitingSwitch,new LinearLayout.LayoutParams(-1,-2));
             arrival = new NavigationArrivalController(this, bottomActions);
         }
         FrameLayout.LayoutParams bottomLp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);

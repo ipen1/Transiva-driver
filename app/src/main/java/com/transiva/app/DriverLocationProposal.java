@@ -220,6 +220,7 @@ final class DriverLocationProposal {
         }
 
         private void ready(GoogleMap google) {
+            DriverGoogleMapStyle.apply(host, google);
             if(!alive())return;
             map=google;
             map.getUiSettings().setMapToolbarEnabled(false);

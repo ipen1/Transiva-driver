@@ -240,6 +240,7 @@ final class DashboardMapPanel {
     }
 
     private void ready(GoogleMap value) {
+            DriverGoogleMapStyle.apply(host, value);
         if (destroyed || host.isFinishing()) return;
         map = value;
         map.getUiSettings().setMapToolbarEnabled(false);

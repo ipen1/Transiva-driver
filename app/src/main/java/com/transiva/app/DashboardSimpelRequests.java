@@ -33,6 +33,7 @@ final class DashboardSimpelRequests {
     private final Map<String, JSONObject> pending = new LinkedHashMap<>();
     private final LinearLayout card;
     private final TextView summary, pickup, countdown;
+    private final TextView shoppingNote;
     private final Button accept, reject;
     private String preferredId = "", selectedKey = "";
     private boolean listening, online, busy, refreshAgain;
@@ -65,6 +66,10 @@ final class DashboardSimpelRequests {
         pickup.setMaxLines(2);
         pickup.setEllipsize(android.text.TextUtils.TruncateAt.END);
         card.addView(pickup);
+        shoppingNote=host.text("",13,"#405975",false);
+        shoppingNote.setMaxLines(3);
+        shoppingNote.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        card.addView(shoppingNote);
         LinearLayout actions = new LinearLayout(host);
         LinearLayout.LayoutParams actionRow = new LinearLayout.LayoutParams(-1, host.dp(48));
         actionRow.topMargin = host.dp(7);
@@ -111,6 +116,9 @@ final class DashboardSimpelRequests {
                 + (title.isEmpty() ? "" : " · " + title));
         pickup.setVisibility(point == null ? View.GONE : View.VISIBLE);
         if (point != null) pickup.setText(point.optString("address"));
+        String detail=brief!=null && "shop".equals(brief.optString("kind"))?brief.optString("detail").trim():"";
+        shoppingNote.setVisibility(detail.isEmpty()?View.GONE:View.VISIBLE);
+        shoppingNote.setText(detail.isEmpty()?"":"Daftar belanja\n"+detail);
         renderCountdown();
     }
 

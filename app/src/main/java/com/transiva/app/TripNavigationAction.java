@@ -21,7 +21,7 @@ final class TripNavigationAction {
                 JSONObject payload = new JSONObject().put("id", id).put("order_id", publicId)
                         .put("source", source).put("order_kind", "pickup_orders".equals(source) ? "pickup" : "order")
                         .put("driver", host.username).put("driver_username", host.username)
-                        .put("status", action.next);
+                        .put("status", action.next).put("manual_waiting", true);
                 if (fix != null) payload.put("driver_lat", fix.getLatitude()).put("driver_lng", fix.getLongitude());
                 String endpoint = DriverOrderStateMachine.endpoint(action.next, "pickup_orders".equals(source));
                 if ("waypoint".equals(action.next)) {
@@ -37,6 +37,7 @@ final class TripNavigationAction {
                 if ("waypoint".equals(action.next)) {
                     if (result.optJSONObject("ecosystem") != null) updated.put("ecosystem", result.optJSONObject("ecosystem"));
                     else throw new java.io.IOException("Menunggu sinkronisasi persinggahan.");
+                    if (result.optJSONObject("smart_waiting") != null) updated.put("smart_waiting", result.optJSONObject("smart_waiting"));
                 } else if ("extension".equals(action.next)) {
                     updated = TripActionSession.merge(updated, client.post("driver_trip_realtime.php",
                             new JSONObject().put("order_id", publicId).put("order_db_id", id)).body.optJSONObject("order"));

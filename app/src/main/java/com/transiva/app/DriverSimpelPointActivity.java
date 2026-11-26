@@ -89,6 +89,7 @@ public final class DriverSimpelPointActivity extends android.app.Activity {
         boolean seeded=valid(lat,lng);
         LatLng seed=seeded?new LatLng(lat,lng):DEFAULT_CENTER;
         mapView.getMapAsync(map->{
+            DriverGoogleMapStyle.apply(this, map);
             if (isFinishing() || isDestroyed()) return;
             googleMap=map;
             map.getUiSettings().setMapToolbarEnabled(false);

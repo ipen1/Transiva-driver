@@ -619,7 +619,7 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         tripMutationStarted();waypointArrivalBusy=true;refreshButtons();if(progressBar!=null)progressBar.setVisibility(View.VISIBLE);
         boolean queued=tripRouteScope.execute(()->{
             try{
-                JSONObject body=new JSONObject().put("action","arrive_waypoint").put("source",isPickupOrder()?"pickup_orders":"orders").put("order_id",capturedOrder).put("sequence",sequence).put("driver_lat",fix.getLatitude()).put("driver_lng",fix.getLongitude());
+                JSONObject body=new JSONObject().put("action","arrive_waypoint").put("manual_waiting",true).put("source",isPickupOrder()?"pickup_orders":"orders").put("order_id",capturedOrder).put("sequence",sequence).put("driver_lat",fix.getLatitude()).put("driver_lng",fix.getLongitude());
                 JSONObject response=new com.transiva.app.driver.data.DriverApiClient(session).post("ride_ecosystem_order.php",body).body;
                 tripRouteScope.post(()->{
                     waypointArrivalBusy=false;if(progressBar!=null)progressBar.setVisibility(View.GONE);

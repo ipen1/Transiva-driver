@@ -74,6 +74,7 @@ final class TripDestinationExtensionController {
             public void afterTextChanged(android.text.Editable s){}
         });
         map.getMapAsync(g->{
+            DriverGoogleMapStyle.apply(host, g);
             if(!alive()||picker==null||generation!=pickerVersion)return;
             g.getUiSettings().setMapToolbarEnabled(false);
             g.setOnCameraMoveStartedListener(reason->{selectionVersion++;host.mainHandler.removeCallbacks(lookup);chosen[0]=null;address.setText("");location.setText("Geser peta untuk menentukan tujuan…");});
@@ -140,7 +141,7 @@ final class TripDestinationExtensionController {
         host.setLoading(true);
         boolean queued = DriverNetworkExecutor.executeOrderAction(() -> {
             try {
-                JSONObject q=new JSONObject().put("id",Integer.parseInt(host.internalId())).put("action",action).put("request_id",requestId);
+                JSONObject q=new JSONObject().put("id",Integer.parseInt(host.internalId())).put("action",action).put("manual_waiting",true).put("request_id",requestId);
                 if("arrive".equals(action))q.put("driver_lat",latitude).put("driver_lng",longitude);
                 JSONObject r=new com.transiva.app.driver.data.DriverApiClient(host.session).post("driver_destination_extension.php",q).body;
                 JSONObject fresh=null;

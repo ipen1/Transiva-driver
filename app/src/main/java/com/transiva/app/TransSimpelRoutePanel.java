@@ -197,6 +197,7 @@ final class TransSimpelRoutePanel {
         map.onStart();
         if(active)map.onResume();
         map.getMapAsync(google->{
+            DriverGoogleMapStyle.apply(activity, google);
             if(mapView!=map || activity.isFinishing() || activity.isDestroyed())return;
             googleMap=google;
             google.getUiSettings().setAllGesturesEnabled(false);
@@ -381,7 +382,8 @@ final class TransSimpelRoutePanel {
         mapToggle.setText(mapExpanded?"Tutup peta":"Tampil peta");
         if (canShowMap && mapExpanded) showMap();
         else removeMap();
-        briefButton.setVisibility(editable && tivaBrief!=null ? View.VISIBLE : View.GONE);
+        briefButton.setVisibility(tivaBrief!=null ? View.VISIBLE : View.GONE);
+        briefButton.setText("shop".equals(kind())?"Daftar belanja  ›":"Tiva AI  ›");
         boolean food="food".equals(kind());
         boolean send="send".equals(kind());
         stop.setVisibility(editable && (kind().isEmpty() || "ride".equals(kind()))?View.VISIBLE:View.GONE);
@@ -402,6 +404,12 @@ final class TransSimpelRoutePanel {
         boolean assistedPurchase=tivaBrief!=null
                 && "shop".equals(kind());
         purchaseHint.setVisibility(assistedPurchase?View.VISIBLE:View.GONE);
+        if (assistedPurchase) {
+            purchaseHint.setMaxLines(4);
+            purchaseHint.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            purchaseHint.setText("Daftar belanja\n"+tivaBrief.optString("detail"));
+            purchaseHint.setOnClickListener(v->TivaSimpelBrief.show(activity,tivaBrief));
+        }
         if (amount>0 && assistedPurchase) {
             summary.setText("Ongkir  Rp "+NumberFormat.getIntegerInstance(new Locale("id","ID")).format(amount)+" · Tunai");
         }

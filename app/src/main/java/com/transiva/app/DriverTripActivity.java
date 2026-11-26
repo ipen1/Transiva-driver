@@ -137,6 +137,28 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         if (changed) renderOrder();
     }
     private SmartWaitingTextView waitingView;
+    private SmartWaitingSwitch waitingSwitch;
+
+    private void bindWaiting(JSONObject state) {
+        if (waitingView!=null) waitingView.bind(state);
+        if (waitingSwitch!=null) waitingSwitch.bind(state);
+    }
+
+    private void setTripWaiting() {
+        tripMutationStarted();
+        waitingSwitch.request(this,session,order,trustedArrivalFix(),(id,state)->{
+            if (!id.equals(NavigationTargetPolicy.id(order))) return;
+            tripMutationStarted();
+            try {
+                order.put("smart_waiting",state);
+            } catch (org.json.JSONException error) {
+                NavigationDiagnostics.error(this,"TRIP_WAITING_RESPONSE",error);
+            }
+            bindWaiting(state);
+            saveActiveOrder();
+            tripNeedsSync();
+        });
+    }
     private String waitingActionKey(JSONObject snapshot){
         JSONObject waiting=snapshot.optJSONObject("smart_waiting"),active=waiting==null?null:waiting.optJSONObject("active");
         return active==null?"":active.optString("id")+"|"+active.optString("point_key");
@@ -167,7 +189,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
                         }
                         tripStateFresh=true;tripLastSync=android.os.SystemClock.elapsedRealtime();
                         if(pickup){
-                            order.put("smart_waiting",state);if(waitingView!=null)waitingView.bind(state);
+                            order.put("smart_waiting",state);bindWaiting(state);
                             if(fresh!=null){
                                 String signature=fresh.optString("status")+"|"+fresh.optString("assignment_version")+"|"+fresh.optInt("customer_received")+"|"+fresh.optString("price")+"|"+fresh.optString("price_change_status")+"|"+String.valueOf(fresh.optJSONObject("ecosystem"))+"|"+fresh.optString("pickup_lat")+"|"+fresh.optString("pickup_lng")+"|"+fresh.optString("delivery_lat")+"|"+fresh.optString("delivery_lng")+"|"+fresh.optString("destination_lat")+"|"+fresh.optString("destination_lng");
                                 if(!signature.equals(realtimeSignature)){realtimeSignature=signature;java.util.Iterator<String> fields=fresh.keys();while(fields.hasNext()){String field=fields.next();order.put(field,fresh.opt(field));}saveActiveOrder();renderOrder();refreshButtons();requestStableRoute(false);}
@@ -178,7 +200,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
                             String incoming=first(fresh.optString("order_id"),fresh.optString("id"));if(!key.equals(incoming)&&!internalId().equals(fresh.optString("id")))return;
                             JSONObject routeSnapshot=fresh.optJSONObject("server_route");
                             String signature=fresh.optString("status")+"|"+fresh.optString("assignment_version")+"|"+fresh.optString("customer_received")+"|"+fresh.optString("price")+"|"+NavigationTargetPolicy.revision(fresh)+"|"+fresh.optString("delivery_lat")+"|"+fresh.optString("delivery_lng")+"|"+String.valueOf(fresh.optJSONObject("ecosystem"))+"|"+String.valueOf(fresh.optJSONObject("destination_extension"))+"|"+String.valueOf(fresh.optJSONObject("extra_fare_request"))+"|"+fresh.optString("price_change_status")+"|"+waitingActionKey(fresh)+"|"+(routeSnapshot==null?"":routeSnapshot.optString("route_hash")+":"+routeSnapshot.optLong("version"))+(isFoodOrder()||DeliveryTripPresentation.special(order)?fresh.optString("note")+String.valueOf(fresh.optJSONObject("shopping_plan")):"");
-                            JSONObject waiting=fresh.optJSONObject("smart_waiting");order.put("smart_waiting",waiting);if(waitingView!=null)waitingView.bind(waiting);
+                            JSONObject waiting=fresh.optJSONObject("smart_waiting");order.put("smart_waiting",waiting);bindWaiting(waiting);
                             if(signature.equals(realtimeSignature)){refreshButtons();return;}realtimeSignature=signature;
                             order=fresh;saveActiveOrder();renderOrder();refreshButtons();requestStableRoute(false);
                             String next=status();if(NavigationTargetPolicy.terminal(order)){NavigationSessionStore.clear(this);NavigationGuidanceService.stop(this);DriverGuardianManager.invalidate(this);}
@@ -382,24 +404,15 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         waitingView=new SmartWaitingTextView(this);
         if (tripDetailsScreen()) add(waitingView.compactDetailRow(),0,0,0,dp(6));
         else root.addView(waitingView,new LinearLayout.LayoutParams(-1,-2));
-        waitingView.bind(order.optJSONObject("smart_waiting"));
-        JSONObject waitingState=order.optJSONObject("smart_waiting");JSONObject waitingActive=waitingState==null?null:waitingState.optJSONObject("active");
-        if(waitingActive!=null && waitingActive.optString("point_key").startsWith("stop:")){
-            final long sessionId=waitingActive.optLong("id");Button continueTrip=outline("Lanjut perjalanan • hentikan waktu tunggu");
-            continueTrip.setOnClickListener(v -> {
-                continueTrip.setEnabled(false);tripMutationStarted();
-                DriverNetworkExecutor.execute(() -> { try {
-                    JSONObject body=new JSONObject().put("order_id",orderId()).put("source",isPickupOrder()?"pickup_orders":"orders").put("action","continue").put("session_id",sessionId);
-                    com.transiva.app.driver.data.DriverApiClient.Result response=new com.transiva.app.driver.data.DriverApiClient(session).post("smart_waiting.php",body);
-                    if(!response.body.optBoolean("success"))throw new Exception(response.body.optString("message"));
-                    mainHandler.post(() -> { try{order.put("smart_waiting",response.body.optJSONObject("smart_waiting"));}catch(Exception ignored){}tripNeedsSync();renderOrder(); });
-                }catch(Exception error){mainHandler.post(() -> {continueTrip.setEnabled(true);info("Smart Waiting",first(error.getMessage(),"Belum dapat melanjutkan. Coba lagi."));});} });
-            });
-            if (tripDetailsScreen()) {
-                continueTrip.setMinHeight(dp(48));
-                continueTrip.setPadding(dp(10),dp(5),dp(10),dp(5));
-                add(continueTrip,0,0,0,dp(6));
-            } else root.addView(continueTrip,btnLp(8));
+        if (waitingSwitch==null) {
+            waitingSwitch=new SmartWaitingSwitch(this,this::trustedArrivalFix);
+            waitingSwitch.setOnClickListener(v->setTripWaiting());
+        } else if (waitingSwitch.getParent() instanceof android.view.ViewGroup) {
+            ((android.view.ViewGroup)waitingSwitch.getParent()).removeView(waitingSwitch);
+        }
+        if (!premiumRideTrip() || tripDetailsScreen()) {
+            add(waitingSwitch,0,0,0,dp(6));
+            bindWaiting(order.optJSONObject("smart_waiting"));
         }
         if(actionDock!=null)actionDock.removeAllViews();
         addLocationCard("Titik jemput", pickupAddress(), true);
@@ -419,6 +432,10 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         }
         if(foodPanel!=null)foodPanel.bind();
         if(premiumRideTrip() && DeliveryTripPresentation.special(order) && !tripDetailsScreen())PremiumParcelTripPanel.bind(this,actionDock);
+        if (premiumRideTrip() && !tripDetailsScreen() && actionDock!=null) {
+            actionDock.addView(waitingSwitch,0,new LinearLayout.LayoutParams(-1,-2));
+            bindWaiting(order.optJSONObject("smart_waiting"));
+        }
         if(mapReady){initNativeTripMarkers();applyPendingRoute();updateMap();}
     }
     protected void top(String title, String sub){
@@ -504,6 +521,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         try { MapsInitializer.initialize(getApplicationContext(), MapsInitializer.Renderer.LATEST, null); } catch (Throwable ignored) { TransivaDiagnostics.error(this,"order","NON_FATAL_EXCEPTION",ignored); }
         final MapView createdMapView=mapView;
         mapView.getMapAsync(map -> {
+            DriverGoogleMapStyle.apply(this, map);
             if(isFinishing()||isDestroyed()||mapView!=createdMapView)return;
             googleMap = map; mapReady = true;
             try {

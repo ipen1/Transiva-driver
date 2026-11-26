@@ -124,6 +124,7 @@ public class DriverLocationActivity extends FragmentActivity implements OnMapRea
     }
 
     @Override public void onMapReady(GoogleMap googleMap) {
+            DriverGoogleMapStyle.apply(this, googleMap);
         map = googleMap;
         map.getUiSettings().setZoomControlsEnabled(false);
         map.getUiSettings().setMapToolbarEnabled(false);
