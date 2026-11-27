@@ -54,12 +54,17 @@ import java.util.Date;
 import java.util.Locale;
 public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
     private TransSimpelRoutePanel simpelPanel;
+    private LinearLayout chatRoot;
+    private View routeAnchor;
+    private boolean chatResumed;
 
     @Override protected void onResume() {
         super.onResume();
+        chatResumed=true;
         if (simpelPanel!=null) simpelPanel.resume();
     }
     @Override protected void onPause() {
+        chatResumed=false;
         if (simpelPanel!=null) simpelPanel.pause();
         super.onPause();
     }
@@ -85,7 +90,7 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
         readIntent();
         String simpelId=TransSimpelRoutePanel.contactId(orderId,roomId);
         if (!simpelId.isEmpty()) {
-            simpelPanel=new TransSimpelRoutePanel(this,simpelId);
+            simpelPanel=new TransSimpelRoutePanel(this,simpelId,orderId,orderSource);
             simpelPanel.restore(savedInstanceState);
         }
         DriverMessageUnreadRepository.markRead(this, orderId, roomId);
@@ -109,6 +114,27 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
         if (!readOnly) {
             main.postDelayed(refreshRunnable, WaveLoadGuard.jitter(DriverPollingCoordinator.interval(DriverChatRoomActivity.this, REFRESH_MS)));
         }
+    }
+
+    @Override protected void handleResponse(JSONObject response, boolean reset) {
+        super.handleResponse(response, reset);
+        if (simpelPanel!=null || !response.optBoolean("success")
+                || !"Trans Simpel".equals(response.optString("service_type"))) return;
+
+        String contact=TransSimpelRoutePanel.contactId(orderId,roomId);
+        simpelPanel=new TransSimpelRoutePanel(this,contact,
+                response.optString("simpel_order_id",orderId),response.optString("simpel_source",orderSource));
+        attachRoutePanel();
+        if (chatResumed) simpelPanel.resume();
+    }
+
+    private void attachRoutePanel() {
+        if (simpelPanel==null || routeAnchor==null) return;
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-1,-2);
+        params.topMargin=dp(5);
+        chatRoot.addView(simpelPanel.view(),chatRoot.indexOfChild(routeAnchor)+1,params);
+        simpelPanel.fitOnResize(chatRoot);
+        DriverAppSettings.applyToView(this,simpelPanel.view());
     }
 
     protected void readIntent() {
@@ -197,12 +223,10 @@ public class DriverChatRoomActivity extends DriverChatRoomActivityLayer2 {
 
         root.addView(header);
         root.addView(new ActiveCallBanner(this),new LinearLayout.LayoutParams(-1,-2));
-        if (simpelPanel!=null) {
-            LinearLayout.LayoutParams routeParams=new LinearLayout.LayoutParams(-1,-2);
-            routeParams.topMargin=dp(5);
-            root.addView(simpelPanel.view(),routeParams);
-            simpelPanel.fitOnResize(root);
-        }
+        chatRoot=root;
+        routeAnchor=new View(this);
+        root.addView(routeAnchor,new LinearLayout.LayoutParams(0,0));
+        attachRoutePanel();
 
         messagesScroll = new ScrollView(this);
         messagesScroll.setFillViewport(true);

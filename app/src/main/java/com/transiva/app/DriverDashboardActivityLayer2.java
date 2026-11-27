@@ -327,6 +327,18 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
         try {
             session.put("current_order_source", order.source);
             session.put("current_order_id", order.id);
+            String simpelRoom=order.raw.optString("simpel_room_id");
+            if (!simpelRoom.isEmpty()) {
+                startActivity(new Intent(this,DriverChatRoomActivity.class)
+                        .putExtra("order_id",CallPeerIdentity.first(order.raw.optString("simpel_order_id"),order.id))
+                        .putExtra("order_db_id",order.id)
+                        .putExtra("order_source",order.source)
+                        .putExtra("order_type","Trans Simpel")
+                        .putExtra("order_status",order.status)
+                        .putExtra("room_id",simpelRoom)
+                        .putExtra("participant_name",order.raw.optString("customer_name")));
+                return;
+            }
             Intent intent = new Intent(this, DriverTripActivity.class);
             intent.putExtra("order_json", order.raw.toString());
             intent.putExtra("order_table", order.source);
@@ -656,7 +668,8 @@ abstract class DriverDashboardActivityLayer2 extends DriverDashboardActivityLaye
             }
         }
 
-        Button resume = primaryButton("Lanjutkan Perjalanan");
+        Button resume = primaryButton(order.raw.optString("simpel_room_id").isEmpty()
+                ? "Lanjutkan Perjalanan" : "Lanjutkan di chat");
         resume.setOnClickListener(v -> openTrip(order));
         add(card, resume, 0, dp(10), 0, 0);
         if (canDriverCancel(order.status)) {

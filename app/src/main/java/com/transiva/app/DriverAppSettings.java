@@ -237,15 +237,26 @@ public final class DriverAppSettings {
     }
 
     private static void transformBackground(View view, int depth) {
-        Drawable background = view.getBackground();
-        if (background == null) return;
+        transformSurface(view.getBackground(), depth);
+    }
 
-        if (background instanceof ColorDrawable) {
-            int original = ((ColorDrawable) background).getColor();
-            Integer mapped = mapLightBackground(original, depth);
-            if (mapped != null && mapped != original) {
-                view.setBackgroundColor(mapped);
+    private static void transformSurface(Drawable background, int depth) {
+        if (background instanceof android.graphics.drawable.LayerDrawable) {
+            android.graphics.drawable.LayerDrawable layers=(android.graphics.drawable.LayerDrawable)background;
+            for (int i=0;i<layers.getNumberOfLayers();i++) {
+                if (layers.getId(i)!=android.R.id.mask) transformSurface(layers.getDrawable(i),depth);
             }
+            return;
+        }
+        if (background instanceof android.graphics.drawable.InsetDrawable) {
+            transformSurface(((android.graphics.drawable.InsetDrawable)background).getDrawable(),depth);
+            return;
+        }
+        if (background instanceof ColorDrawable) {
+            ColorDrawable solid=(ColorDrawable)background;
+            int original=solid.getColor();
+            Integer mapped=mapLightBackground(original,depth);
+            if (mapped!=null && mapped!=original) ((ColorDrawable)solid.mutate()).setColor(mapped);
             return;
         }
 
@@ -264,14 +275,12 @@ public final class DriverAppSettings {
                 // Gradient biru utama tidak disentuh. Hanya gradient putih/pucat.
                 if (allLight) {
                     shape.setColors(new int[]{DARK_CARD_SOFT, DARK_CARD});
-                    view.setBackground(shape);
                 }
             } else if (shape.getColor() != null) {
                 int original = shape.getColor().getDefaultColor();
                 Integer mapped = mapLightBackground(original, depth);
                 if (mapped != null && mapped != original) {
                     shape.setColor(mapped);
-                    view.setBackground(shape);
                 }
             }
         }

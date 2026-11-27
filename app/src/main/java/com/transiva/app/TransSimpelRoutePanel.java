@@ -28,13 +28,19 @@ final class TransSimpelRoutePanel {
     private static final int DELIVERY = 682;
     private static final int STOP = 683;
     private final Activity activity;
-    private final String id;
+    private final String id, linkedOrder, linkedSource;
+    private final LinearLayout shell;
+    private final Button editLocations;
+    private final SmartWaitingSwitch waitingSwitch;
+    private final SmartWaitingTextView waitingText;
+    private boolean followRoute;
+    private int availablePanelHeight;
+    private final boolean dark;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Runnable poll = this::refresh;
     private final LinearLayout view;
     private final android.widget.ScrollView routeScroll;
     private final LinearLayout fareRow;
-    private final Button stop;
     private final Button navigation, tripAction;
     private final TripLocationController tripLocation;
     private android.location.Location lastFix;
@@ -69,46 +75,51 @@ final class TransSimpelRoutePanel {
     private org.json.JSONArray mapPath;
     private String mapRouteKey="";
 
-    TransSimpelRoutePanel(Activity activity, String id) {
+    TransSimpelRoutePanel(Activity activity, String id, String linkedOrder, String linkedSource) {
         this.activity = activity;
+        dark = DriverThemeTokens.isDark(activity);
         tripLocation=new TripLocationController(activity,new TripLocationController.Callback() {
-            @Override public void onLocation(android.location.Location fix) { lastFix=fix; }
+            @Override public void onLocation(android.location.Location fix) {
+                lastFix=fix;
+                if (route!=null) waitingSwitch.bind(route.optJSONObject("smart_waiting"));
+            }
             @Override public void onPermissionRequired() { }
         });
         this.id = id;
+        this.linkedOrder=linkedOrder;
+        this.linkedSource=linkedSource;
         network = new DriverUiScope(activity);
         session = new SessionManager(activity);
         view = new LinearLayout(activity);
         view.setOrientation(LinearLayout.VERTICAL);
         view.setPadding(dp(9),dp(4),dp(9),dp(5));
-        view.setBackground(surface("#FFFFFF", "#DCE8F5"));
+        shell=new LinearLayout(activity);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setPadding(dp(7),dp(3),dp(7),dp(4));
+        shell.setBackground(surface(DriverThemeTokens.surface(activity),DriverThemeTokens.border(activity)));
+        shell.setVisibility(View.GONE);
         routeScroll=new android.widget.ScrollView(activity) {
             @Override protected void onMeasure(int widthSpec,int heightSpec) {
-                android.view.ViewParent parent=getParent();
-                int available=parent instanceof View && ((View)parent).getHeight()>0
-                        ? ((View)parent).getHeight()
+                int available=availablePanelHeight>0?availablePanelHeight
                         : dp(activity.getResources().getConfiguration().screenHeightDp);
-                int cap=Math.max(dp(48),Math.round(available*(mapView==null?.42f:.56f)));
+                int cap=Math.max(dp(48),Math.round(available*(mapView==null?.24f:.36f)));
                 if (MeasureSpec.getMode(heightSpec)!=MeasureSpec.UNSPECIFIED) cap=Math.min(cap,MeasureSpec.getSize(heightSpec));
                 super.onMeasure(widthSpec,MeasureSpec.makeMeasureSpec(cap,MeasureSpec.AT_MOST));
             }
         };
         routeScroll.setFillViewport(false);
-        routeScroll.setVisibility(View.GONE);
         routeScroll.addView(view,new android.widget.ScrollView.LayoutParams(-1,-2));
         LinearLayout heading=new LinearLayout(activity);
         heading.setGravity(android.view.Gravity.CENTER_VERTICAL);
         routeTitle=new TextView(activity);
         TextView title=routeTitle;
         title.setText("Atur rute");
-        title.setTextColor(0xFF102449);
+        title.setTextColor(DriverThemeTokens.textPrimary(activity));
         title.setTextSize(15);
         title.setMaxLines(3);
         title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         heading.addView(title,new LinearLayout.LayoutParams(0,-2,1));
-        stop = button("+ Singgah", () -> openPicker(STOP));
         clearStop = button("Hapus", this::removeStop);
-        style(stop,"#F5F9FF","#075BC8");
         style(clearStop,"#F3F6FA","#41556C");
         briefButton=button("Tiva AI  ›",()->TivaSimpelBrief.show(activity,tivaBrief));
         style(briefButton,"#EFE8FF","#502B93");
@@ -123,20 +134,38 @@ final class TransSimpelRoutePanel {
         });
         mapToggle.setVisibility(View.GONE);
         heading.addView(mapToggle,new LinearLayout.LayoutParams(-2,dp(44)));
-        view.addView(heading,new LinearLayout.LayoutParams(-1,-2));
+        shell.addView(heading,new LinearLayout.LayoutParams(-1,-2));
+        LinearLayout actions=new LinearLayout(activity);
+        navigation=button("Ikuti rute",()->{
+            followRoute=!followRoute;
+            mapExpanded=true;
+            mapBoundsKey="";
+            render(route);
+            refresh();
+        });
+        editLocations=button("Lokasi",this::chooseLocation);
+        tripAction=button("Perbarui status",this::advanceTrip);
+        style(tripAction,"#0A57B6","#FFFFFF");
+        for (Button control:new Button[]{navigation,editLocations,tripAction}) {
+            control.setVisibility(View.GONE);
+            LinearLayout.LayoutParams cell=new LinearLayout.LayoutParams(0,-2,1f);
+            cell.setMargins(dp(2),0,dp(2),0);
+            actions.addView(control,cell);
+        }
+        shell.addView(actions,new LinearLayout.LayoutParams(-1,-2));
+        shell.addView(routeScroll,new LinearLayout.LayoutParams(-1,-2));
 
-        pickupAddress = addressLine("Jemput","●",0xFF08785B,"pickup");
-        view.addView(stop,new LinearLayout.LayoutParams(-2,dp(44)));
-        stopAddress = addressLine("Singgah","◆",0xFF925200,"stop");
-        deliveryAddress = addressLine("Antar","⚑",0xFFB52432,"delivery");
+        pickupAddress = addressLine("Jemput","●","pickup");
+        stopAddress = addressLine("Singgah","◆","stop");
+        deliveryAddress = addressLine("Antar","⚑","delivery");
         View divider=new View(activity);
-        divider.setBackgroundColor(0xFFDCE8F5);
+        divider.setBackgroundColor(DriverThemeTokens.divider(activity));
         view.addView(divider,new LinearLayout.LayoutParams(-1,dp(1)));
         fareRow=new LinearLayout(activity);
         fareRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
         view.addView(fareRow,new LinearLayout.LayoutParams(-1,-2));
         summary = new TextView(activity);
-        summary.setTextColor(0xFF143052);
+        summary.setTextColor(DriverThemeTokens.textPrimary(activity));
         summary.setTextSize(13);
         summary.setMaxLines(2);
         summary.setPadding(dp(4),dp(8),dp(4),dp(8));
@@ -144,7 +173,7 @@ final class TransSimpelRoutePanel {
         summary.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         summary.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         purchaseHint=new TextView(activity);
-        purchaseHint.setTextColor(0xFF526E90);
+        purchaseHint.setTextColor(DriverThemeTokens.textSecondary(activity));
         purchaseHint.setTextSize(12);
         purchaseHint.setText("Harga makanan atau belanja dibahas di chat.");
         purchaseHint.setVisibility(View.GONE);
@@ -155,12 +184,11 @@ final class TransSimpelRoutePanel {
             calculateIfReady();
         });
         view.addView(quoteRetry,new LinearLayout.LayoutParams(-1,dp(44)));
-        navigation=button("Navigasi",this::openNavigation);
-        tripAction=button("Perbarui perjalanan",this::advanceTrip);
-        for (Button control:new Button[]{navigation,tripAction}) {
-            control.setVisibility(View.GONE);
-            view.addView(control,new LinearLayout.LayoutParams(-1,-2));
-        }
+        waitingSwitch=new SmartWaitingSwitch(activity,()->TripArrivalLocation.verified(lastFix));
+        waitingSwitch.setOnClickListener(v->requestWaiting());
+        view.addView(waitingSwitch,new LinearLayout.LayoutParams(-1,-2));
+        waitingText=new SmartWaitingTextView(activity);
+        view.addView(waitingText.compactDetailRow(),new LinearLayout.LayoutParams(-1,-2));
     }
 
     static String contactId(String orderId,String roomId) {
@@ -169,17 +197,21 @@ final class TransSimpelRoutePanel {
         return "";
     }
 
-    View view() { return routeScroll; }
+    View view() { return shell; }
 
     void fitOnResize(View parent) {
         parent.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{
-            if (b-t!=ob-ot) routeScroll.requestLayout();
+            if (availablePanelHeight!=b-t) {
+                availablePanelHeight=b-t;
+                routeScroll.requestLayout();
+            }
         });
     }
 
     void resume() {
         active=true;
         if (mapView!=null) mapView.onResume();
+        if (route!=null) render(route);
         refresh();
     }
 
@@ -208,7 +240,7 @@ final class TransSimpelRoutePanel {
         mapView=map;
         map.onCreate(null);
         int height=Math.max(112,Math.min(165,activity.getResources().getConfiguration().screenHeightDp/4));
-        view.addView(map,1,new LinearLayout.LayoutParams(-1,dp(height)));
+        view.addView(map,0,new LinearLayout.LayoutParams(-1,dp(height)));
         map.onStart();
         if(active)map.onResume();
         map.getMapAsync(google->{
@@ -242,8 +274,24 @@ final class TransSimpelRoutePanel {
                     .icon(com.google.android.gms.maps.model.BitmapDescriptorFactory.defaultMarker(colors[index]))));
         }
         if (mapMarkers.isEmpty()) return;
+        JSONObject ecosystem=route.optJSONObject("ecosystem");
+        org.json.JSONArray stops=ecosystem==null?null:ecosystem.optJSONArray("waypoints");
+        StringBuilder stopKey=new StringBuilder();
+        for (int index=0;stops!=null && index<stops.length();index++) {
+            JSONObject waypoint=stops.optJSONObject(index);
+            if (waypoint==null) continue;
+            double lat=waypoint.optDouble("latitude"),lng=waypoint.optDouble("longitude");
+            if (!NavigationTargetPolicy.valid(lat,lng)) continue;
+            com.google.android.gms.maps.model.LatLng position=new com.google.android.gms.maps.model.LatLng(lat,lng);
+            stopKey.append(position);
+            bounds.include(position);
+            mapMarkers.add(googleMap.addMarker(new com.google.android.gms.maps.model.MarkerOptions()
+                    .position(position).title("Singgah "+waypoint.optInt("sequence",index+1))
+                    .icon(com.google.android.gms.maps.model.BitmapDescriptorFactory.defaultMarker(35f))));
+        }
+        key.append(stopKey);
         String routeKey=String.valueOf(route.optJSONObject("pickup"))+"|"
-                +String.valueOf(route.optJSONObject("delivery"))+"|"+String.valueOf(route.optJSONObject("stop"));
+                +String.valueOf(route.optJSONObject("delivery"))+"|"+stopKey;
         if (!routeKey.equals(mapRouteKey)) { mapRouteKey=routeKey;mapPath=null; }
         if (route.has("map_points")) mapPath=route.optJSONArray("map_points");
         org.json.JSONArray path=mapPath;
@@ -258,6 +306,7 @@ final class TransSimpelRoutePanel {
         if(mapLine!=null)mapLine.remove();
         mapLine=polyline.size()>1?googleMap.addPolyline(new com.google.android.gms.maps.model.PolylineOptions()
                 .addAll(polyline).color(0xff0865e8).width(dp(5))):null;
+        if (followRoute && focusCurrentLeg()) return;
         String signature=key.toString();
         if(!signature.equals(mapBoundsKey)){
             mapBoundsKey=signature;
@@ -268,6 +317,32 @@ final class TransSimpelRoutePanel {
                 try{ googleMap.moveCamera(com.google.android.gms.maps.CameraUpdateFactory.newLatLngBounds(area,root.getWidth(),root.getHeight(),dp(20))); }
                 catch (IllegalStateException ignored) { }
             });
+        }
+    }
+
+    private boolean focusCurrentLeg() {
+        try {
+            NavigationTargetPolicy.Target target=NavigationTargetPolicy.resolve(navigationOrder(),"",Double.NaN,Double.NaN);
+            if (!target.valid()) return false;
+            com.google.android.gms.maps.model.LatLng destination=new com.google.android.gms.maps.model.LatLng(target.lat,target.lng);
+            JSONObject driver=route.optJSONObject("driver_position");
+            if (driver==null || !NavigationTargetPolicy.valid(driver.optDouble("lat"),driver.optDouble("lng"))
+                    || mapView.getWidth()<=0 || mapView.getHeight()<=0) {
+                googleMap.moveCamera(com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(destination,16f));
+                return true;
+            }
+            com.google.android.gms.maps.model.LatLng current=new com.google.android.gms.maps.model.LatLng(driver.optDouble("lat"),driver.optDouble("lng"));
+            if (current.equals(destination)) {
+                googleMap.moveCamera(com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(destination,17f));
+            } else {
+                com.google.android.gms.maps.model.LatLngBounds leg=new com.google.android.gms.maps.model.LatLngBounds.Builder()
+                        .include(current).include(destination).build();
+                googleMap.animateCamera(com.google.android.gms.maps.CameraUpdateFactory.newLatLngBounds(
+                        leg,mapView.getWidth(),mapView.getHeight(),dp(25)),450,null);
+            }
+            return true;
+        } catch (org.json.JSONException | IllegalStateException unavailable) {
+            return false;
         }
     }
 
@@ -302,20 +377,25 @@ final class TransSimpelRoutePanel {
         return Math.round(activity.getResources().getDisplayMetrics().density * value);
     }
 
-    private GradientDrawable surface(String fill,String stroke) {
+    private GradientDrawable surface(int fill,int stroke) {
         GradientDrawable bg=new GradientDrawable();
-        bg.setColor(Color.parseColor(fill));
+        bg.setColor(fill);
         bg.setCornerRadius(dp(12));
-        bg.setStroke(dp(1),Color.parseColor(stroke));
+        bg.setStroke(dp(1),stroke);
         return bg;
     }
 
     private void style(Button button,String fill,String text) {
+        boolean primary="#FFFFFF".equals(text);
+        boolean tiva="#502B93".equals(text);
+        int background=primary?0xFF0A57B6:dark?(tiva?0xFF302947:0xFF203A56):Color.parseColor(fill);
+        int foreground=primary?Color.WHITE:dark?(tiva?0xFFE3D4FF:0xFFE2F0FF):Color.parseColor(text);
+        button.setMinHeight(dp(46));
         button.setTextColor(new ColorStateList(new int[][]{
                 new int[]{-android.R.attr.state_enabled},new int[]{}},
-                new int[]{0xFF61748B,Color.parseColor(text)}));
+                new int[]{primary?0xFFD6E5FB:DriverThemeTokens.textSecondary(activity),foreground}));
         button.setBackground(new RippleDrawable(ColorStateList.valueOf(0x332379DB),
-                surface(fill,fill),null));
+                surface(background,background),null));
     }
 
     private static String field(int which) {
@@ -334,15 +414,15 @@ final class TransSimpelRoutePanel {
         }
     }
 
-    private TextView addressLine(String title,String icon,int color,String key) {
+    private TextView addressLine(String title,String icon,String key) {
         TextView line=new TextView(activity);
-        line.setTextColor(color);
+        line.setTextColor(DriverThemeTokens.textSecondary(activity));
         line.setTextSize(13);
         line.setMaxLines(2);
         line.setEllipsize(TextUtils.TruncateAt.END);
         line.setGravity(android.view.Gravity.CENTER_VERTICAL);
         line.setMinHeight(dp(44));
-        line.setBackground(surface("#F8FAFD","#E5ECF5"));
+        line.setBackground(surface(DriverThemeTokens.surfaceAlt(activity),DriverThemeTokens.border(activity)));
         line.setPadding(dp(6),dp(4),dp(4),dp(4));
         line.setOnClickListener(v->{
             if (route!=null && canEditPoint("pickup".equals(key)?PICKUP:"stop".equals(key)?STOP:DELIVERY)
@@ -350,7 +430,7 @@ final class TransSimpelRoutePanel {
                 openPicker("pickup".equals(key)?PICKUP:"stop".equals(key)?STOP:DELIVERY);
                 return;
             }
-            new android.app.AlertDialog.Builder(activity)
+            PremiumDialogs.builder(activity)
                 .setTitle(title).setMessage(route==null?"Belum diatur":address(key))
                 .setPositiveButton("Tutup",null).show();
         });
@@ -364,7 +444,9 @@ final class TransSimpelRoutePanel {
         String place=address(key);
         android.text.SpannableString display=new android.text.SpannableString(title+"\n    "+place+"  ›");
         display.setSpan(new android.text.style.StyleSpan(Typeface.BOLD),0,title.length(),0);
-        display.setSpan(new android.text.style.ForegroundColorSpan(0xFF213953),title.length()+1,display.length(),0);
+        int accent="pickup".equals(key)?(dark?0xFF83E5BC:0xFF086548):
+                "delivery".equals(key)?(dark?0xFFFFABB8:0xFFA52232):(dark?0xFFFFD087:0xFF824A00);
+        display.setSpan(new android.text.style.ForegroundColorSpan(accent),0,title.length(),0);
         line.setText(display);
         line.setContentDescription(title+". "+place+". Ketuk untuk melihat alamat lengkap.");
     }
@@ -388,33 +470,39 @@ final class TransSimpelRoutePanel {
         if (assigned && active) tripLocation.start();
         else tripLocation.stop();
         navigation.setVisibility(assigned?View.VISIBLE:View.GONE);
+        navigation.setText(followRoute?"Lihat semua":"Ikuti rute");
+        editLocations.setVisibility(assigned || editable ? View.VISIBLE : View.GONE);
+        JSONObject waitingState=assigned?route.optJSONObject("smart_waiting"):null;
+        waitingSwitch.bind(waitingState);
+        waitingText.bind(waitingState);
         tripAction.setVisibility(assigned && !nextStep().isEmpty()?View.VISIBLE:View.GONE);
         tripAction.setEnabled(!busy);
         tripAction.setText(stepLabel());
         boolean waiting="waiting_driver".equals(state);
-        routeScroll.setVisibility(editable || ordered || waiting ? View.VISIBLE : View.GONE);
+        shell.setVisibility(editable || ordered || waiting ? View.VISIBLE : View.GONE);
         String phase=route.optString("order_status");
         String caption="arrived_pickup".equals(phase)?"Tiba di jemput":
                 "on_delivery".equals(phase)||"picked_up".equals(phase)?"Menuju antar":
+                "arrived_delivery".equals(phase) && route.optInt("customer_received")==0?"Menunggu konfirmasi customer":
                 "arrived_delivery".equals(phase)?"Tiba di tujuan":
                 "finished".equals(phase)||"completed".equals(phase)?"Selesai":"Menuju jemput";
         routeTitle.setText(ordered?"Rute perjalanan\n"+caption:waiting?"Pesanan dalam antrean":"Atur rute");
         boolean canShowMap=ordered && route.optJSONObject("pickup")!=null && route.optJSONObject("delivery")!=null;
         mapToggle.setVisibility(canShowMap?View.VISIBLE:View.GONE);
-        mapToggle.setText(mapExpanded?"Tutup peta":"Tampil peta");
+        mapToggle.setText(mapExpanded?"Tutup peta":"Buka peta");
         if (canShowMap && mapExpanded) showMap();
         else removeMap();
         briefButton.setVisibility(tivaBrief!=null ? View.VISIBLE : View.GONE);
-        briefButton.setText("shop".equals(kind())?"Daftar belanja  ›":"Tiva AI  ›");
+        briefButton.setText("shop".equals(kind())?"Belanja":"food".equals(kind())?"Menu":"Detail");
+        if ("food".equals(kind()) && !route.optString("merchant_status").isEmpty()) {
+            String merchant=route.optString("merchant_status");
+            if ("ready".equals(merchant)) routeTitle.append("\nPesanan siap diambil");
+            if ("preparing".equals(merchant) || "merchant_accepted".equals(merchant)) routeTitle.append("\nMerchant menyiapkan pesanan");
+        }
         boolean food="food".equals(kind());
         boolean send="send".equals(kind());
-        stop.setVisibility((editable && (kind().isEmpty() || "ride".equals(kind())) ||
-                assigned && canEditPoint(STOP))?View.VISIBLE:View.GONE);
-        stop.setEnabled(!busy);
         boolean hasStop=route.optJSONObject("stop")!=null;
-        stop.setText(ordered?"+ Ajukan singgah":hasStop?"Singgah":"+ Singgah");
-        stop.setContentDescription(hasStop?"Ubah titik singgah":"Tambah titik singgah opsional");
-        clearStop.setVisibility(editable && hasStop?View.VISIBLE:View.GONE);
+        clearStop.setVisibility(editable && hasStop && canEditPoint(STOP)?View.VISIBLE:View.GONE);
         clearStop.setEnabled(!busy);
         clearStop.setContentDescription("Hapus titik singgah");
         long amount=route.optLong("total",0);
@@ -423,7 +511,7 @@ final class TransSimpelRoutePanel {
         stopAddress.setVisibility(hasStop?View.VISIBLE:View.GONE);
         showAddress(deliveryAddress,"delivery");
         summary.setText(amount>0?(food?"Total makanan + ongkir":ordered?"Total":"Estimasi")+"  Rp "
-                +NumberFormat.getIntegerInstance(new Locale("id","ID")).format(amount)+" · Tunai":"");
+                +NumberFormat.getIntegerInstance(new Locale("id","ID")).format(amount)+paymentLabel():"");
         boolean assistedPurchase=tivaBrief!=null
                 && "shop".equals(kind());
         purchaseHint.setVisibility(assistedPurchase?View.VISIBLE:View.GONE);
@@ -434,8 +522,10 @@ final class TransSimpelRoutePanel {
             purchaseHint.setOnClickListener(v->TivaSimpelBrief.show(activity,tivaBrief));
         }
         if (amount>0 && assistedPurchase) {
-            summary.setText("Ongkir  Rp "+NumberFormat.getIntegerInstance(new Locale("id","ID")).format(amount)+" · Tunai");
+            summary.setText("Ongkir  Rp "+NumberFormat.getIntegerInstance(new Locale("id","ID")).format(amount)+paymentLabel());
         }
+        JSONObject proposal=route.optJSONObject("location_proposal");
+        if (proposal!=null) summary.append("\nSinggah menunggu persetujuan customer");
         if (waiting) summary.setText("Pesanan antre sampai perjalanan aktif selesai.");
         summary.setVisibility(waiting || amount>0?View.VISIBLE:View.GONE);
         boolean both=route.optJSONObject("pickup")!=null && route.optJSONObject("delivery")!=null;
@@ -496,9 +586,13 @@ final class TransSimpelRoutePanel {
                     .put("location",new JSONObject().put("lat",data.getDoubleExtra("lat",0))
                             .put("lng",data.getDoubleExtra("lng",0)).put("address",data.getStringExtra("address")));
             pickerRevision=-1;
+            if (route==null || !canEditPoint(request)) {
+                notice("Tahap perjalanan berubah. Buka kembali lokasi terbaru.");
+                return true;
+            }
             if ("ordered".equals(route.optString("state"))) {
                 JSONObject location=payload.getJSONObject("location");
-                send("propose",new JSONObject().put("source",route.optString("source"))
+                submitLocation(new JSONObject().put("source",route.optString("source"))
                         .put("order_id",route.optString("order_id")).put("point",field(request))
                         .put("latitude",location.optDouble("lat")).put("longitude",location.optDouble("lng"))
                         .put("address",location.optString("address")));
@@ -514,7 +608,13 @@ final class TransSimpelRoutePanel {
         return point==null || point.isEmpty()?JSONObject.NULL:new JSONObject(point);
     }
 
-    private JSONObject queuedPoint;
+    private JSONObject queuedPoint, queuedProposal;
+
+    private void submitLocation(JSONObject payload) {
+        if (busy && readingRoute) queuedProposal=payload;
+        else if (!busy) send("propose",payload);
+        else notice("Tunggu perubahan sebelumnya tersimpan.");
+    }
 
     private void send(String action,JSONObject data) {
         busy=true;
@@ -529,6 +629,9 @@ final class TransSimpelRoutePanel {
             try {
                 JSONObject body=data==null?new JSONObject():data;
                 body.put("action",action).put("contact_id",id);
+                if ("get".equals(action) && id.isEmpty()) {
+                    body.put("order_id",linkedOrder).put("source",linkedSource);
+                }
                 JSONObject reply=request(body);
                 if (!reply.optBoolean("success")) throw new IllegalStateException(reply.optString("message","Permintaan belum berhasil."));
                 post(() -> complete(action,reply,null));
@@ -547,7 +650,7 @@ final class TransSimpelRoutePanel {
         if (activity.isFinishing() || activity.isDestroyed()) return;
         if (reply!=null && !reply.optBoolean("available",true)) {
             available=false;
-            routeScroll.setVisibility(View.GONE);
+            shell.setVisibility(View.GONE);
             return;
         }
         boolean briefChanged=false;
@@ -565,6 +668,12 @@ final class TransSimpelRoutePanel {
         if (failure!=null && !"get".equals(action)) notice(failure);
         if (reply!=null && ("trip".equals(action)||"propose".equals(action))) {
             if (active) refresh();
+            return;
+        }
+        if (queuedProposal!=null) {
+            JSONObject proposal=queuedProposal;
+            queuedProposal=null;
+            send("propose",proposal);
             return;
         }
         if (queuedPoint!=null) {
@@ -595,7 +704,11 @@ final class TransSimpelRoutePanel {
     }
 
     private boolean canEditPoint(int which) {
-        if ("accepted".equals(route.optString("state"))) return true;
+        if ("accepted".equals(route.optString("state"))) {
+            if (tivaBrief!=null && tivaBrief.optLong("authorized_total")>0) return false;
+            return (which!=STOP || kind().isEmpty() || "ride".equals(kind()))
+                    && (which==DELIVERY || !"food".equals(kind()));
+        }
         if (!"ordered".equals(route.optString("state"))||!route.optBoolean("driver_has_order")) return false;
         String phase=DriverOrderStateMachine.normalize(route.optString("order_status"));
         return which==PICKUP?!"food".equals(kind()) && "taken".equals(phase):"on_delivery".equals(phase);
@@ -638,37 +751,92 @@ final class TransSimpelRoutePanel {
         if (next.isEmpty()) return;
         android.location.Location fix=TripArrivalLocation.verified(lastFix);
         if (fix==null && next.startsWith("arriv")) { notice("Tunggu GPS akurat di titik perjalanan."); return; }
-        new android.app.AlertDialog.Builder(activity)
+        PremiumDialogs.builder(activity)
                 .setMessage(stepLabel()+"?").setNegativeButton("Kembali",null)
                 .setPositiveButton("Konfirmasi",(dialog,which)->{
                     if (busy || !next.equals(nextStep())) return;
+                    android.location.Location confirmedFix=TripArrivalLocation.verified(lastFix);
+                    if (confirmedFix==null && next.startsWith("arriv")) {
+                        notice("Tunggu GPS akurat di titik perjalanan.");
+                        return;
+                    }
                     try {
                         JSONObject payload=new JSONObject().put("order_id",route.optString("order_id"))
                                 .put("id",route.optLong("order_db_id")).put("source",route.optString("source"))
                                 .put("driver",session.getUsername()).put("driver_username",session.getUsername())
                                 .put("status",next);
-                        if (fix!=null) payload.put("driver_lat",fix.getLatitude()).put("driver_lng",fix.getLongitude());
+                        if (confirmedFix!=null) payload.put("driver_lat",confirmedFix.getLatitude()).put("driver_lng",confirmedFix.getLongitude());
                         if ("arrive_waypoint".equals(next)) payload.put("sequence",nextStop().optInt("sequence"));
                         send("trip",payload);
                     } catch (org.json.JSONException invalid) { notice("Status belum dapat disimpan."); }
                 }).show();
     }
 
-    private void openNavigation() {
+    private String paymentLabel() {
+        String payment=route.optString("payment_label");
+        return payment.isEmpty()?"":" · "+payment;
+    }
+
+    private void chooseLocation() {
+        if (route==null || (busy && !readingRoute)) return;
+        java.util.ArrayList<String> labels=new java.util.ArrayList<>();
+        java.util.ArrayList<Runnable> actions=new java.util.ArrayList<>();
+        addLocationAction(labels,actions,PICKUP,"Edit titik jemput");
+        addLocationAction(labels,actions,DELIVERY,"Edit titik antar");
+        addLocationAction(labels,actions,STOP,"Ajukan titik singgah");
+        if ("ordered".equals(route.optString("state")) && route.optBoolean("driver_has_order")) {
+            labels.add("Navigasi penuh");
+            actions.add(this::openNavigation);
+        }
+        if (labels.isEmpty()) {
+            notice("Lokasi belum dapat diubah pada tahap ini.");
+            return;
+        }
+        PremiumDialogs.builder(activity).setTitle("Rute dan lokasi")
+                .setItems(labels.toArray(new String[0]),(dialog,index)->actions.get(index).run())
+                .setNegativeButton("Tutup",null).show();
+    }
+
+    private void addLocationAction(java.util.List<String> labels,java.util.List<Runnable> actions,int point,String label) {
+        if (!canEditPoint(point)) return;
+        labels.add(label);
+        actions.add(()->openPicker(point));
+    }
+
+    private void requestWaiting() {
         if (route==null || !route.optBoolean("driver_has_order")) return;
         try {
             JSONObject order=new JSONObject().put("id",route.optLong("order_db_id"))
-                    .put("order_id",route.optString("order_id")).put("source",route.optString("source"))
-                    .put("status",route.optString("order_status")).put("order_type",route.optString("order_type"))
-                    .put("driver_type","bike").put("customer_received",route.optInt("customer_received"))
-                    .put("ecosystem",route.opt("ecosystem"));
-            for (String key:new String[]{"pickup","delivery"}) {
-                JSONObject point=route.getJSONObject(key);
-                order.put(key+"_lat",point.optDouble("lat")).put(key+"_lng",point.optDouble("lng"))
-                        .put(key+"_address",point.optString("address"));
-            }
+                    .put("order_id",route.optString("order_id")).put("source",route.optString("source"));
+            waitingSwitch.request(activity,session,order,TripArrivalLocation.verified(lastFix),(id,state)->{
+                if (!id.equals(route.optString("order_id"))) return;
+                try { route.put("smart_waiting",state); } catch (org.json.JSONException ignored) { }
+                waitingText.bind(state);
+                refresh();
+            });
+        } catch (org.json.JSONException ignored) { notice("Waktu tunggu belum tersedia."); }
+    }
+
+    private void openNavigation() {
+        if (route==null || !route.optBoolean("driver_has_order")) return;
+        try {
+            JSONObject order=navigationOrder();
             activity.startActivity(new Intent(activity,DriverNavigationActivity.class).putExtra("order_json",order.toString()));
         } catch (Exception unavailable) { notice("Rute navigasi belum tersedia."); }
+    }
+
+    private JSONObject navigationOrder() throws org.json.JSONException {
+        JSONObject order=new JSONObject().put("id",route.optLong("order_db_id"))
+                .put("order_id",route.optString("order_id")).put("source",route.optString("source"))
+                .put("status",route.optString("order_status")).put("order_type",route.optString("order_type"))
+                .put("driver_type","bike").put("customer_received",route.optInt("customer_received"))
+                .put("ecosystem",route.opt("ecosystem"));
+        for (String key:new String[]{"pickup","delivery"}) {
+            JSONObject point=route.getJSONObject(key);
+            order.put(key+"_lat",point.optDouble("lat")).put(key+"_lng",point.optDouble("lng"))
+                    .put(key+"_address",point.optString("address"));
+        }
+        return order;
     }
 
     private JSONObject request(JSONObject data) throws Exception {
