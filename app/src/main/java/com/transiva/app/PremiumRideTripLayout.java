@@ -96,6 +96,7 @@ final class PremiumRideTripLayout {
         copy.addView(place);
         row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
         row.setOnClickListener(v -> host.openTripLocation(label, address.get(),pickup));
+        host.addTripPointActions(row,pickup);
         itinerary.addView(row, new LinearLayout.LayoutParams(-1, -2));
         return place;
     }

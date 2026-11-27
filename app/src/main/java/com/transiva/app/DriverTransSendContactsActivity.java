@@ -199,7 +199,7 @@ public final class DriverTransSendContactsActivity extends Activity {
                 card.addView(request);
                 LinearLayout history=new LinearLayout(this);
                 card.addView(history);
-                addAction(history,"Lihat percakapan",()->TivaSimpelBrief.show(this,brief),false);
+                addAction(history,"Detail pesanan",()->TivaSimpelBrief.show(this,brief,null),false);
             }
             LinearLayout actions=new LinearLayout(this);
             actions.setGravity(Gravity.END);

@@ -309,6 +309,7 @@ public final class DriverTripDetailsActivity extends DriverTripActivity {
         copy.addView(text(label,11,"#64748B",false));
         copy.addView(text(first(address,"—"),13,"#0B3A78",true));
         line.addView(copy,new LinearLayout.LayoutParams(0,-2,1));
+        if ("Titik jemput".equals(label) || "Tujuan".equals(label)) addTripPointActions(line,!last);
         slot(parent,line,parent.getChildCount()==1?6:0);
     }
 

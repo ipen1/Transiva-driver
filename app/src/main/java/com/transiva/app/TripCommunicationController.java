@@ -102,7 +102,13 @@ public final class TripCommunicationController {
     }
 
     public void openNavigation(boolean pickup, double driverLat, double driverLng) {
-        NavigationTargetPolicy.Target target=NavigationTargetPolicy.resolve(order,pickup?"pickup":"delivery",Double.NaN,Double.NaN);
+        openNavigation(pickup,driverLat,driverLng,false);
+    }
+
+    void openNavigation(boolean pickup, double driverLat, double driverLng, boolean fromPointCard) {
+        String point=pickup?"pickup":"delivery";
+        NavigationTargetPolicy.Target target=fromPointCard?NavigationTargetPolicy.resolveTripPoint(order,point)
+                :NavigationTargetPolicy.resolve(order,point,Double.NaN,Double.NaN);
         double lat=target.lat,lng=target.lng;String mode=target.mode;
         if (!host.tripValid(lat, lng)) { host.tripInfo("Lokasi", "Koordinat belum tersedia."); return; }
         try { host.tripFitNativeOverview(); }
@@ -122,6 +128,7 @@ public final class TripCommunicationController {
         Intent nativeNav = new Intent(host, DriverNavigationActivity.class);
         nativeNav.putExtra("order_json", order.toString());
         nativeNav.putExtra("target", mode);
+        if (fromPointCard) nativeNav.putExtra("trip_point",point);
         nativeNav.putExtra("target_lat", lat);
         nativeNav.putExtra("target_lng", lng);
         nativeNav.putExtra("driver_lat", driverLat);

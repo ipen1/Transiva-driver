@@ -30,10 +30,8 @@ final class TransSimpelRoutePanel {
     private final Activity activity;
     private final String id, linkedOrder, linkedSource;
     private final LinearLayout shell;
-    private final Button editLocations;
     private final SmartWaitingSwitch waitingSwitch;
     private final SmartWaitingTextView waitingText;
-    private boolean followRoute;
     private int availablePanelHeight;
     private final boolean dark;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -41,7 +39,7 @@ final class TransSimpelRoutePanel {
     private final LinearLayout view;
     private final android.widget.ScrollView routeScroll;
     private final LinearLayout fareRow;
-    private final Button navigation, tripAction;
+    private final Button tripAction;
     private final TripLocationController tripLocation;
     private android.location.Location lastFix;
     private final Button clearStop;
@@ -70,6 +68,8 @@ final class TransSimpelRoutePanel {
     private com.google.android.gms.maps.GoogleMap googleMap;
     private boolean mapExpanded=true;
     private String mapBoundsKey="";
+    private com.google.android.gms.maps.model.Marker vehicleMarker;
+    private final java.util.Map<String,com.google.android.gms.maps.model.BitmapDescriptor> vehicleIcons=new java.util.HashMap<>();
     private final java.util.ArrayList<com.google.android.gms.maps.model.Marker> mapMarkers=new java.util.ArrayList<>();
     private com.google.android.gms.maps.model.Polyline mapLine;
     private org.json.JSONArray mapPath;
@@ -102,7 +102,7 @@ final class TransSimpelRoutePanel {
             @Override protected void onMeasure(int widthSpec,int heightSpec) {
                 int available=availablePanelHeight>0?availablePanelHeight
                         : dp(activity.getResources().getConfiguration().screenHeightDp);
-                int cap=Math.max(dp(48),Math.round(available*(mapView==null?.24f:.36f)));
+                int cap=Math.max(dp(48),Math.round(available*(mapView==null?.24f:.42f)));
                 if (MeasureSpec.getMode(heightSpec)!=MeasureSpec.UNSPECIFIED) cap=Math.min(cap,MeasureSpec.getSize(heightSpec));
                 super.onMeasure(widthSpec,MeasureSpec.makeMeasureSpec(cap,MeasureSpec.AT_MOST));
             }
@@ -121,12 +121,12 @@ final class TransSimpelRoutePanel {
         heading.addView(title,new LinearLayout.LayoutParams(0,-2,1));
         clearStop = button("Hapus", this::removeStop);
         style(clearStop,"#F3F6FA","#41556C");
-        briefButton=button("Tiva AI  ›",()->TivaSimpelBrief.show(activity,tivaBrief));
+        briefButton=button("Tiva AI  ›",()->TivaSimpelBrief.show(activity,tivaBrief,route));
         style(briefButton,"#EFE8FF","#502B93");
-        briefButton.setContentDescription("Buka percakapan Tiva AI");
+        briefButton.setContentDescription("Buka ringkasan pesanan");
         briefButton.setPadding(dp(10),0,dp(10),0);
         briefButton.setVisibility(View.GONE);
-        heading.addView(briefButton,new LinearLayout.LayoutParams(-2,dp(48)));
+        heading.addView(briefButton,new LinearLayout.LayoutParams(-2,dp(44)));
         mapToggle=button("Sembunyikan peta",()->{
             mapExpanded=!mapExpanded;
             if(route!=null)render(route);
@@ -134,25 +134,14 @@ final class TransSimpelRoutePanel {
         });
         mapToggle.setVisibility(View.GONE);
         heading.addView(mapToggle,new LinearLayout.LayoutParams(-2,dp(44)));
-        shell.addView(heading,new LinearLayout.LayoutParams(-1,-2));
-        LinearLayout actions=new LinearLayout(activity);
-        navigation=button("Ikuti rute",()->{
-            followRoute=!followRoute;
-            mapExpanded=true;
-            mapBoundsKey="";
-            render(route);
-            refresh();
-        });
-        editLocations=button("Lokasi",this::chooseLocation);
         tripAction=button("Perbarui status",this::advanceTrip);
         style(tripAction,"#0A57B6","#FFFFFF");
-        for (Button control:new Button[]{navigation,editLocations,tripAction}) {
-            control.setVisibility(View.GONE);
-            LinearLayout.LayoutParams cell=new LinearLayout.LayoutParams(0,-2,1f);
-            cell.setMargins(dp(2),0,dp(2),0);
-            actions.addView(control,cell);
-        }
-        shell.addView(actions,new LinearLayout.LayoutParams(-1,-2));
+        tripAction.setTextSize(11);
+        tripAction.setVisibility(View.GONE);
+        LinearLayout.LayoutParams actionCell=new LinearLayout.LayoutParams(0,-2,1f);
+        actionCell.setMarginStart(dp(4));
+        heading.addView(tripAction,actionCell);
+        shell.addView(heading,new LinearLayout.LayoutParams(-1,-2));
         shell.addView(routeScroll,new LinearLayout.LayoutParams(-1,-2));
 
         pickupAddress = addressLine("Jemput","●","pickup");
@@ -230,7 +219,7 @@ final class TransSimpelRoutePanel {
         if(active)mapView.onPause();
         mapView.onStop();mapView.onDestroy();
         view.removeView(mapView);
-        mapView=null;googleMap=null;mapBoundsKey="";mapRouteKey="";mapPath=null;mapMarkers.clear();mapLine=null;
+        mapView=null;googleMap=null;mapBoundsKey="";mapRouteKey="";mapPath=null;mapMarkers.clear();vehicleMarker=null;vehicleIcons.clear();mapLine=null;
         routeScroll.requestLayout();
     }
 
@@ -259,8 +248,8 @@ final class TransSimpelRoutePanel {
         StringBuilder key=new StringBuilder();
         for(com.google.android.gms.maps.model.Marker marker:mapMarkers)if(marker!=null)marker.remove();
         mapMarkers.clear();
-        String[] names={"pickup","delivery","driver_position"};
-        float[] colors={120f,0f,210f};
+        String[] names={"pickup","delivery"};
+        float[] colors={120f,0f};
         for(int index=0;index<names.length;index++){
             JSONObject point=route.optJSONObject(names[index]);
             if(point==null)continue;
@@ -268,12 +257,13 @@ final class TransSimpelRoutePanel {
             if(!Double.isFinite(lat)||!Double.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180)continue;
             com.google.android.gms.maps.model.LatLng position=new com.google.android.gms.maps.model.LatLng(lat,lng);
             bounds.include(position);
-            key.append(index==2?"driver":position.toString());
+            key.append(position);
             mapMarkers.add(googleMap.addMarker(new com.google.android.gms.maps.model.MarkerOptions().position(position)
-                    .title(index==0?"Jemput":index==1?"Antar":"Posisi driver")
+                    .title(index==0?"Jemput":"Antar")
                     .icon(com.google.android.gms.maps.model.BitmapDescriptorFactory.defaultMarker(colors[index]))));
         }
-        if (mapMarkers.isEmpty()) return;
+        updateVehicleMarker(bounds,key);
+        if (mapMarkers.isEmpty() && vehicleMarker==null) return;
         JSONObject ecosystem=route.optJSONObject("ecosystem");
         org.json.JSONArray stops=ecosystem==null?null:ecosystem.optJSONArray("waypoints");
         StringBuilder stopKey=new StringBuilder();
@@ -306,7 +296,6 @@ final class TransSimpelRoutePanel {
         if(mapLine!=null)mapLine.remove();
         mapLine=polyline.size()>1?googleMap.addPolyline(new com.google.android.gms.maps.model.PolylineOptions()
                 .addAll(polyline).color(0xff0865e8).width(dp(5))):null;
-        if (followRoute && focusCurrentLeg()) return;
         String signature=key.toString();
         if(!signature.equals(mapBoundsKey)){
             mapBoundsKey=signature;
@@ -320,29 +309,36 @@ final class TransSimpelRoutePanel {
         }
     }
 
-    private boolean focusCurrentLeg() {
-        try {
-            NavigationTargetPolicy.Target target=NavigationTargetPolicy.resolve(navigationOrder(),"",Double.NaN,Double.NaN);
-            if (!target.valid()) return false;
-            com.google.android.gms.maps.model.LatLng destination=new com.google.android.gms.maps.model.LatLng(target.lat,target.lng);
-            JSONObject driver=route.optJSONObject("driver_position");
-            if (driver==null || !NavigationTargetPolicy.valid(driver.optDouble("lat"),driver.optDouble("lng"))
-                    || mapView.getWidth()<=0 || mapView.getHeight()<=0) {
-                googleMap.moveCamera(com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(destination,16f));
-                return true;
-            }
-            com.google.android.gms.maps.model.LatLng current=new com.google.android.gms.maps.model.LatLng(driver.optDouble("lat"),driver.optDouble("lng"));
-            if (current.equals(destination)) {
-                googleMap.moveCamera(com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(destination,17f));
-            } else {
-                com.google.android.gms.maps.model.LatLngBounds leg=new com.google.android.gms.maps.model.LatLngBounds.Builder()
-                        .include(current).include(destination).build();
-                googleMap.animateCamera(com.google.android.gms.maps.CameraUpdateFactory.newLatLngBounds(
-                        leg,mapView.getWidth(),mapView.getHeight(),dp(25)),450,null);
-            }
-            return true;
-        } catch (org.json.JSONException | IllegalStateException unavailable) {
-            return false;
+    private void updateVehicleMarker(com.google.android.gms.maps.model.LatLngBounds.Builder bounds,StringBuilder key) {
+        JSONObject driver=route.optJSONObject("driver_position");
+        double lat=driver==null?Double.NaN:driver.optDouble("lat");
+        double lng=driver==null?Double.NaN:driver.optDouble("lng");
+        if (!NavigationTargetPolicy.valid(lat,lng)) {
+            if (vehicleMarker!=null) vehicleMarker.remove();
+            vehicleMarker=null;
+            return;
+        }
+        com.google.android.gms.maps.model.LatLng position=new com.google.android.gms.maps.model.LatLng(lat,lng);
+        bounds.include(position);
+        key.append("|driver");
+        String vehicle="car".equalsIgnoreCase(driver.optString("vehicle"))?"car":"bike";
+        com.google.android.gms.maps.model.BitmapDescriptor icon=vehicleIcons.get(vehicle);
+        if (icon==null) {
+            int drawable="car".equals(vehicle)?R.drawable.map_car_top:R.drawable.map_motor_top;
+            android.graphics.Bitmap bitmap=android.graphics.BitmapFactory.decodeResource(activity.getResources(),drawable);
+            icon=com.google.android.gms.maps.model.BitmapDescriptorFactory.fromBitmap(
+                    android.graphics.Bitmap.createScaledBitmap(bitmap,dp(40),dp(40),true));
+            vehicleIcons.put(vehicle,icon);
+        }
+        float bearing=(float)driver.optDouble("bearing",vehicleMarker==null?0:vehicleMarker.getRotation());
+        if (vehicleMarker==null) {
+            vehicleMarker=googleMap.addMarker(new com.google.android.gms.maps.model.MarkerOptions()
+                    .position(position).icon(icon).anchor(.5f,.5f).flat(true).zIndex(10)
+                    .rotation(bearing).title("Posisi driver"));
+        } else {
+            vehicleMarker.setPosition(position);
+            vehicleMarker.setRotation(bearing);
+            vehicleMarker.setIcon(icon);
         }
     }
 
@@ -469,9 +465,6 @@ final class TransSimpelRoutePanel {
         boolean assigned=ordered && route.optBoolean("driver_has_order") && !tripEnded();
         if (assigned && active) tripLocation.start();
         else tripLocation.stop();
-        navigation.setVisibility(assigned?View.VISIBLE:View.GONE);
-        navigation.setText(followRoute?"Lihat semua":"Ikuti rute");
-        editLocations.setVisibility(assigned || editable ? View.VISIBLE : View.GONE);
         JSONObject waitingState=assigned?route.optJSONObject("smart_waiting"):null;
         waitingSwitch.bind(waitingState);
         waitingText.bind(waitingState);
@@ -492,7 +485,7 @@ final class TransSimpelRoutePanel {
         mapToggle.setText(mapExpanded?"Tutup peta":"Buka peta");
         if (canShowMap && mapExpanded) showMap();
         else removeMap();
-        briefButton.setVisibility(tivaBrief!=null ? View.VISIBLE : View.GONE);
+        briefButton.setVisibility(tivaBrief!=null || (route!=null && "ordered".equals(route.optString("state"))) ? View.VISIBLE : View.GONE);
         briefButton.setText("shop".equals(kind())?"Belanja":"food".equals(kind())?"Menu":"Detail");
         if ("food".equals(kind()) && !route.optString("merchant_status").isEmpty()) {
             String merchant=route.optString("merchant_status");
@@ -519,7 +512,7 @@ final class TransSimpelRoutePanel {
             purchaseHint.setMaxLines(4);
             purchaseHint.setEllipsize(android.text.TextUtils.TruncateAt.END);
             purchaseHint.setText("Daftar belanja\n"+tivaBrief.optString("detail"));
-            purchaseHint.setOnClickListener(v->TivaSimpelBrief.show(activity,tivaBrief));
+            purchaseHint.setOnClickListener(v->TivaSimpelBrief.show(activity,tivaBrief,route));
         }
         if (amount>0 && assistedPurchase) {
             summary.setText("Ongkir  Rp "+NumberFormat.getIntegerInstance(new Locale("id","ID")).format(amount)+paymentLabel());
@@ -777,32 +770,6 @@ final class TransSimpelRoutePanel {
         return payment.isEmpty()?"":" · "+payment;
     }
 
-    private void chooseLocation() {
-        if (route==null || (busy && !readingRoute)) return;
-        java.util.ArrayList<String> labels=new java.util.ArrayList<>();
-        java.util.ArrayList<Runnable> actions=new java.util.ArrayList<>();
-        addLocationAction(labels,actions,PICKUP,"Edit titik jemput");
-        addLocationAction(labels,actions,DELIVERY,"Edit titik antar");
-        addLocationAction(labels,actions,STOP,"Ajukan titik singgah");
-        if ("ordered".equals(route.optString("state")) && route.optBoolean("driver_has_order")) {
-            labels.add("Navigasi penuh");
-            actions.add(this::openNavigation);
-        }
-        if (labels.isEmpty()) {
-            notice("Lokasi belum dapat diubah pada tahap ini.");
-            return;
-        }
-        PremiumDialogs.builder(activity).setTitle("Rute dan lokasi")
-                .setItems(labels.toArray(new String[0]),(dialog,index)->actions.get(index).run())
-                .setNegativeButton("Tutup",null).show();
-    }
-
-    private void addLocationAction(java.util.List<String> labels,java.util.List<Runnable> actions,int point,String label) {
-        if (!canEditPoint(point)) return;
-        labels.add(label);
-        actions.add(()->openPicker(point));
-    }
-
     private void requestWaiting() {
         if (route==null || !route.optBoolean("driver_has_order")) return;
         try {
@@ -815,28 +782,6 @@ final class TransSimpelRoutePanel {
                 refresh();
             });
         } catch (org.json.JSONException ignored) { notice("Waktu tunggu belum tersedia."); }
-    }
-
-    private void openNavigation() {
-        if (route==null || !route.optBoolean("driver_has_order")) return;
-        try {
-            JSONObject order=navigationOrder();
-            activity.startActivity(new Intent(activity,DriverNavigationActivity.class).putExtra("order_json",order.toString()));
-        } catch (Exception unavailable) { notice("Rute navigasi belum tersedia."); }
-    }
-
-    private JSONObject navigationOrder() throws org.json.JSONException {
-        JSONObject order=new JSONObject().put("id",route.optLong("order_db_id"))
-                .put("order_id",route.optString("order_id")).put("source",route.optString("source"))
-                .put("status",route.optString("order_status")).put("order_type",route.optString("order_type"))
-                .put("driver_type","bike").put("customer_received",route.optInt("customer_received"))
-                .put("ecosystem",route.opt("ecosystem"));
-        for (String key:new String[]{"pickup","delivery"}) {
-            JSONObject point=route.getJSONObject(key);
-            order.put(key+"_lat",point.optDouble("lat")).put(key+"_lng",point.optDouble("lng"))
-                    .put(key+"_address",point.optString("address"));
-        }
-        return order;
     }
 
     private JSONObject request(JSONObject data) throws Exception {

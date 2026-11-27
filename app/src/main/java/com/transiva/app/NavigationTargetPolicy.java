@@ -41,6 +41,11 @@ final class NavigationTargetPolicy {
         if(!valid(lat,lng)&&(preferred==null||!preferred.startsWith("waypoint_"))){lat=fallbackLat;lng=fallbackLng;}
         return new Target(mode,lat,lng);
     }
+    static Target resolveTripPoint(JSONObject order,String point) {
+        if ("pickup".equals(point)) return new Target("pickup",
+                coord(order,"pickup_lat","user_lat"),coord(order,"pickup_lng","user_lng"));
+        return resolve(order,"delivery",Double.NaN,Double.NaN);
+    }
     static double coord(JSONObject o,String a,String b){if(o==null)return Double.NaN;double v=o.optDouble(a,Double.NaN);return Double.isFinite(v)?v:o.optDouble(b,Double.NaN);}
     static boolean valid(double lat,double lng){return Double.isFinite(lat)&&Double.isFinite(lng)&&Math.abs(lat)<=90&&Math.abs(lng)<=180&&!(lat==0&&lng==0);}
     private static String first(String... ss){for(String s:ss)if(s!=null&&!s.trim().isEmpty()&&!"null".equalsIgnoreCase(s.trim()))return s.trim();return "";}

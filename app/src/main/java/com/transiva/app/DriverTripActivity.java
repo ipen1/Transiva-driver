@@ -403,7 +403,7 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         }
         waitingView=new SmartWaitingTextView(this);
         if (tripDetailsScreen()) add(waitingView.compactDetailRow(),0,0,0,dp(6));
-        else root.addView(waitingView,new LinearLayout.LayoutParams(-1,-2));
+        else if (!premiumRideTrip()) root.addView(waitingView,new LinearLayout.LayoutParams(-1,-2));
         if (waitingSwitch==null) {
             waitingSwitch=new SmartWaitingSwitch(this,this::trustedArrivalFix);
             waitingSwitch.setOnClickListener(v->setTripWaiting());
@@ -429,11 +429,14 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
         if (premiumRideTrip() && !tripDetailsScreen()) {
             pickupLine.setText(isFoodOrder() ? FoodTripPresentation.restaurant(order) : pickupAddress());
             deliveryLine.setText(deliveryAddress());
+            updateTripPointCorrection((LinearLayout)((View)pickupLine.getParent()).getParent(),true);
+            updateTripPointCorrection((LinearLayout)((View)deliveryLine.getParent()).getParent(),false);
         }
         if(foodPanel!=null)foodPanel.bind();
         if(premiumRideTrip() && DeliveryTripPresentation.special(order) && !tripDetailsScreen())PremiumParcelTripPanel.bind(this,actionDock);
         if (premiumRideTrip() && !tripDetailsScreen() && actionDock!=null) {
-            actionDock.addView(waitingSwitch,0,new LinearLayout.LayoutParams(-1,-2));
+            actionDock.addView(waitingView.compactDetailRow(),0,new LinearLayout.LayoutParams(-1,-2));
+            actionDock.addView(waitingSwitch,1,new LinearLayout.LayoutParams(-1,-2));
             bindWaiting(order.optJSONObject("smart_waiting"));
         }
         if(mapReady){initNativeTripMarkers();applyPendingRoute();updateMap();}
@@ -487,11 +490,55 @@ public class DriverTripActivity extends DriverTripActivityLayer2 {
     protected void addLocationCard(String title, String body, boolean pickup){
         // Satu baris tanpa tombol navigasi samping. Tombol navigasi utama tetap ada di kartu Aksi Perjalanan.
         LinearLayout c = card(); c.setPadding(dp(16), dp(14), dp(16), dp(14));
-        TextView label=text(title,12,"#64748B",true);c.addView(label);
-        TextView address=text(first(body,"-"),14,"#111827",false);address.setMaxLines(2);address.setEllipsize(android.text.TextUtils.TruncateAt.END);c.addView(address);
+        LinearLayout row=new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout info=new LinearLayout(this);
+        info.setOrientation(LinearLayout.VERTICAL);
+        info.addView(text(title,12,"#64748B",true));
+        TextView address=text(first(body,"-"),14,"#111827",false);
+        address.setMaxLines(2);
+        address.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        info.addView(address);
+        row.addView(info,new LinearLayout.LayoutParams(0,-2,1));
+        addTripPointActions(row,pickup);
+        c.addView(row,new LinearLayout.LayoutParams(-1,-2));
         c.setOnClickListener(v->openTripLocation(title,body,pickup));
         add(c,0,0,0,dp(12));
     }
+    void addTripPointActions(LinearLayout row, boolean pickup) {
+        addTripPointButton(row, R.drawable.ic_food_navigation, pickup ? "Rute jemput" : "Rute antar", () -> {
+            if (order != null) new TripCommunicationController(this, order, driverUsername, null)
+                    .openNavigation(pickup, lastDriverLat, lastDriverLng, true);
+        });
+        addTripPointButton(row, R.drawable.ic_trip_correct_location,
+                pickup ? "Perbaiki titik jemput" : "Perbaiki titik antar",
+                () -> DriverLocationProposal.show(this, session, order, trustedArrivalFix(), false))
+                .setTag("tripPointCorrection");
+        updateTripPointCorrection(row,pickup);
+    }
+
+    private void updateTripPointCorrection(LinearLayout row, boolean pickup) {
+        View correction=row.findViewWithTag("tripPointCorrection");
+        if (correction!=null) correction.setVisibility(order!=null && DriverLocationProposal.available(order)
+                && (pickup?"pickup":"delivery").equals(DriverLocationProposal.pointFor(order))?View.VISIBLE:View.GONE);
+    }
+
+    private View addTripPointButton(LinearLayout row, int icon, String description, Runnable action) {
+        android.widget.ImageButton button = new android.widget.ImageButton(this);
+        button.setImageResource(icon);
+        button.setImageTintList(android.content.res.ColorStateList.valueOf(DriverThemeTokens.accent(this)));
+        button.setScaleType(android.widget.ImageView.ScaleType.CENTER_INSIDE);
+        button.setContentDescription(description);
+        button.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x33086bff),
+                DriverNavigationUi.roundRect(DriverThemeTokens.surfaceAlt(this),dp(12)),null));
+        button.setOnClickListener(view -> action.run());
+        LinearLayout.LayoutParams cell = new LinearLayout.LayoutParams(dp(44),dp(44));
+        cell.setMarginStart(dp(3));
+        row.addView(button,cell);
+        return button;
+    }
+
     void openTripLocation(String title, String address, boolean pickup) {
         if (order!=null && (order.optInt("is_trans_simpel",0)!=0
                 || orderId().startsWith("TS-") || "Trans Simpel".equalsIgnoreCase(order.optString("order_type")))) {

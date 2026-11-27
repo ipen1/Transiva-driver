@@ -64,6 +64,14 @@ final class DriverLocationProposal {
         }
     }
 
+    static boolean canAddStop(JSONObject order) {
+        if (!available(order) || !"delivery".equals(pointFor(order))) return false;
+        if ("pending".equals(order.optString("price_change_status"))
+                || "qris".equalsIgnoreCase(order.optString("payment_method"))) return false;
+        JSONObject policy=order.optJSONObject("stop_pricing");
+        return policy==null || DriverEcosystemFeatures.from(order).waypoints.length()<policy.optInt("max_stops");
+    }
+
     static Button actionButton(Activity activity) {
         Button button=new Button(activity);
         button.setAllCaps(false);
@@ -142,6 +150,17 @@ final class DriverLocationProposal {
             body.setPadding(dp(host,12),dp(host,3),dp(host,12),dp(host,8));
             status=new TextView(host);
             status.setTextColor(DriverThemeTokens.textSecondary(host));
+            if ("stop".equals(kind)) {
+                TextView tariff=new TextView(host);
+                tariff.setTextColor(DriverThemeTokens.textPrimary(host));
+                JSONObject policy=order.optJSONObject("stop_pricing");
+                String fee=policy==null?"Biaya singgah mengikuti tarif server."
+                        :"Biaya singgah Rp"+java.text.NumberFormat.getIntegerInstance(new Locale("id","ID"))
+                                .format(policy.optLong("stop_fee"))+".";
+                tariff.setText(fee+" Total juga mengikuti tambahan jarak. Jika bayar pakai TransPay, customer akan menerima pengajuan.");
+                tariff.setPadding(0,0,0,dp(host,6));
+                body.addView(tariff);
+            }
             status.setText("Geser peta hingga titik yang benar berada di ujung marka.");
             status.setPadding(0,0,0,dp(host,8));
             body.addView(status);
@@ -203,7 +222,7 @@ final class DriverLocationProposal {
             scroll.addView(body);
             dialog=PremiumDialogs.builder(host).setTitle(title).setView(scroll)
                     .setNegativeButton("Batal",null)
-                    .setPositiveButton("stop".equals(kind)?"Kirim usulan":"Simpan lokasi",null).create();
+                    .setPositiveButton("stop".equals(kind)?"Tambah persinggahan":"Simpan lokasi",null).create();
             dialog.setOnDismissListener(ignored->{
                 cancelGps();
                 cancelAddressLookup();
@@ -392,7 +411,8 @@ final class DriverLocationProposal {
                     }
                     JSONObject request=new JSONObject().put("order_id",NavigationTargetPolicy.id(order))
                             .put("source",NavigationTargetPolicy.source(order))
-                            .put("point",kind).put("latitude",point.latitude).put("longitude",point.longitude)
+                            .put("point",kind).put("apply_cash_stop","stop".equals(kind))
+                            .put("latitude",point.latitude).put("longitude",point.longitude)
                             .put("address",label);
                     DriverApiClient client = new DriverApiClient(session);
                     JSONObject response;

@@ -250,7 +250,10 @@ final class NavigationLiveRouteController implements AutoCloseable {
         String before=key();
         try{org.json.JSONObject merged=new org.json.JSONObject(host.order.toString());java.util.Iterator<String> fields=fresh.keys();while(fields.hasNext()){String field=fields.next();merged.put(field,fresh.opt(field));}host.order=merged;}
         catch(org.json.JSONException e){NavigationDiagnostics.error(host,"NAV_ORDER_APPLY_FAILED",e);return;}
-        NavigationTargetPolicy.Target target=NavigationTargetPolicy.resolve(host.order,host.targetMode,host.explicitTargetLat,host.explicitTargetLng);
+        String point=host.getIntent().getStringExtra("trip_point");
+        NavigationTargetPolicy.Target target=("pickup".equals(point)||"delivery".equals(point))
+                ?NavigationTargetPolicy.resolveTripPoint(host.order,point)
+                :NavigationTargetPolicy.resolve(host.order,host.targetMode,host.explicitTargetLat,host.explicitTargetLng);
         host.targetMode=target.mode;host.explicitTargetLat=target.lat;host.explicitTargetLng=target.lng;
         if(!before.equals(key())){
             if(host.markerController!=null)host.markerController.clear(host.map);host.markerController=new NavigationMarkerController(host,host.order);host.installMarkers();

@@ -54,18 +54,21 @@ public final class SmartWaitingTextView extends android.widget.TextView {
         String compactStatus="Berhenti";
         if(active!=null){
             long elapsed=active.optLong("elapsed_seconds")+Math.min(30,Math.max(0,(SystemClock.elapsedRealtime()-sampledAt)/1000));
-            long free=active.optLong("free_seconds",300), rate=active.optLong("rate_per_minute",500);
+            long free=active.optLong("free_seconds"), rate=active.optLong("rate_per_minute");
             long activeFee=((Math.max(0,elapsed-free)+59)/60)*rate;
             fee=fee-active.optLong("fee")+activeFee;
-            long remaining=Math.max(0,free-elapsed);
-            compactStatus=remaining>0?String.format(Locale.US,"Gratis %02d:%02d",remaining/60,remaining%60):"Waktu berbayar";
-            message+=" • "+active.optString("label")+"\n"+(remaining>0?String.format(Locale.US,"Gratis tersisa %02d:%02d",remaining/60,remaining%60):"Waktu berbayar berjalan")+" • "+money(rate)+"/menit";
-        }else message+=" • berhenti";
+            compactStatus=WaitingClock.text(elapsed,free);
+            setTextColor(WaitingClock.color(elapsed,free,DriverThemeTokens.isDark(getContext())));
+            message=compactStatus+" · "+active.optString("label")+"\n"+money(rate)+"/menit";
+        }else {
+            message+=" · berhenti";
+            setTextColor(DriverThemeTokens.textPrimary(getContext()));
+        }
         message+="\nBiaya tunggu "+money(fee)+" • "+(active!=null?"Estimasi total ":"Total ")+money(state.optLong("base_total")+fee);
         if(active==null){
             for(int i=0;i<sessions.length();i++){JSONObject s=sessions.optJSONObject(i);if(s!=null)message+="\n"+s.optString("label")+" • "+s.optInt("paid_minutes")+" menit berbayar • "+money(s.optLong("fee"));}
         }
-        message+="\n100% biaya tunggu untuk driver. Karena waktu Anda berharga.";
+        message+="\n100% biaya tunggu untuk driver.";
         detailedMessage=message;
         String label=compactDetail!=null?"⏱  Smart Waiting · "+compactStatus+"\nBiaya tunggu "+money(fee):message;
         if (!label.contentEquals(getText())) setText(label);

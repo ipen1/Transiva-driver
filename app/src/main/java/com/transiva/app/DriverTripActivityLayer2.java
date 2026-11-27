@@ -175,8 +175,9 @@ abstract class DriverTripActivityLayer2 extends DriverTripActivityLayer1 {
         correctLocation.setOnClickListener(v->DriverLocationProposal.show(this,session,order,trustedArrivalFix(),false));
         if (tripDetailsScreen()) options.addView(correctLocation,btnLp(6));
         else if (!premiumRideTrip()) actionDock.addView(correctLocation,new LinearLayout.LayoutParams(-1,-2));
-        Button addStop=outline("+ Singgah");
-        addStop.setVisibility(DriverLocationProposal.available(order) && "on_delivery".equals(status()) ? View.VISIBLE : View.GONE);
+        Button addStop=outline("Tambah persinggahan");
+        addStop.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_trip_add_stop,0,0,0);
+        addStop.setVisibility(DriverLocationProposal.canAddStop(order) ? View.VISIBLE : View.GONE);
         addStop.setOnClickListener(v->DriverLocationProposal.show(this,session,order,trustedArrivalFix(),true));
         options.addView(addStop,btnLp(6));
         updatePriceBtn = outline("💰 Update Total"); updatePriceBtn.setOnClickListener(v -> showUpdatePriceDialog()); options.addView(updatePriceBtn, btnLp(6));
