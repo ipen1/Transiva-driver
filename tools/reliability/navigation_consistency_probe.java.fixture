@@ -36,6 +36,13 @@ public class ConsistencyProbe{
  trip.order.put("delivery_lat",-.78);DriverConnectionRepository.Reply waiting=new DriverConnectionRepository.Reply(route(2000).toString(),true);DriverConnectionRepository.replies.add(waiting);live.request(false);waiting.entered.await(2,TimeUnit.SECONDS);check(field(live,"route")==null&&trip.deliveryPolyline==null,"changed target immediately clears old active route");live.active(false);waiting.release.countDown();drain();check(field(live,"route")==null,"paused trip cannot apply a late route response");live.close();
  NavigationSessionStore.stopped=false;DriverNavigationActivityLayer2 host=new DriverNavigationActivityLayer2();host.order=order();NavigationLiveRouteController nav=new NavigationLiveRouteController(host);nav.resumed(true);drain();
  Method apply=nav.getClass().getDeclaredMethod("applyOrderState",JSONObject.class,boolean.class);apply.setAccessible(true);apply.invoke(nav,order().put("delivery_lat",-.77),true);check(host.targetLat()==-.77&&host.routePoints.isEmpty(),"foreground state update invalidates old target geometry");
+ host.setIntent(new android.content.Intent().putExtra("trip_point","pickup"));
+ apply.invoke(nav,order().put("pickup_lat",-.801),true);
+ check("pickup".equals(host.targetMode)&&host.targetLat()==-.801,"pickup card keeps its selected point after an order refresh");
+ host.setIntent(new android.content.Intent().putExtra("trip_point","delivery"));
+ JSONObject withStop=order().put("ecosystem",new JSONObject().put("waypoints",new JSONArray().put(stop(1,"pending"))));
+ apply.invoke(nav,withStop,true);
+ check("waypoint_1".equals(host.targetMode)&&host.targetLat()==stop(1,"pending").getDouble("latitude"),"delivery card follows the next pending stop after an order refresh");
  apply.invoke(nav,order().put("status","finished"),true);check(host.finishing&&NavigationSessionStore.stopped,"finished order stops foreground guidance without mutation");nav.close();
  NavigationSessionStore.stopped=false;NavigationSessionStore.foreground=false;NavigationGuidanceService service=new NavigationGuidanceService();service.onCreate();
  JSONObject snap=new JSONObject().put("order",order().toString()).put("profile","car").put("mode","delivery").put("lat",-.79).put("lng",120).put("key","old-key").put("owner",NavigationSessionStore.identity(service)).put("saved",System.currentTimeMillis());Field sf=service.getClass().getDeclaredField("snapshot");sf.setAccessible(true);sf.set(service,snap);
