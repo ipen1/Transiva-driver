@@ -90,7 +90,7 @@ public final class NavigationCommunicationController {
             callButton.setTextSize(14);
             callButton.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
             callButton.setGravity(Gravity.CENTER);
-            callButton.setBackground(DriverNavigationUi.roundRect(actionBackground(callColor, DriverThemeTokens.isDark(activity) ? "#173C35" : "#D5F3E5"), dp(16)));
+            styleAction(callButton, actionBackground(callColor, DriverThemeTokens.isDark(activity) ? "#173C35" : "#D5F3E5"));
             callButton.setOnClickListener(v -> openCall());
         }
     }
@@ -176,7 +176,13 @@ public final class NavigationCommunicationController {
         int color = actionBackground(unread ? messageUnreadColor : messageColor, unread
                 ? (DriverThemeTokens.isDark(activity) ? "#4A3824" : "#FFF0CE")
                 : "#F2F7FF");
-        messageButton.setBackground(DriverNavigationUi.roundRect(color, dp(16)));
+        styleAction(messageButton, color);
+    }
+
+    private void styleAction(TextView action, int background) {
+        action.setPadding(dp(8), dp(4), dp(8), dp(4));
+        action.setBackground(DriverNavigationUi.roundRect(background, dp(14)));
+        if (DriverThemeTokens.isDark(activity)) DarkTextContrast.apply(action);
     }
 
     private void loadResourceConfig() {

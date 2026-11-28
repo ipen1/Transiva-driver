@@ -28,7 +28,7 @@ final class NavigationArrivalController {
         hint.setGravity(Gravity.CENTER);
         hint.setTextColor(DriverThemeTokens.textSecondary(host));
         hint.setTextSize(11);
-        hint.setPadding(host.dp(3), host.dp(3), host.dp(3), 0);
+        hint.setPadding(host.dp(3), host.dp(2), host.dp(3), 0);
         dock.addView(hint, new LinearLayout.LayoutParams(-1, -2));
         render();
     }
@@ -71,13 +71,16 @@ final class NavigationArrivalController {
             if (swipe != null) dock.removeView(swipe);
             actionKey = key;
             swipe = new TripSwipeControl(host, action.label, this::submit);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, host.dp(49));
-            lp.topMargin = host.dp(7);
+            int height = Math.max(48, (int) Math.ceil(40 * host.getResources().getConfiguration().fontScale));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, host.dp(height));
+            lp.topMargin = host.dp(5);
             dock.addView(swipe, dock.indexOfChild(hint), lp);
         }
         boolean enabled = active && action.enabled;
         if (swipe.isEnabled() != enabled) swipe.setEnabled(enabled);
         if (!action.hint.contentEquals(hint.getText())) hint.setText(action.hint);
+        int hintVisibility = action.hint.isEmpty() ? TextView.GONE : TextView.VISIBLE;
+        if (hint.getVisibility() != hintVisibility) hint.setVisibility(hintVisibility);
     }
 
     private void submit() {

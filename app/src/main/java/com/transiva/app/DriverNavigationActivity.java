@@ -9,6 +9,7 @@ import android.net.Uri;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.graphics.Typeface;
 import android.location.Location;
 import android.location.LocationListener;
@@ -22,7 +23,6 @@ import android.util.Rational;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
-import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -103,14 +103,11 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         }
     }
 
-    private Button correctLocationButton;
     private SmartWaitingSwitch waitingSwitch;
 
     @Override void onNavigationOrderSynced(JSONObject fresh) {
         if (arrival != null) arrival.synced(fresh);
         if (waitingSwitch != null && fresh != null) waitingSwitch.bind(fresh.optJSONObject("smart_waiting"));
-        if (correctLocationButton!=null) correctLocationButton.setVisibility(
-                DriverLocationProposal.available(fresh)?View.VISIBLE:View.GONE);
     }
 
     @Override protected void onCreate(Bundle savedInstanceState) {
@@ -274,8 +271,10 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
 
         LinearLayout bottomActions = new LinearLayout(this);
         bottomActions.setOrientation(LinearLayout.VERTICAL);
-        bottomActions.setPadding(dp(8), dp(8), dp(8), dp(7));
-        bottomActions.setBackground(roundRect(DriverThemeTokens.surface(this), 22));
+        bottomActions.setPadding(dp(8), dp(6), dp(8), dp(6));
+        GradientDrawable dockBackground = roundRect(DriverThemeTokens.surface(this), 20);
+        dockBackground.setStroke(dp(1), DriverThemeTokens.border(this));
+        bottomActions.setBackground(dockBackground);
         bottomActions.setElevation(dp(7));
         LinearLayout communication = new LinearLayout(this);
         bottomActions.addView(communication, new LinearLayout.LayoutParams(-1, -2));
@@ -285,13 +284,9 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
         callButton = new TextView(this);
         callButton.setMinHeight(dp(48));
         LinearLayout.LayoutParams callLp = new LinearLayout.LayoutParams(0, -2, 1);
-        callLp.setMarginStart(dp(7));
+        callLp.setMarginStart(dp(6));
         communication.addView(callButton, callLp);
         if (!NavigationTargetPolicy.id(order).isEmpty()) {
-            correctLocationButton=DriverLocationProposal.actionButton(this);
-            correctLocationButton.setVisibility(DriverLocationProposal.available(order)?View.VISIBLE:View.GONE);
-            correctLocationButton.setOnClickListener(v->DriverLocationProposal.show(this,session,order,lastLocation,false));
-            bottomActions.addView(correctLocationButton,new LinearLayout.LayoutParams(-1,-2));
             waitingSwitch=new SmartWaitingSwitch(this,()->TripActionSession.get(this,order).fix());
             waitingSwitch.bind(order.optJSONObject("smart_waiting"));
             waitingSwitch.setOnClickListener(v->{
@@ -311,7 +306,7 @@ public class DriverNavigationActivity extends DriverNavigationActivityLayer2 {
             arrival = new NavigationArrivalController(this, bottomActions);
         }
         FrameLayout.LayoutParams bottomLp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
-        bottomLp.setMargins(dp(10), 0, dp(10), dp(20));
+        bottomLp.setMargins(dp(10), 0, dp(10), dp(17));
         android.widget.ScrollView dockScroll = DriverResponsiveUi.mapPanelScroll(this, .45f);
         dockScroll.setElevation(dp(7));
         dockScroll.addView(bottomActions, new android.widget.ScrollView.LayoutParams(-1, -2));

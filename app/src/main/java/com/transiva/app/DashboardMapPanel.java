@@ -165,7 +165,7 @@ final class DashboardMapPanel {
         rows.setOrientation(LinearLayout.VERTICAL);
         rows.setPadding(dp(14),dp(6),dp(14),dp(10));
         scroll.addView(rows);
-        android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(host)
+        android.app.AlertDialog dialog=PremiumDialogs.builder(host)
                 .setTitle("Antrean order").setView(scroll).setNegativeButton("Tutup",null).create();
         queueDialog=dialog;
         renderOrderQueue(dialog,rows,null,false);
@@ -200,7 +200,7 @@ final class DashboardMapPanel {
             });
             count++;
         }
-        if (count==0) rows.addView(host.text("Belum ada tawaran aktif.",13,"#405975",false));
+        if (count==0) rows.addView(host.text("Belum ada tawaran aktif.",13,"#64748B",false));
 
         TextView title=host.text("Permintaan Trans Simpel & TransSend",15,"#0B3A78",true);
         title.setPadding(0,dp(12),0,0);
@@ -220,7 +220,7 @@ final class DashboardMapPanel {
         }
         if (pending==0) rows.addView(host.text(waiting?"Memuat permintaan…":failed?
                 "Permintaan belum bisa dimuat. Buka daftar untuk mencoba lagi.":"Belum ada permintaan aktif.",
-                13,"#405975",false));
+                13,"#64748B",false));
         queueRow(rows,"Buka daftar permintaan",()->{
             dialog.dismiss();
             host.startActivity(new Intent(host,DriverTransSendContactsActivity.class));
@@ -232,7 +232,7 @@ final class DashboardMapPanel {
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setMinHeight(dp(48));
         row.setPadding(dp(10),dp(6),dp(10),dp(6));
-        row.setBackground(host.round("#EAF3FF",dp(14)));
+        row.setBackground(host.roundStroke("#EAF3FF","#D9E2EE",dp(14),1));
         row.setOnClickListener(v->open.run());
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);
         lp.topMargin=dp(5);

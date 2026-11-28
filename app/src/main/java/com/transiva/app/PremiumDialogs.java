@@ -94,7 +94,13 @@ public final class PremiumDialogs {
             // Custom EditText pada dialog harga/PIN sebelumnya tidak ikut tema
             // PremiumDialogs, sehingga teks hitam berada di atas surface gelap.
             // Terapkan palet input berdasarkan pilihan tema Transiva, bukan theme OEM.
-            if (window != null) styleCustomInputs(context, window.getDecorView());
+            if (window != null) {
+                View decor = window.getDecorView();
+                styleCustomInputs(context, decor);
+                int customId = context.getResources().getIdentifier("custom", "id", "android");
+                View custom = customId == 0 ? null : dialog.findViewById(customId);
+                DriverAppSettings.applyToView(context, custom);
+            }
 
             styleAction(context, dialog.getButton(AlertDialog.BUTTON_POSITIVE), Action.PRIMARY);
             styleAction(context, dialog.getButton(AlertDialog.BUTTON_NEGATIVE), Action.SECONDARY);

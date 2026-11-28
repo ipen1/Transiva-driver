@@ -49,8 +49,17 @@ public final class DriverThemeTokens {
      * always follow the Transiva preference rather than the OEM/system theme.
      */
     public static int textColor(Context c,String value){
-        if("#FFFFFF".equalsIgnoreCase(value)||"#FFFFFFFF".equalsIgnoreCase(value))return onAccent(c);
-        return color(c,value);
+        String hex = value == null ? "" : value.trim().toUpperCase(Locale.US);
+        switch (hex) {
+            case "#FFFFFF": case "#FFFFFFFF":
+                return onAccent(c);
+            case "#405975": case "#334155": case "#425367":
+                return isDark(c) ? textSecondary(c) : color(c, value);
+            case "#103769": case "#0B477D":
+                return isDark(c) ? textPrimary(c) : color(c, value);
+            default:
+                return color(c, value);
+        }
     }
     public static int color(Context c, String legacyHex) {
         String h = legacyHex == null ? "" : legacyHex.trim().toUpperCase(Locale.US);
@@ -62,6 +71,9 @@ public final class DriverThemeTokens {
             case "#F8FAFC": case "#F1F5F9": case "#EEF6FF": case "#F5F9FF":
             case "#F5F8FD": case "#F6F9FE": case "#F7F9FC":
                 return background(c);
+
+            case "#F2F7FF": case "#EAF3FF": case "#DCEBFF":
+                return isDark(c) ? surfaceAlt(c) : Color.parseColor(h);
 
             case "#0F172A": case "#111827": case "#1E293B": case "#123D7C":
             case "#0B3675": case "#0B3A78": case "#082F63": case "#0A356C":
